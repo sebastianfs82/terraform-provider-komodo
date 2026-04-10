@@ -235,7 +235,7 @@ func (d *RepoDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		UrlClone: types.StringNull(),
 		UrlBuild: types.StringNull(),
 	}
-	envVars := envStringToMap(ctx, strings.TrimRight(repo.Config.Environment, "\n"))
+	envVars := envStringToMap(strings.TrimRight(repo.Config.Environment, "\n"))
 	filePath := types.StringNull()
 	if repo.Config.EnvFilePath != "" {
 		filePath = types.StringValue(repo.Config.EnvFilePath)

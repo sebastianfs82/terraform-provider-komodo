@@ -892,7 +892,7 @@ func stackToModel(ctx context.Context, stack *client.Stack, data *StackResourceM
 	}
 
 	// Environment block
-	envVars := envStringToMap(ctx, strings.TrimRight(stack.Config.Environment, "\n"))
+	envVars := envStringToMap(strings.TrimRight(stack.Config.Environment, "\n"))
 	if len(envVars.Elements()) > 0 || stack.Config.EnvFilePath != "" {
 		data.Environment = &EnvironmentModel{
 			FilePath:  strOrNull(stack.Config.EnvFilePath),

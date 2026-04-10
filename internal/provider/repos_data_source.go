@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -212,7 +213,7 @@ func (d *ReposDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 			}
 		}
 
-		envVars := envStringToMap(ctx, strings.TrimRight(repo.Config.Environment, "\n"))
+		envVars := envStringToMap(strings.TrimRight(repo.Config.Environment, "\n"))
 		var environment *EnvironmentModel
 		if !envVars.IsNull() && len(envVars.Elements()) > 0 || repo.Config.EnvFilePath != "" {
 			filePath := types.StringNull()

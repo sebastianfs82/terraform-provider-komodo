@@ -16,7 +16,7 @@ func (c *Client) AddUserToUserGroup(ctx context.Context, req AddUserToUserGroupR
 		"type":   "AddUserToUserGroup",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (c *Client) RemoveUserFromUserGroup(ctx context.Context, req RemoveUserFrom
 		"type":   "RemoveUserFromUserGroup",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (c *Client) SetEveryoneUserGroup(ctx context.Context, req SetEveryoneUserGr
 		"type":   "SetEveryoneUserGroup",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -74,13 +74,13 @@ func (c *Client) SetEveryoneUserGroup(ctx context.Context, req SetEveryoneUserGr
 	return &group, nil
 }
 
-// UserGroup CRUD
+// UserGroup CRUD.
 func (c *Client) CreateUserGroup(ctx context.Context, req CreateUserGroupRequest) (*UserGroup, error) {
 	payload := map[string]interface{}{
 		"type":   "CreateUserGroup",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (c *Client) ListUserGroups(ctx context.Context) ([]UserGroup, error) {
 		"type":   "ListUserGroups",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (c *Client) GetUserGroup(ctx context.Context, name string) (*UserGroup, err
 		"type":   "GetUserGroup",
 		"params": map[string]interface{}{"user_group": name},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (c *Client) RenameUserGroup(ctx context.Context, oldName, newName string) (
 		"type":   "RenameUserGroup",
 		"params": RenameUserGroupRequest{ID: oldName, Name: newName},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (c *Client) DeleteUserGroup(ctx context.Context, id string) error {
 		"type":   "DeleteUserGroup",
 		"params": DeleteUserGroupRequest{ID: id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -327,7 +327,7 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 }
 
 // doRequest makes an authenticated HTTP request to the Komodo API.
-func (c *Client) doRequest(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, path string, body interface{}) (*http.Response, error) {
 	var reqBody io.Reader
 	if body != nil {
 		jsonData, err := json.Marshal(body)
@@ -337,7 +337,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 		reqBody = bytes.NewBuffer(jsonData)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.endpoint+path, reqBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+path, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -391,7 +391,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 			reqBody = bytes.NewBuffer(jsonData)
 		}
 
-		req, err = http.NewRequestWithContext(ctx, method, c.endpoint+path, reqBody)
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+path, reqBody)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
@@ -415,7 +415,7 @@ func (c *Client) ListApiKeys(ctx context.Context) ([]ApiKey, error) {
 		Params: map[string]interface{}{},
 	}
 
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", listReq)
+	resp, err := c.doRequest(ctx, "/read", listReq)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +452,7 @@ func (c *Client) GetApiKey(ctx context.Context, keyID string) (*ApiKey, error) {
 
 // CreateApiKey creates a new API key.
 func (c *Client) CreateApiKey(ctx context.Context, req CreateApiKeyRequest) (*ApiKey, error) {
-	resp, err := c.doRequest(ctx, http.MethodPost, "/user/CreateApiKey", req)
+	resp, err := c.doRequest(ctx, "/user/CreateApiKey", req)
 	if err != nil {
 		return nil, err
 	}
@@ -496,7 +496,7 @@ func (c *Client) CreateApiKey(ctx context.Context, req CreateApiKeyRequest) (*Ap
 
 // DeleteApiKey deletes an API key.
 func (c *Client) DeleteApiKey(ctx context.Context, req DeleteApiKeyRequest) error {
-	resp, err := c.doRequest(ctx, http.MethodPost, "/user/DeleteApiKey", req)
+	resp, err := c.doRequest(ctx, "/user/DeleteApiKey", req)
 	if err != nil {
 		return err
 	}
@@ -522,7 +522,7 @@ func (c *Client) CreateVariable(ctx context.Context, req CreateVariableRequest) 
 		"type":   "CreateVariable",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -583,7 +583,7 @@ func (c *Client) UpdateVariable(ctx context.Context, id string, req CreateVariab
 		"type":   "UpdateVariableValue",
 		"params": map[string]interface{}{"name": found.Name, "value": req.Value},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", valuePayload)
+	resp, err := c.doRequest(ctx, "/write", valuePayload)
 	if err != nil {
 		return nil, err
 	}
@@ -598,7 +598,7 @@ func (c *Client) UpdateVariable(ctx context.Context, id string, req CreateVariab
 		"type":   "UpdateVariableDescription",
 		"params": map[string]interface{}{"name": found.Name, "description": req.Description},
 	}
-	resp2, err := c.doRequest(ctx, http.MethodPost, "/write", descPayload)
+	resp2, err := c.doRequest(ctx, "/write", descPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -613,7 +613,7 @@ func (c *Client) UpdateVariable(ctx context.Context, id string, req CreateVariab
 		"type":   "UpdateVariableIsSecret",
 		"params": map[string]interface{}{"name": found.Name, "is_secret": req.IsSecret},
 	}
-	resp3, err := c.doRequest(ctx, http.MethodPost, "/write", secretPayload)
+	resp3, err := c.doRequest(ctx, "/write", secretPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -648,7 +648,7 @@ func (c *Client) DeleteVariable(ctx context.Context, req DeleteVariableRequest) 
 		"type":   "DeleteVariable",
 		"params": map[string]interface{}{"name": found.Name},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -667,7 +667,7 @@ func (c *Client) ListVariables(ctx context.Context) ([]Variable, error) {
 		"type":   "ListVariables",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", listReq)
+	resp, err := c.doRequest(ctx, "/read", listReq)
 	if err != nil {
 		return nil, err
 	}
@@ -700,7 +700,7 @@ func (c *Client) CreateTag(ctx context.Context, req CreateTagRequest) (*Tag, err
 		"type":   "CreateTag",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -743,7 +743,7 @@ func (c *Client) ListTags(ctx context.Context) ([]Tag, error) {
 		"type":   "ListTags",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", listReq)
+	resp, err := c.doRequest(ctx, "/read", listReq)
 	if err != nil {
 		return nil, err
 	}
@@ -766,7 +766,7 @@ func (c *Client) UpdateTag(ctx context.Context, name string, req CreateTagReques
 			"type":   "RenameTag",
 			"params": RenameTagRequest{OldName: name, NewName: req.Name},
 		}
-		resp, err := c.doRequest(ctx, http.MethodPost, "/write", renamePayload)
+		resp, err := c.doRequest(ctx, "/write", renamePayload)
 		if err != nil {
 			return nil, err
 		}
@@ -782,7 +782,7 @@ func (c *Client) UpdateTag(ctx context.Context, name string, req CreateTagReques
 		"type":   "UpdateTagColor",
 		"params": UpdateTagColorRequest{Tag: name, Color: req.Color},
 	}
-	resp2, err := c.doRequest(ctx, http.MethodPost, "/write", colorPayload)
+	resp2, err := c.doRequest(ctx, "/write", colorPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -828,7 +828,7 @@ func (c *Client) DeleteTag(ctx context.Context, name string) error {
 		"type":   "DeleteTag",
 		"params": DeleteTagRequest{ID: tag.ID.OID},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -848,7 +848,7 @@ func (c *Client) CreateLocalUser(ctx context.Context, req CreateLocalUserRequest
 		"type":   "CreateLocalUser",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -869,7 +869,7 @@ func (c *Client) FindUser(ctx context.Context, user string) (*User, error) {
 		"type":   "FindUser",
 		"params": FindUserRequest{User: user},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -894,7 +894,7 @@ func (c *Client) UpdateUserBasePermissions(ctx context.Context, req UpdateUserBa
 		"type":   "UpdateUserBasePermissions",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -911,7 +911,7 @@ func (c *Client) UpdateUserAdmin(ctx context.Context, req UpdateUserAdminRequest
 		"type":   "UpdateUserAdmin",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -928,7 +928,7 @@ func (c *Client) DeleteUser(ctx context.Context, user string) error {
 		"type":   "DeleteUser",
 		"params": DeleteUserRequest{User: user},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -948,7 +948,7 @@ func (c *Client) ListUsers(ctx context.Context) ([]User, error) {
 		"type":   "ListUsers",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -969,7 +969,7 @@ func (c *Client) ListServiceUsers(ctx context.Context) ([]User, error) {
 		"type":   "ListServiceUsers",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -990,7 +990,7 @@ func (c *Client) CreateServiceUser(ctx context.Context, req CreateServiceUserReq
 		"type":   "CreateServiceUser",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1011,7 +1011,7 @@ func (c *Client) UpdateServiceUserDescription(ctx context.Context, req UpdateSer
 		"type":   "UpdateServiceUserDescription",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -1029,7 +1029,7 @@ func (c *Client) ListApiKeysForServiceUser(ctx context.Context, userID string) (
 		"type":   "ListApiKeysForServiceUser",
 		"params": map[string]string{"user": userID},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1065,7 +1065,7 @@ func (c *Client) CreateApiKeyForServiceUser(ctx context.Context, req CreateApiKe
 		"type":   "CreateApiKeyForServiceUser",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1102,7 +1102,7 @@ func (c *Client) DeleteApiKeyForServiceUser(ctx context.Context, req DeleteApiKe
 		"type":   "DeleteApiKeyForServiceUser",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -1114,13 +1114,13 @@ func (c *Client) DeleteApiKeyForServiceUser(ctx context.Context, req DeleteApiKe
 	return nil
 }
 
-// isHex returns true if s is a valid hex string (for ObjectId detection)
+// isHex returns true if s is a valid hex string (for ObjectId detection).
 func isHex(s string) bool {
 	if len(s) != 24 {
 		return false
 	}
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}
@@ -1134,7 +1134,7 @@ func (c *Client) CreateGitProviderAccount(ctx context.Context, req CreateGitProv
 		"type":   "CreateGitProviderAccount",
 		"params": map[string]interface{}{"account": req},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1155,7 +1155,7 @@ func (c *Client) GetGitProviderAccount(ctx context.Context, id string) (*GitProv
 		"type":   "GetGitProviderAccount",
 		"params": map[string]interface{}{"id": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1180,7 +1180,7 @@ func (c *Client) ListGitProviderAccounts(ctx context.Context) ([]GitProviderAcco
 		"type":   "ListGitProviderAccounts",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1201,7 +1201,7 @@ func (c *Client) UpdateGitProviderAccount(ctx context.Context, id string, req Cr
 		"type":   "UpdateGitProviderAccount",
 		"params": map[string]interface{}{"id": id, "account": req},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1222,7 +1222,7 @@ func (c *Client) DeleteGitProviderAccount(ctx context.Context, id string) error 
 		"type":   "DeleteGitProviderAccount",
 		"params": map[string]interface{}{"id": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -1244,7 +1244,7 @@ func (c *Client) CreateDockerRegistryAccount(ctx context.Context, req CreateDock
 		"type":   "CreateDockerRegistryAccount",
 		"params": map[string]interface{}{"account": req},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1265,7 +1265,7 @@ func (c *Client) GetDockerRegistryAccount(ctx context.Context, id string) (*Dock
 		"type":   "GetDockerRegistryAccount",
 		"params": map[string]interface{}{"id": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1290,7 +1290,7 @@ func (c *Client) ListDockerRegistryAccounts(ctx context.Context) ([]DockerRegist
 		"type":   "ListDockerRegistryAccounts",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1311,7 +1311,7 @@ func (c *Client) UpdateDockerRegistryAccount(ctx context.Context, id string, req
 		"type":   "UpdateDockerRegistryAccount",
 		"params": map[string]interface{}{"id": id, "account": req},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1332,7 +1332,7 @@ func (c *Client) DeleteDockerRegistryAccount(ctx context.Context, id string) err
 		"type":   "DeleteDockerRegistryAccount",
 		"params": map[string]interface{}{"id": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -1354,7 +1354,7 @@ func (c *Client) CreateGitRepository(ctx context.Context, req CreateGitRepositor
 		"type":   "CreateRepo",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1375,7 +1375,7 @@ func (c *Client) GetGitRepository(ctx context.Context, idOrName string) (*GitRep
 		"type":   "GetRepo",
 		"params": map[string]interface{}{"repo": idOrName},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1400,7 +1400,7 @@ func (c *Client) UpdateGitRepository(ctx context.Context, req UpdateGitRepositor
 		"type":   "UpdateRepo",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1421,7 +1421,7 @@ func (c *Client) DeleteGitRepository(ctx context.Context, id string) error {
 		"type":   "DeleteRepo",
 		"params": DeleteGitRepositoryRequest{ID: id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -1442,7 +1442,7 @@ func (c *Client) ListGitRepositories(ctx context.Context) ([]GitRepository, erro
 		"type":   "ListFullRepos",
 		"params": map[string]interface{}{"query": map[string]interface{}{}},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1464,7 +1464,7 @@ func (c *Client) BuildRepo(ctx context.Context, req BuildRepoRequest) error {
 		"type":   "BuildRepo",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1482,7 +1482,7 @@ func (c *Client) CloneRepo(ctx context.Context, req CloneRepoRequest) error {
 		"type":   "CloneRepo",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1500,7 +1500,7 @@ func (c *Client) PullRepo(ctx context.Context, req PullRepoRequest) error {
 		"type":   "PullRepo",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1519,7 +1519,7 @@ func (c *Client) CreateStack(ctx context.Context, req CreateStackRequest) (*Stac
 		"type":   "CreateStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1540,7 +1540,7 @@ func (c *Client) GetStack(ctx context.Context, nameOrID string) (*Stack, error) 
 		"type":   "GetStack",
 		"params": map[string]interface{}{"stack": nameOrID},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1565,7 +1565,7 @@ func (c *Client) UpdateStack(ctx context.Context, req UpdateStackRequest) (*Stac
 		"type":   "UpdateStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1586,7 +1586,7 @@ func (c *Client) DeleteStack(ctx context.Context, id string) error {
 		"type":   "DeleteStack",
 		"params": DeleteStackRequest{ID: id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -1607,7 +1607,7 @@ func (c *Client) ListStacks(ctx context.Context) ([]Stack, error) {
 		"type":   "ListFullStacks",
 		"params": map[string]interface{}{"query": map[string]interface{}{}},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1631,7 +1631,7 @@ func (c *Client) StartStack(ctx context.Context, req StartStackRequest) error {
 		"type":   "StartStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1649,7 +1649,7 @@ func (c *Client) StopStack(ctx context.Context, req StopStackRequest) error {
 		"type":   "StopStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1667,7 +1667,7 @@ func (c *Client) PauseStack(ctx context.Context, req PauseStackRequest) error {
 		"type":   "PauseStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1685,7 +1685,7 @@ func (c *Client) DeployStack(ctx context.Context, req DeployStackRequest) error 
 		"type":   "DeployStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1703,7 +1703,7 @@ func (c *Client) DestroyStackAction(ctx context.Context, req DestroyStackActionR
 		"type":   "DestroyStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1722,7 +1722,7 @@ func (c *Client) GetServer(ctx context.Context, nameOrID string) (*Server, error
 		"type":   "GetServer",
 		"params": map[string]interface{}{"server": nameOrID},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1747,7 +1747,7 @@ func (c *Client) ListServers(ctx context.Context) ([]Server, error) {
 		"type":   "ListFullServers",
 		"params": map[string]interface{}{"query": map[string]interface{}{}},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1769,7 +1769,7 @@ func (c *Client) CreateServer(ctx context.Context, req CreateServerRequest) (*Se
 		"type":   "CreateServer",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1791,7 +1791,7 @@ func (c *Client) UpdateServer(ctx context.Context, req UpdateServerRequest) (*Se
 		"type":   "UpdateServer",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -1813,7 +1813,7 @@ func (c *Client) DeleteServer(ctx context.Context, id string) error {
 		"type":   "DeleteServer",
 		"params": DeleteServerRequest{ID: id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -1837,7 +1837,7 @@ func (c *Client) PruneBuildx(ctx context.Context, req PruneBuildxRequest) error 
 		"type":   "PruneBuildx",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1855,7 +1855,7 @@ func (c *Client) PruneContainers(ctx context.Context, req PruneContainersRequest
 		"type":   "PruneContainers",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1873,7 +1873,7 @@ func (c *Client) PruneDockerBuilders(ctx context.Context, req PruneDockerBuilder
 		"type":   "PruneDockerBuilders",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1891,7 +1891,7 @@ func (c *Client) PruneImages(ctx context.Context, req PruneImagesRequest) error 
 		"type":   "PruneImages",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1909,7 +1909,7 @@ func (c *Client) PruneNetworks(ctx context.Context, req PruneNetworksRequest) er
 		"type":   "PruneNetworks",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1927,7 +1927,7 @@ func (c *Client) PruneSystem(ctx context.Context, req PruneSystemRequest) error 
 		"type":   "PruneSystem",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1945,7 +1945,7 @@ func (c *Client) PruneVolumes(ctx context.Context, req PruneVolumesRequest) erro
 		"type":   "PruneVolumes",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1965,7 +1965,7 @@ func (c *Client) StartDeployment(ctx context.Context, req StartDeploymentRequest
 		"type":   "StartDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -1983,7 +1983,7 @@ func (c *Client) PullDeployment(ctx context.Context, req PullDeploymentRequest) 
 		"type":   "PullDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2003,7 +2003,7 @@ func (c *Client) RunAction(ctx context.Context, req RunActionRequest) error {
 		"type":   "RunAction",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2023,7 +2023,7 @@ func (c *Client) RunBuild(ctx context.Context, req RunBuildRequest) error {
 		"type":   "RunBuild",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2043,7 +2043,7 @@ func (c *Client) RunProcedure(ctx context.Context, req RunProcedureRequest) erro
 		"type":   "RunProcedure",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2061,7 +2061,7 @@ func (c *Client) Deploy(ctx context.Context, req DeployRequest) error {
 		"type":   "Deploy",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2079,7 +2079,7 @@ func (c *Client) StopDeployment(ctx context.Context, req StopDeploymentRequest) 
 		"type":   "StopDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2097,7 +2097,7 @@ func (c *Client) DestroyDeployment(ctx context.Context, req DestroyDeploymentReq
 		"type":   "DestroyDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2115,7 +2115,7 @@ func (c *Client) RestartDeployment(ctx context.Context, req RestartDeploymentReq
 		"type":   "RestartDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2133,7 +2133,7 @@ func (c *Client) PauseDeployment(ctx context.Context, req PauseDeploymentRequest
 		"type":   "PauseDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2151,7 +2151,7 @@ func (c *Client) UnpauseDeployment(ctx context.Context, req UnpauseDeploymentReq
 		"type":   "UnpauseDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2169,7 +2169,7 @@ func (c *Client) RestartStack(ctx context.Context, req RestartStackRequest) erro
 		"type":   "RestartStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2187,7 +2187,7 @@ func (c *Client) UnpauseStack(ctx context.Context, req UnpauseStackRequest) erro
 		"type":   "UnpauseStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2205,7 +2205,7 @@ func (c *Client) PullStack(ctx context.Context, req PullStackRequest) error {
 		"type":   "PullStack",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2223,7 +2223,7 @@ func (c *Client) TestAlerter(ctx context.Context, req TestAlerterRequest) error 
 		"type":   "TestAlerter",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -2242,7 +2242,7 @@ func (c *Client) CreateBuilder(ctx context.Context, req CreateBuilderRequest) (*
 		"type":   "CreateBuilder",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2263,7 +2263,7 @@ func (c *Client) GetBuilder(ctx context.Context, idOrName string) (*Builder, err
 		"type":   "GetBuilder",
 		"params": map[string]interface{}{"builder": idOrName},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2288,7 +2288,7 @@ func (c *Client) UpdateBuilder(ctx context.Context, req UpdateBuilderRequest) (*
 		"type":   "UpdateBuilder",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2309,7 +2309,7 @@ func (c *Client) DeleteBuilder(ctx context.Context, id string) error {
 		"type":   "DeleteBuilder",
 		"params": map[string]interface{}{"id": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -2330,7 +2330,7 @@ func (c *Client) ListBuilders(ctx context.Context) ([]Builder, error) {
 		"type":   "ListBuilders",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2351,7 +2351,7 @@ func (c *Client) CreateAlerter(ctx context.Context, req CreateAlerterRequest) (*
 		"type":   "CreateAlerter",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2372,7 +2372,7 @@ func (c *Client) GetAlerter(ctx context.Context, idOrName string) (*Alerter, err
 		"type":   "GetAlerter",
 		"params": map[string]interface{}{"alerter": idOrName},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2397,7 +2397,7 @@ func (c *Client) UpdateAlerter(ctx context.Context, req UpdateAlerterRequest) (*
 		"type":   "UpdateAlerter",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2418,7 +2418,7 @@ func (c *Client) DeleteAlerter(ctx context.Context, id string) error {
 		"type":   "DeleteAlerter",
 		"params": map[string]interface{}{"id": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -2439,7 +2439,7 @@ func (c *Client) ListAlerters(ctx context.Context) ([]Alerter, error) {
 		"type":   "ListAlerters",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2462,7 +2462,7 @@ func (c *Client) CreateAction(ctx context.Context, req CreateActionRequest) (*Ac
 		"type":   "CreateAction",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2483,7 +2483,7 @@ func (c *Client) GetAction(ctx context.Context, idOrName string) (*Action, error
 		"type":   "GetAction",
 		"params": map[string]interface{}{"action": idOrName},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2508,7 +2508,7 @@ func (c *Client) UpdateAction(ctx context.Context, req UpdateActionRequest) (*Ac
 		"type":   "UpdateAction",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2529,7 +2529,7 @@ func (c *Client) DeleteAction(ctx context.Context, id string) error {
 		"type":   "DeleteAction",
 		"params": map[string]interface{}{"id": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -2550,7 +2550,7 @@ func (c *Client) ListActions(ctx context.Context) ([]Action, error) {
 		"type":   "ListActions",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2572,7 +2572,7 @@ func (c *Client) CreateBuild(ctx context.Context, req CreateBuildRequest) (*Buil
 		"type":   "CreateBuild",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2596,7 +2596,7 @@ func (c *Client) GetBuild(ctx context.Context, idOrName string) (*Build, error) 
 			"build": idOrName,
 		},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2629,7 +2629,7 @@ func (c *Client) UpdateBuild(ctx context.Context, req UpdateBuildRequest) (*Buil
 		"type":   "UpdateBuild",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2653,7 +2653,7 @@ func (c *Client) DeleteBuild(ctx context.Context, id string) error {
 			"id": id,
 		},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -2675,7 +2675,7 @@ func (c *Client) ListBuilds(ctx context.Context) ([]Build, error) {
 		"type":   "ListBuilds",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2697,7 +2697,7 @@ func (c *Client) CreateDeployment(ctx context.Context, req CreateDeploymentReque
 		"type":   "CreateDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2721,7 +2721,7 @@ func (c *Client) GetDeployment(ctx context.Context, idOrName string) (*Deploymen
 			"deployment": idOrName,
 		},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2754,7 +2754,7 @@ func (c *Client) UpdateDeployment(ctx context.Context, req UpdateDeploymentReque
 		"type":   "UpdateDeployment",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2778,7 +2778,7 @@ func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 			"id": id,
 		},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -2800,7 +2800,7 @@ func (c *Client) ListDeployments(ctx context.Context) ([]Deployment, error) {
 		"type":   "ListDeployments",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2822,7 +2822,7 @@ func (c *Client) CreateProcedure(ctx context.Context, req CreateProcedureRequest
 		"type":   "CreateProcedure",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2846,7 +2846,7 @@ func (c *Client) GetProcedure(ctx context.Context, idOrName string) (*Procedure,
 			"procedure": idOrName,
 		},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2875,7 +2875,7 @@ func (c *Client) UpdateProcedure(ctx context.Context, req UpdateProcedureRequest
 		"type":   "UpdateProcedure",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2899,7 +2899,7 @@ func (c *Client) DeleteProcedure(ctx context.Context, id string) error {
 			"id": id,
 		},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -2921,7 +2921,7 @@ func (c *Client) ListProcedures(ctx context.Context) ([]Procedure, error) {
 		"type":   "ListProcedures",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2945,7 +2945,7 @@ func (c *Client) CreateResourceSync(ctx context.Context, req CreateResourceSyncR
 		"type":   "CreateResourceSync",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2967,7 +2967,7 @@ func (c *Client) GetResourceSync(ctx context.Context, id string) (*ResourceSync,
 		"type":   "GetResourceSync",
 		"params": map[string]interface{}{"sync": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -2993,7 +2993,7 @@ func (c *Client) ListResourceSyncs(ctx context.Context) ([]ResourceSync, error) 
 		"type":   "ListResourceSyncs",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -3015,7 +3015,7 @@ func (c *Client) UpdateResourceSync(ctx context.Context, req UpdateResourceSyncR
 		"type":   "UpdateResourceSync",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -3037,7 +3037,7 @@ func (c *Client) DeleteResourceSync(ctx context.Context, id string) error {
 		"type":   "DeleteResourceSync",
 		"params": map[string]interface{}{"id": id},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -3059,7 +3059,7 @@ func (c *Client) RunSync(ctx context.Context, req RunSyncRequest) error {
 		"type":   "RunSync",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/execute", payload)
+	resp, err := c.doRequest(ctx, "/execute", payload)
 	if err != nil {
 		return err
 	}
@@ -3077,7 +3077,7 @@ func (c *Client) CreateNetwork(ctx context.Context, req CreateNetworkRequest) er
 		"type":   "CreateNetwork",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}
@@ -3095,7 +3095,7 @@ func (c *Client) ListDockerNetworks(ctx context.Context, server string) ([]Netwo
 		"type":   "ListDockerNetworks",
 		"params": map[string]interface{}{"server": server},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -3119,7 +3119,7 @@ func (c *Client) ListOnboardingKeys(ctx context.Context) ([]OnboardingKey, error
 		"type":   "ListOnboardingKeys",
 		"params": map[string]interface{}{},
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/read", payload)
+	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -3155,7 +3155,7 @@ func (c *Client) CreateOnboardingKey(ctx context.Context, req CreateOnboardingKe
 		"type":   "CreateOnboardingKey",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -3177,7 +3177,7 @@ func (c *Client) UpdateOnboardingKey(ctx context.Context, req UpdateOnboardingKe
 		"type":   "UpdateOnboardingKey",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -3199,7 +3199,7 @@ func (c *Client) DeleteOnboardingKey(ctx context.Context, req DeleteOnboardingKe
 		"type":   "DeleteOnboardingKey",
 		"params": req,
 	}
-	resp, err := c.doRequest(ctx, http.MethodPost, "/write", payload)
+	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
 		return err
 	}

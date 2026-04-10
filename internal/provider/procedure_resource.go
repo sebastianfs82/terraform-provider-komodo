@@ -169,7 +169,7 @@ func (r *ProcedureResource) Create(ctx context.Context, req resource.CreateReque
 	}
 	tflog.Debug(ctx, "Creating procedure", map[string]interface{}{"name": data.Name.ValueString()})
 
-	cfg, d := partialProcedureConfigFromModel(ctx, &data)
+	cfg, d := partialProcedureConfigFromModel(&data)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -229,7 +229,7 @@ func (r *ProcedureResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 	data.ID = state.ID
 
-	cfg, d := partialProcedureConfigFromModel(ctx, &data)
+	cfg, d := partialProcedureConfigFromModel(&data)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -268,7 +268,7 @@ func (r *ProcedureResource) ImportState(ctx context.Context, req resource.Import
 }
 
 // partialProcedureConfigFromModel converts the Terraform model into a PartialProcedureConfig.
-func partialProcedureConfigFromModel(ctx context.Context, data *ProcedureResourceModel) (client.PartialProcedureConfig, diag.Diagnostics) {
+func partialProcedureConfigFromModel(data *ProcedureResourceModel) (client.PartialProcedureConfig, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	cfg := client.PartialProcedureConfig{}
 

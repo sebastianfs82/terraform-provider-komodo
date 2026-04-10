@@ -20,14 +20,14 @@ type DeploymentImageBuild struct {
 }
 
 // DeploymentImage represents the tagged union for a deployment's image source.
-// The API uses the format: {"type": "Image", "params": {"image": "nginx:latest"}}
+// The API uses the format: {"type": "Image", "params": {"image": "nginx:latest"}}.
 type DeploymentImage struct {
 	Image *DeploymentImageExternal
 	Build *DeploymentImageBuild
 }
 
 // MarshalJSON encodes DeploymentImage in the Komodo API format:
-// {"type": "Image", "params": {...}} or {"type": "Build", "params": {...}}
+// {"type": "Image", "params": {...}} or {"type": "Build", "params": {...}}.
 func (d DeploymentImage) MarshalJSON() ([]byte, error) {
 	if d.Build != nil {
 		return json.Marshal(struct {

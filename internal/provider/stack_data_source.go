@@ -399,7 +399,7 @@ func stackToDataSourceModel(ctx context.Context, stack *client.Stack, data *Stac
 		Command: types.StringValue(strings.TrimRight(stack.Config.PostDeploy.Command, "\n")),
 	}
 
-	envVars := envStringToMap(ctx, strings.TrimRight(stack.Config.Environment, "\n"))
+	envVars := envStringToMap(strings.TrimRight(stack.Config.Environment, "\n"))
 	filePath := types.StringNull()
 	if stack.Config.EnvFilePath != "" {
 		filePath = types.StringValue(stack.Config.EnvFilePath)

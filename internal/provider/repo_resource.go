@@ -350,7 +350,7 @@ func envMapToString(ctx context.Context, m types.Map) string {
 
 // envStringToMap parses a newline-separated KEY=VALUE string into a Terraform map.
 // Keys are uppercased. Returns an empty map for blank input.
-func envStringToMap(ctx context.Context, s string) types.Map {
+func envStringToMap(s string) types.Map {
 	elems := map[string]attr.Value{}
 	for _, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
@@ -514,7 +514,7 @@ func repoToModel(ctx context.Context, repo *client.GitRepository, data *RepoReso
 	} else {
 		data.Webhook = nil
 	}
-	envVars := envStringToMap(ctx, strings.TrimRight(repo.Config.Environment, "\n"))
+	envVars := envStringToMap(strings.TrimRight(repo.Config.Environment, "\n"))
 	envFilePath := repo.Config.EnvFilePath
 	if !envVars.IsNull() && len(envVars.Elements()) > 0 || envFilePath != "" {
 		filePath := types.StringNull()

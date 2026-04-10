@@ -57,7 +57,6 @@ func TestAccStackResource_withGit(t *testing.T) {
 			{
 				Config: testAccStackResourceConfig_withGit(
 					"tf-test-stack-git",
-					"github.com",
 					"owner/my-stack-repo",
 					"main",
 				),
@@ -86,7 +85,6 @@ func TestAccStackResource_gitRecloneComputed(t *testing.T) {
 			{
 				Config: testAccStackResourceConfig_withGit(
 					"tf-test-stack-reclone",
-					"github.com",
 					"owner/my-stack-repo",
 					"main",
 				),
@@ -94,7 +92,7 @@ func TestAccStackResource_gitRecloneComputed(t *testing.T) {
 			},
 			// Re-plan with the same config — must produce an empty diff.
 			{
-				Config:             testAccStackResourceConfig_withGit("tf-test-stack-reclone", "github.com", "owner/my-stack-repo", "main"),
+				Config:             testAccStackResourceConfig_withGit("tf-test-stack-reclone", "owner/my-stack-repo", "main"),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
@@ -125,13 +123,13 @@ func TestAccStackResource_update(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccStackResourceConfig_withGit("tf-update-stack", "github.com", "owner/repo", "main"),
+				Config: testAccStackResourceConfig_withGit("tf-update-stack", "owner/repo", "main"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_stack.test", "source.branch", "main"),
 				),
 			},
 			{
-				Config: testAccStackResourceConfig_withGit("tf-update-stack", "github.com", "owner/repo", "develop"),
+				Config: testAccStackResourceConfig_withGit("tf-update-stack", "owner/repo", "develop"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_stack.test", "source.branch", "develop"),
 				),
@@ -219,18 +217,18 @@ resource "komodo_stack" "test" {
 `, name)
 }
 
-func testAccStackResourceConfig_withGit(name, gitProvider, repo, branch string) string {
+func testAccStackResourceConfig_withGit(name, repo, branch string) string {
 	return fmt.Sprintf(`
 resource "komodo_stack" "test" {
   name = "%s"
 
   source = {
-    url    = "https://%s"
+    url    = "https://github.com"
     path   = "%s"
     branch = "%s"
   }
 }
-`, name, gitProvider, repo, branch)
+`, name, repo, branch)
 }
 
 func testAccStackResourceConfig_withPreDeploy(name string) string {

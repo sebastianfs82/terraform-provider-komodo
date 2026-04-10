@@ -297,7 +297,7 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 
 	items := make([]StackDataSourceModel, 0, len(stacks))
 	for _, stack := range stacks {
-		envVars := envStringToMap(ctx, strings.TrimRight(stack.Config.Environment, "\n"))
+		envVars := envStringToMap(strings.TrimRight(stack.Config.Environment, "\n"))
 		filePath := types.StringNull()
 		if stack.Config.EnvFilePath != "" {
 			filePath = types.StringValue(stack.Config.EnvFilePath)
