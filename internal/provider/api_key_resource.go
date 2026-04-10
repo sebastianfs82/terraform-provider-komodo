@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
-	"terraform-provider-komodo/internal/client"
+	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.

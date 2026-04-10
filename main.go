@@ -10,7 +10,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"terraform-provider-komodo/internal/provider"
+	"github.com/sebastianfs82/terraform-provider-komodo/internal/provider"
 )
 
 var (

@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
-	"terraform-provider-komodo/internal/client"
+	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"

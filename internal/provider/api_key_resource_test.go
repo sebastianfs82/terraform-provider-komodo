@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"terraform-provider-komodo/internal/client"
+	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"

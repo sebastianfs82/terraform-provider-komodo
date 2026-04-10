@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"terraform-provider-komodo/internal/client"
+	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 )
 
 var _ datasource.DataSource = &ServiceUserDataSource{}
