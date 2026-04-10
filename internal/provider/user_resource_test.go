@@ -1,0 +1,179 @@
+package provider
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"testing"
+
+	"terraform-provider-komodo/internal/client"
+
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+)
+
+func TestAccUserResource_basic(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccUserResourceConfig_basic("tf-user-basic", "Password1!"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "username", "tf-user-basic"),
+					resource.TestCheckResourceAttrSet("komodo_user.test", "id"),
+					resource.TestCheckResourceAttr("komodo_user.test", "enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_user.test", "admin", "false"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_servers", "false"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_builds", "false"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccUserResource_withPermissions(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccUserResourceConfig_withPermissions("tf-user-perms", "Password1!", true, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "username", "tf-user-perms"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_servers", "true"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_builds", "true"),
+				),
+			},
+			// Update: revoke permissions
+			{
+				Config: testAccUserResourceConfig_withPermissions("tf-user-perms", "Password1!", false, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "create_servers", "false"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_builds", "false"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccUserResource_disableEnable(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccUserResourceConfig_withEnabled("tf-user-toggle", "Password1!", true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "enabled", "true"),
+				),
+			},
+			{
+				Config: testAccUserResourceConfig_withEnabled("tf-user-toggle", "Password1!", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "enabled", "false"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccUserResource_import(t *testing.T) {
+	var userID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccUserResourceConfig_basic("tf-user-import", "Password1!"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "username", "tf-user-import"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["komodo_user.test"]
+						if !ok {
+							return fmt.Errorf("resource not found")
+						}
+						userID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config:            testAccUserResourceConfig_basic("tf-user-import", "Password1!"),
+				ResourceName:      "komodo_user.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				// password is not returned by the API on Read
+				ImportStateVerifyIgnore: []string{"password"},
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					return userID, nil
+				},
+			},
+		},
+	})
+}
+
+// Config helpers
+
+func testAccUserResourceConfig_basic(username, password string) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username = %[1]q
+  password = %[2]q
+}
+`, username, password)
+}
+
+func testAccUserResourceConfig_withPermissions(username, password string, createServers, createBuilds bool) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username       = %[1]q
+  password       = %[2]q
+  create_servers = %[3]t
+  create_builds  = %[4]t
+}
+`, username, password, createServers, createBuilds)
+}
+
+func testAccUserResourceConfig_withEnabled(username, password string, enabled bool) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username = %[1]q
+  password = %[2]q
+  enabled  = %[3]t
+}
+`, username, password, enabled)
+}
+
+func TestAccUserResource_disappears(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccUserResourceConfig_basic("disappear-user", "Password123!"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("komodo_user.test", "id"),
+					testAccUserDisappears("komodo_user.test"),
+				),
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+func testAccUserDisappears(resourceName string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource not found in state: %s", resourceName)
+		}
+		c := client.NewClient(
+			os.Getenv("KOMODO_ENDPOINT"),
+			os.Getenv("KOMODO_USERNAME"),
+			os.Getenv("KOMODO_PASSWORD"),
+		)
+		return c.DeleteUser(context.Background(), rs.Primary.ID)
+	}
+}

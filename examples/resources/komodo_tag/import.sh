@@ -1,0 +1,1 @@
+terraform import komodo_tag.example 6627c3e4f1a2b3c4d5e6f7a8

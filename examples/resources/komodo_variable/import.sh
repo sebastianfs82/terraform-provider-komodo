@@ -1,0 +1,1 @@
+terraform import komodo_variable.example MY_VARIABLE

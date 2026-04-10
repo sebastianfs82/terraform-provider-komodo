@@ -1,0 +1,37 @@
+---
+page_title: "komodo_procedures Data Source - terraform-provider-komodo"
+subcategory: ""
+description: |-
+  Lists all Komodo procedures visible to the authenticated user.
+---
+
+# komodo_procedures (Data Source)
+
+Lists all Komodo procedures visible to the authenticated user.
+
+## Example Usage
+
+```terraform
+data "komodo_procedures" "all" {}
+
+output "procedure_names" {
+  value = [for p in data.komodo_procedures.all.procedures : p.name]
+}
+```
+
+## Schema
+
+### Read-Only
+
+- `procedures` (List of Object) The list of procedures. (see [below for nested schema](#nestedatt--procedures))
+
+<a id="nestedatt--procedures"></a>
+### Nested Schema for `procedures`
+
+Read-Only:
+
+- `id` (String) The procedure identifier (ObjectId).
+- `name` (String) The name of the procedure.
+- `schedule` (String) The cron schedule for the procedure.
+- `schedule_enabled` (Boolean) Whether the schedule is enabled.
+- `webhook_enabled` (Boolean) Whether webhook triggers are enabled.
