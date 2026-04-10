@@ -9,9 +9,9 @@ resource "komodo_action" "example" {
 }
 
 resource "komodo_action" "scheduled" {
-  name              = "nightly-cleanup"
-  schedule_format   = "Cron"
-  schedule          = "0 0 * * *"
-  schedule_enabled  = true
-  failure_alert     = true
+  name             = "nightly-cleanup"
+  schedule_format  = "Cron"
+  schedule         = "0 0 * * *"
+  schedule_enabled = true
+  failure_alert    = true
 }

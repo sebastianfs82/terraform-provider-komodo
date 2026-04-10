@@ -14,28 +14,8 @@ Manages a Komodo onboarding key used to onboard new servers.
 
 ```terraform
 resource "komodo_onboarding_key" "example" {
-  name = "my-onboarding-key"
-}
-
-# Privileged key with tags and custom server copy
-resource "komodo_onboarding_key" "privileged" {
-  name           = "privileged-onboarding-key"
-  privileged     = true
-  tags           = ["production", "auto-onboarded"]
-  copy_server    = "template-server"
-  create_builder = true
-}
-
-# Key with expiration
-resource "komodo_onboarding_key" "expiring" {
-  name    = "expiring-onboarding-key"
-  expires = 1735689600000 # milliseconds since epoch
-}
-
-# Output the private key (sensitive — only available on creation)
-output "onboarding_private_key" {
-  value     = komodo_onboarding_key.example.private_key
-  sensitive = true
+  name    = "new-server-key"
+  enabled = true
 }
 ```
 
@@ -64,8 +44,10 @@ output "onboarding_private_key" {
 
 ## Import
 
-Import is supported using the `public_key` attribute value.
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-terraform import komodo_onboarding_key.example <public_key>
+terraform import komodo_onboarding_key.example 6627c3e4f1a2b3c4d5e6f7a8
 ```

@@ -39,8 +39,8 @@ resource "komodo_api_key" "svc" {
 
 ### Optional
 
-- `expires` (Number) Expiration timestamp in milliseconds since epoch. Use `0` for no expiration.
-- `service_user_id` (String) When set, creates the API key for the specified service user instead of the authenticated user. Changing this forces a new resource.
+- `expires` (Number) Expiration timestamp in milliseconds since epoch. Use 0 for no expiration.
+- `service_user_id` (String) When set, creates the API key for the specified service user instead of the authenticated user.
 
 ### Read-Only
 
@@ -52,6 +52,8 @@ resource "komodo_api_key" "svc" {
 ## Import
 
 Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
 terraform import komodo_api_key.example K-EDXr0hotlGVGIM67mPSXpPpkvp3j6e92fxybUsNJ
