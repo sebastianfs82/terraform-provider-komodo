@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -58,7 +59,7 @@ type StackSourceModel struct {
 
 type FilesConfigModel struct {
 	Contents     types.String `tfsdk:"contents"`
-	Paths        types.List   `tfsdk:"paths"`
+	FilePaths    types.List   `tfsdk:"file_paths"`
 	LocalEnabled types.Bool   `tfsdk:"local_enabled"`
 	Directory    types.String `tfsdk:"directory"`
 }
@@ -73,7 +74,7 @@ type StackResourceModel struct {
 	// Source
 	Source *StackSourceModel `tfsdk:"source"`
 
-	Files *FilesConfigModel `tfsdk:"files"`
+	Compose *FilesConfigModel `tfsdk:"compose"`
 
 	// Environment
 	Environment *EnvironmentModel `tfsdk:"environment"`
@@ -189,7 +190,7 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					},
 				},
 			},
-			"files": schema.SingleNestedAttribute{
+			"compose": schema.SingleNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "Compose file configuration.",
 				Attributes: map[string]schema.Attribute{
@@ -212,7 +213,7 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						Optional:            true,
 						MarkdownDescription: "Directory to `cd` into before running `docker compose up`.",
 					},
-					"paths": schema.ListAttribute{
+					"file_paths": schema.ListAttribute{
 						Optional:            true,
 						Computed:            true,
 						ElementType:         types.StringType,
@@ -233,8 +234,12 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					},
 					"variables": schema.MapAttribute{
 						Optional:            true,
+						Computed:            true,
 						ElementType:         types.StringType,
 						MarkdownDescription: "Environment variables to inject. Keys are automatically uppercased.",
+						PlanModifiers: []planmodifier.Map{
+							mapplanmodifier.UseStateForUnknown(),
+						},
 					},
 				},
 			},
@@ -516,7 +521,7 @@ func (v autoUpdateScopeValidator) ValidateResource(ctx context.Context, req reso
 
 // gitRepoConflictsValidator rejects configs where source.repo_id is set alongside
 // any of the direct-clone fields (url, account, path, branch, commit).
-// reclone, files.paths, and files.directory are valid alongside repo_id.
+// reclone, compose.file_paths, and compose.directory are valid alongside repo_id.
 type gitRepoConflictsValidator struct{}
 
 func (v gitRepoConflictsValidator) Description(_ context.Context) string {
@@ -563,7 +568,7 @@ func (r *StackResource) Create(ctx context.Context, req resource.CreateRequest, 
 	tflog.Debug(ctx, "Creating stack", map[string]interface{}{"name": data.Name.ValueString()})
 	createReq := client.CreateStackRequest{
 		Name:   data.Name.ValueString(),
-		Config: stackConfigFromModel(ctx, &data),
+		Config: stackConfigFromModel(ctx, r.client, &data),
 	}
 	stack, err := r.client.CreateStack(ctx, createReq)
 	if err != nil {
@@ -577,7 +582,7 @@ func (r *StackResource) Create(ctx context.Context, req resource.CreateRequest, 
 		)
 		return
 	}
-	stackToModel(ctx, stack, &data)
+	stackToModel(ctx, r.client, stack, &data)
 	tflog.Trace(ctx, "Created stack resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -602,7 +607,7 @@ func (r *StackResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		resp.State.RemoveResource(ctx)
 		return
 	}
-	stackToModel(ctx, stack, &data)
+	stackToModel(ctx, r.client, stack, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -620,14 +625,14 @@ func (r *StackResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	data.ID = state.ID
 	updateReq := client.UpdateStackRequest{
 		ID:     data.ID.ValueString(),
-		Config: stackConfigFromModel(ctx, &data),
+		Config: stackConfigFromModel(ctx, r.client, &data),
 	}
 	stack, err := r.client.UpdateStack(ctx, updateReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update stack, got error: %s", err))
 		return
 	}
-	stackToModel(ctx, stack, &data)
+	stackToModel(ctx, r.client, stack, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -651,19 +656,19 @@ func (r *StackResource) ImportState(ctx context.Context, req resource.ImportStat
 }
 
 // stackConfigFromModel converts the Terraform model into a StackConfig.
-func stackConfigFromModel(ctx context.Context, data *StackResourceModel) client.StackConfig {
+func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackResourceModel) client.StackConfig {
 	cfg := client.StackConfig{
 		ServerID:    data.ServerID.ValueString(),
 		SwarmID:     data.SwarmID.ValueString(),
 		ProjectName: data.ProjectName.ValueString(),
 
 		FileContents: func() string {
-			if data.Files != nil {
-				return strings.ReplaceAll(data.Files.Contents.ValueString(), "\r\n", "\n")
+			if data.Compose != nil {
+				return strings.ReplaceAll(data.Compose.Contents.ValueString(), "\r\n", "\n")
 			}
 			return ""
 		}(),
-		FilesOnHost: data.Files != nil && data.Files.LocalEnabled.ValueBool(),
+		FilesOnHost: data.Compose != nil && data.Compose.LocalEnabled.ValueBool(),
 
 		AutoPull: data.AutoPullEnabled.ValueBool(),
 		RunBuild: func() bool {
@@ -739,18 +744,22 @@ func stackConfigFromModel(ctx context.Context, data *StackResourceModel) client.
 			cfg.GitProvider = url
 			cfg.GitHttps = true
 		}
-		cfg.GitAccount = data.Source.AccountID.ValueString()
+		account, err := c.ResolveGitAccountUsername(ctx, data.Source.AccountID.ValueString())
+		if err != nil {
+			account = data.Source.AccountID.ValueString()
+		}
+		cfg.GitAccount = account
 		cfg.Repo = data.Source.Path.ValueString()
 		cfg.Branch = data.Source.Branch.ValueString()
 		cfg.Commit = data.Source.Commit.ValueString()
 		cfg.Reclone = data.Source.CloneEnforced.ValueBool()
 	}
 
-	if data.Files != nil {
-		cfg.RunDirectory = data.Files.Directory.ValueString()
-		if !data.Files.Paths.IsNull() && !data.Files.Paths.IsUnknown() {
+	if data.Compose != nil {
+		cfg.RunDirectory = data.Compose.Directory.ValueString()
+		if !data.Compose.FilePaths.IsNull() && !data.Compose.FilePaths.IsUnknown() {
 			var vals []string
-			data.Files.Paths.ElementsAs(ctx, &vals, false)
+			data.Compose.FilePaths.ElementsAs(ctx, &vals, false)
 			cfg.FilePaths = vals
 		}
 	}
@@ -803,7 +812,7 @@ func stackConfigFromModel(ctx context.Context, data *StackResourceModel) client.
 }
 
 // stackToModel populates the Terraform model from a Stack API response.
-func stackToModel(ctx context.Context, stack *client.Stack, data *StackResourceModel) {
+func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, data *StackResourceModel) {
 	data.ID = types.StringValue(stack.ID.OID)
 	data.Name = types.StringValue(stack.Name)
 
@@ -841,23 +850,42 @@ func stackToModel(ctx context.Context, stack *client.Stack, data *StackResourceM
 	if data.Source != nil || stack.Config.Repo != "" || stack.Config.Branch != "" ||
 		stack.Config.GitProvider != "" || stack.Config.GitAccount != "" || stack.Config.Commit != "" ||
 		stack.Config.LinkedRepo != "" || stack.Config.Reclone {
+		// When repo_id is set, URL/account_id/path/branch/commit are derived from
+		// the linked repo by the API and must not be persisted to state (they were
+		// never in config), otherwise plan == null but state == derived value
+		// causes a perpetual diff.
 		var urlVal types.String
-		if stack.Config.GitProvider != "" {
-			if stack.Config.GitHttps {
-				urlVal = types.StringValue("https://" + stack.Config.GitProvider)
+		accountIDVal := types.StringNull()
+		pathVal := types.StringNull()
+		branchVal := types.StringNull()
+		commitVal := types.StringNull()
+		if stack.Config.LinkedRepo == "" {
+			if stack.Config.GitProvider != "" {
+				if stack.Config.GitHttps {
+					urlVal = types.StringValue("https://" + stack.Config.GitProvider)
+				} else {
+					urlVal = types.StringValue("http://" + stack.Config.GitProvider)
+				}
 			} else {
-				urlVal = types.StringValue("http://" + stack.Config.GitProvider)
+				urlVal = types.StringNull()
 			}
+			id := c.ResolveGitAccountID(ctx, stack.Config.GitProvider, stack.Config.GitAccount)
+			if id != "" {
+				accountIDVal = types.StringValue(id)
+			}
+			pathVal = strOrNull(stack.Config.Repo)
+			branchVal = strOrNull(stack.Config.Branch)
+			commitVal = strOrNull(stack.Config.Commit)
 		} else {
 			urlVal = types.StringNull()
 		}
 		data.Source = &StackSourceModel{
 			RepoID:        strOrNull(stack.Config.LinkedRepo),
 			URL:           urlVal,
-			AccountID:     strOrNull(stack.Config.GitAccount),
-			Path:          strOrNull(stack.Config.Repo),
-			Branch:        strOrNull(stack.Config.Branch),
-			Commit:        strOrNull(stack.Config.Commit),
+			AccountID:     accountIDVal,
+			Path:          pathVal,
+			Branch:        branchVal,
+			Commit:        commitVal,
 			CloneEnforced: types.BoolValue(stack.Config.Reclone),
 		}
 	} else {
@@ -915,17 +943,17 @@ func stackToModel(ctx context.Context, stack *client.Stack, data *StackResourceM
 	extraArgs, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.ExtraArgs)
 	data.ExtraArguments = extraArgs
 
-	if data.Files != nil || stack.Config.FileContents != "" || stack.Config.FilesOnHost ||
+	if data.Compose != nil || stack.Config.FileContents != "" || stack.Config.FilesOnHost ||
 		len(stack.Config.FilePaths) > 0 || stack.Config.RunDirectory != "" {
 		filePaths, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
-		data.Files = &FilesConfigModel{
+		data.Compose = &FilesConfigModel{
 			Contents:     strOrNull(strings.ReplaceAll(stack.Config.FileContents, "\r\n", "\n")),
 			LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
 			Directory:    strOrNull(stack.Config.RunDirectory),
-			Paths:        filePaths,
+			FilePaths:    filePaths,
 		}
 	} else {
-		data.Files = nil
+		data.Compose = nil
 	}
 
 	// Build block

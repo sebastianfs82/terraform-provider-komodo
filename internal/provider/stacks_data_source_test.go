@@ -10,34 +10,34 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestAccDeploymentsDataSource_basic(t *testing.T) {
+func TestAccStacksDataSource_basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDeploymentsDataSourceConfig("tf-acc-deployments-ds-basic"),
+				Config: testAccStacksDataSourceConfig("tf-acc-stacks-ds-basic"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("data.komodo_deployments.all", "deployments.#"),
+					resource.TestCheckResourceAttrSet("data.komodo_stacks.all", "stacks.#"),
 				),
 			},
 		},
 	})
 }
 
-func TestAccDeploymentsDataSource_containsCreated(t *testing.T) {
+func TestAccStacksDataSource_containsCreated(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDeploymentsDataSourceConfig("tf-acc-deployments-ds-find"),
+				Config: testAccStacksDataSourceConfig("tf-acc-stacks-ds-find"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckTypeSetElemNestedAttrs(
-						"data.komodo_deployments.all",
-						"deployments.*",
+						"data.komodo_stacks.all",
+						"stacks.*",
 						map[string]string{
-							"name": "tf-acc-deployments-ds-find",
+							"name": "tf-acc-stacks-ds-find",
 						},
 					),
 				),
@@ -46,19 +46,19 @@ func TestAccDeploymentsDataSource_containsCreated(t *testing.T) {
 	})
 }
 
-func TestAccDeploymentsDataSource_filteredByServerID(t *testing.T) {
+func TestAccStacksDataSource_filteredByServerID(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDeploymentsDataSourceConfig_filteredByServerID("tf-acc-deps-ds-server"),
+				Config: testAccStacksDataSourceConfig_filteredByServerID("tf-acc-stacks-ds-server"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckTypeSetElemNestedAttrs(
-						"data.komodo_deployments.filtered",
-						"deployments.*",
+						"data.komodo_stacks.filtered",
+						"stacks.*",
 						map[string]string{
-							"name": "tf-acc-deps-ds-server",
+							"name": "tf-acc-stacks-ds-server",
 						},
 					),
 				),
@@ -67,39 +67,30 @@ func TestAccDeploymentsDataSource_filteredByServerID(t *testing.T) {
 	})
 }
 
-func testAccDeploymentsDataSourceConfig(name string) string {
+func testAccStacksDataSourceConfig(name string) string {
 	return fmt.Sprintf(`
-data "komodo_servers" "all" {}
-
-resource "komodo_deployment" "test" {
-  name      = %q
-  server_id = data.komodo_servers.all.servers[0].id
-  image = {
-    image = "nginx:latest"
-  }
+resource "komodo_stack" "test" {
+  name = %q
 }
 
-data "komodo_deployments" "all" {
-  depends_on = [komodo_deployment.test]
+data "komodo_stacks" "all" {
+  depends_on = [komodo_stack.test]
 }
 `, name)
 }
 
-func testAccDeploymentsDataSourceConfig_filteredByServerID(name string) string {
+func testAccStacksDataSourceConfig_filteredByServerID(name string) string {
 	return fmt.Sprintf(`
 data "komodo_servers" "all" {}
 
-resource "komodo_deployment" "test" {
+resource "komodo_stack" "test" {
   name      = %q
   server_id = data.komodo_servers.all.servers[0].id
-  image = {
-    image = "nginx:latest"
-  }
 }
 
-data "komodo_deployments" "filtered" {
+data "komodo_stacks" "filtered" {
   server_id  = data.komodo_servers.all.servers[0].id
-  depends_on = [komodo_deployment.test]
+  depends_on = [komodo_stack.test]
 }
 `, name)
 }

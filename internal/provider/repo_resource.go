@@ -14,7 +14,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -24,6 +26,7 @@ import (
 
 var _ resource.Resource = &RepoResource{}
 var _ resource.ResourceWithImportState = &RepoResource{}
+var _ resource.ResourceWithValidateConfig = &RepoResource{}
 
 func NewRepoResource() resource.Resource {
 	return &RepoResource{}
@@ -39,11 +42,12 @@ type SystemCommandModel struct {
 }
 
 type RepositoryProviderModel struct {
-	URL       types.String `tfsdk:"url"`
-	AccountID types.String `tfsdk:"account_id"`
-	Path      types.String `tfsdk:"path"`
-	Branch    types.String `tfsdk:"branch"`
-	Commit    types.String `tfsdk:"commit"`
+	Domain       types.String `tfsdk:"domain"`
+	HttpsEnabled types.Bool   `tfsdk:"https_enabled"`
+	AccountID    types.String `tfsdk:"account_id"`
+	Path         types.String `tfsdk:"path"`
+	Branch       types.String `tfsdk:"branch"`
+	Commit       types.String `tfsdk:"commit"`
 }
 
 type EnvironmentModel struct {
@@ -138,9 +142,13 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 				Optional:            true,
 				MarkdownDescription: "Git provider configuration.",
 				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
+					"domain": schema.StringAttribute{
 						Optional:            true,
-						MarkdownDescription: "The URL of the git provider, e.g. `https://github.com`.",
+						MarkdownDescription: "The git provider domain without protocol prefix (e.g. `github.com`).",
+					},
+					"https_enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether to use HTTPS (true) or HTTP (false) for cloning. Defaults to true.",
 					},
 					"account_id": schema.StringAttribute{
 						Optional:            true,
@@ -152,7 +160,9 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 					},
 					"branch": schema.StringAttribute{
 						Optional:            true,
-						MarkdownDescription: "The branch to check out. Omit or set to empty string to clear.",
+						Computed:            true,
+						Default:             stringdefault.StaticString("main"),
+						MarkdownDescription: "The branch to check out. Defaults to `main`.",
 					},
 					"commit": schema.StringAttribute{
 						Optional:            true,
@@ -207,8 +217,12 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 					},
 					"variables": schema.MapAttribute{
 						Optional:            true,
+						Computed:            true,
 						ElementType:         types.StringType,
 						MarkdownDescription: "Environment variables to inject. Keys are automatically uppercased.",
+						PlanModifiers: []planmodifier.Map{
+							mapplanmodifier.UseStateForUnknown(),
+						},
 					},
 				},
 			},
@@ -231,6 +245,34 @@ func (r *RepoResource) Configure(ctx context.Context, req resource.ConfigureRequ
 	r.client = c
 }
 
+func (r *RepoResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data RepoResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Source == nil {
+		return
+	}
+	accountIDSet := !data.Source.AccountID.IsNull() && !data.Source.AccountID.IsUnknown() && data.Source.AccountID.ValueString() != ""
+	if accountIDSet {
+		if !data.Source.Domain.IsNull() && !data.Source.Domain.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("source").AtName("domain"),
+				"Conflicting source attributes",
+				"source.domain cannot be set when source.account_id is set. The domain is derived automatically from the linked provider account.",
+			)
+		}
+		if !data.Source.HttpsEnabled.IsNull() && !data.Source.HttpsEnabled.IsUnknown() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("source").AtName("https_enabled"),
+				"Conflicting source attributes",
+				"source.https_enabled cannot be set when source.account_id is set. The value is derived automatically from the linked provider account.",
+			)
+		}
+	}
+}
+
 func (r *RepoResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data RepoResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -242,7 +284,7 @@ func (r *RepoResource) Create(ctx context.Context, req resource.CreateRequest, r
 	})
 	createReq := client.CreateGitRepositoryRequest{
 		Name:   data.Name.ValueString(),
-		Config: repoConfigFromModel(ctx, &data),
+		Config: repoConfigFromModel(ctx, r.client, &data),
 	}
 	repo, err := r.client.CreateGitRepository(ctx, createReq)
 	if err != nil {
@@ -256,7 +298,7 @@ func (r *RepoResource) Create(ctx context.Context, req resource.CreateRequest, r
 		)
 		return
 	}
-	repoToModel(ctx, repo, &data)
+	repoToModel(ctx, r.client, repo, &data)
 	tflog.Trace(ctx, "Created git repository resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -277,7 +319,7 @@ func (r *RepoResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		resp.State.RemoveResource(ctx)
 		return
 	}
-	repoToModel(ctx, repo, &data)
+	repoToModel(ctx, r.client, repo, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -295,14 +337,14 @@ func (r *RepoResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	data.ID = state.ID
 	updateReq := client.UpdateGitRepositoryRequest{
 		ID:     data.ID.ValueString(),
-		Config: repoConfigFromModel(ctx, &data),
+		Config: repoConfigFromModel(ctx, r.client, &data),
 	}
 	repo, err := r.client.UpdateGitRepository(ctx, updateReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update git repository, got error: %s", err))
 		return
 	}
-	repoToModel(ctx, repo, &data)
+	repoToModel(ctx, r.client, repo, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -365,11 +407,14 @@ func envStringToMap(s string) types.Map {
 		elems[strings.ToUpper(line[:idx])] = types.StringValue(line[idx+1:])
 	}
 	m, _ := types.MapValue(types.StringType, elems)
+	if len(elems) == 0 {
+		return types.MapNull(types.StringType)
+	}
 	return m
 }
 
 // repoConfigFromModel converts the Terraform model into a GitRepositoryConfig.
-func repoConfigFromModel(ctx context.Context, data *RepoResourceModel) client.GitRepositoryConfig {
+func repoConfigFromModel(ctx context.Context, c *client.Client, data *RepoResourceModel) client.GitRepositoryConfig {
 	cfg := client.GitRepositoryConfig{
 		ServerID:  data.ServerID.ValueString(),
 		BuilderID: data.BuilderID.ValueString(),
@@ -401,18 +446,30 @@ func repoConfigFromModel(ctx context.Context, data *RepoResourceModel) client.Gi
 		SkipSecretInterp: false,
 	}
 	if data.Source != nil {
-		url := data.Source.URL.ValueString()
-		if strings.HasPrefix(url, "https://") {
-			cfg.GitProvider = strings.TrimPrefix(url, "https://")
-			cfg.GitHttps = true
-		} else if strings.HasPrefix(url, "http://") {
-			cfg.GitProvider = strings.TrimPrefix(url, "http://")
-			cfg.GitHttps = false
-		} else {
-			cfg.GitProvider = url
-			cfg.GitHttps = true
+		// Resolve account_id → full GitProviderAccount so we can derive domain/https from it.
+		linkedAccount := c.ResolveGitAccountFull(ctx, data.Source.AccountID.ValueString())
+
+		// domain: explicit value wins; fall back to the linked account's domain.
+		if !data.Source.Domain.IsNull() && !data.Source.Domain.IsUnknown() {
+			cfg.GitProvider = data.Source.Domain.ValueString()
+		} else if linkedAccount != nil {
+			cfg.GitProvider = linkedAccount.Domain
 		}
-		cfg.GitAccount = data.Source.AccountID.ValueString()
+
+		// https_enabled: explicit value wins; fall back to the linked account's setting.
+		if !data.Source.HttpsEnabled.IsNull() && !data.Source.HttpsEnabled.IsUnknown() {
+			cfg.GitHttps = data.Source.HttpsEnabled.ValueBool()
+		} else if linkedAccount != nil {
+			cfg.GitHttps = linkedAccount.HttpsEnabled
+		} else {
+			cfg.GitHttps = true // safe default
+		}
+
+		account, err := c.ResolveGitAccountUsername(ctx, data.Source.AccountID.ValueString())
+		if err != nil {
+			account = data.Source.AccountID.ValueString()
+		}
+		cfg.GitAccount = account
 		cfg.Repo = data.Source.Path.ValueString()
 		cfg.Branch = data.Source.Branch.ValueString()
 		cfg.Commit = data.Source.Commit.ValueString()
@@ -442,7 +499,7 @@ func repoConfigFromModel(ctx context.Context, data *RepoResourceModel) client.Gi
 }
 
 // repoToModel populates the Terraform model from a GitRepository API response.
-func repoToModel(ctx context.Context, repo *client.GitRepository, data *RepoResourceModel) {
+func repoToModel(ctx context.Context, c *client.Client, repo *client.GitRepository, data *RepoResourceModel) {
 	data.ID = types.StringValue(repo.ID.OID)
 	data.Name = types.StringValue(repo.Name)
 	// Store null when the API returns empty string so removing the attribute from
@@ -459,9 +516,13 @@ func repoToModel(ctx context.Context, repo *client.GitRepository, data *RepoReso
 	}
 	// Populate git block. If the block was nil in config and all git fields are
 	// empty/default, keep it nil so no spurious diff is produced.
-	gitAccount := types.StringNull()
+	gitAccountID := ""
 	if repo.Config.GitAccount != "" {
-		gitAccount = types.StringValue(repo.Config.GitAccount)
+		gitAccountID = c.ResolveGitAccountID(ctx, repo.Config.GitProvider, repo.Config.GitAccount)
+	}
+	gitAccount := types.StringNull()
+	if gitAccountID != "" {
+		gitAccount = types.StringValue(gitAccountID)
 	}
 	if data.Source != nil || repo.Config.Repo != "" || repo.Config.Branch != "" ||
 		repo.Config.GitProvider != "" || repo.Config.GitAccount != "" || repo.Config.Commit != "" {
@@ -477,22 +538,24 @@ func repoToModel(ctx context.Context, repo *client.GitRepository, data *RepoReso
 		if repo.Config.Commit != "" {
 			gitCommit = types.StringValue(repo.Config.Commit)
 		}
-		var urlVal types.String
-		if repo.Config.GitProvider != "" {
-			if repo.Config.GitHttps {
-				urlVal = types.StringValue("https://" + repo.Config.GitProvider)
-			} else {
-				urlVal = types.StringValue("http://" + repo.Config.GitProvider)
+		// When account_id is set, domain/https_enabled are derived from the linked
+		// account and should not be persisted to state (they were never in config).
+		// Only store them when the user explicitly configured them (account_id absent).
+		domainVal := types.StringNull()
+		httpsVal := types.BoolNull()
+		if gitAccount.IsNull() {
+			if repo.Config.GitProvider != "" {
+				domainVal = types.StringValue(repo.Config.GitProvider)
 			}
-		} else {
-			urlVal = types.StringNull()
+			httpsVal = types.BoolValue(repo.Config.GitHttps)
 		}
 		data.Source = &RepositoryProviderModel{
-			URL:       urlVal,
-			AccountID: gitAccount,
-			Path:      gitPath,
-			Branch:    gitBranch,
-			Commit:    gitCommit,
+			Domain:       domainVal,
+			HttpsEnabled: httpsVal,
+			AccountID:    gitAccount,
+			Path:         gitPath,
+			Branch:       gitBranch,
+			Commit:       gitCommit,
 		}
 	} else {
 		data.Source = nil

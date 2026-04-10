@@ -27,6 +27,8 @@ type ReposDataSource struct {
 }
 
 type ReposDataSourceModel struct {
+	ServerID     types.String          `tfsdk:"server_id"`
+	BuilderID    types.String          `tfsdk:"builder_id"`
 	Repositories []RepoDataSourceModel `tfsdk:"repositories"`
 }
 
@@ -49,6 +51,14 @@ func (d *ReposDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo git repositories visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"server_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter repos by server ID. When set, only repos cloned on this server are returned.",
+			},
+			"builder_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter repos by builder ID. When set, only repos using this builder are returned.",
+			},
 			"repositories": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of git repositories.",
@@ -74,9 +84,13 @@ func (d *ReposDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 							Computed:            true,
 							MarkdownDescription: "Git source configuration.",
 							Attributes: map[string]schema.Attribute{
-								"url": schema.StringAttribute{
+								"domain": schema.StringAttribute{
 									Computed:            true,
-									MarkdownDescription: "The URL of the git provider, e.g. `https://github.com`.",
+									MarkdownDescription: "The git provider domain without protocol prefix (e.g. `github.com`).",
+								},
+								"https_enabled": schema.BoolAttribute{
+									Computed:            true,
+									MarkdownDescription: "Whether HTTPS is used for cloning.",
 								},
 								"account_id": schema.StringAttribute{
 									Computed:            true,
@@ -193,6 +207,12 @@ func (d *ReposDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	items := make([]RepoDataSourceModel, 0, len(repos))
 	for _, repo := range repos {
+		if !data.ServerID.IsNull() && !data.ServerID.IsUnknown() && repo.Config.ServerID != data.ServerID.ValueString() {
+			continue
+		}
+		if !data.BuilderID.IsNull() && !data.BuilderID.IsUnknown() && repo.Config.BuilderID != data.BuilderID.ValueString() {
+			continue
+		}
 		gitAccount := types.StringNull()
 		if repo.Config.GitAccount != "" {
 			gitAccount = types.StringValue(repo.Config.GitAccount)
@@ -232,15 +252,9 @@ func (d *ReposDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 			return
 		}
 
-		var repoURLVal types.String
+		domainVal := types.StringNull()
 		if repo.Config.GitProvider != "" {
-			if repo.Config.GitHttps {
-				repoURLVal = types.StringValue("https://" + repo.Config.GitProvider)
-			} else {
-				repoURLVal = types.StringValue("http://" + repo.Config.GitProvider)
-			}
-		} else {
-			repoURLVal = types.StringNull()
+			domainVal = types.StringValue(repo.Config.GitProvider)
 		}
 
 		items = append(items, RepoDataSourceModel{
@@ -249,11 +263,12 @@ func (d *ReposDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 			ServerID:  types.StringValue(repo.Config.ServerID),
 			BuilderID: types.StringValue(repo.Config.BuilderID),
 			Source: &RepositoryProviderModel{
-				URL:       repoURLVal,
-				AccountID: gitAccount,
-				Path:      types.StringValue(repo.Config.Repo),
-				Branch:    types.StringValue(repo.Config.Branch),
-				Commit:    types.StringValue(repo.Config.Commit),
+				Domain:       domainVal,
+				HttpsEnabled: types.BoolValue(repo.Config.GitHttps),
+				AccountID:    gitAccount,
+				Path:         types.StringValue(repo.Config.Repo),
+				Branch:       types.StringValue(repo.Config.Branch),
+				Commit:       types.StringValue(repo.Config.Commit),
 			},
 			Path:    types.StringValue(repo.Config.Path),
 			Webhook: webhook,

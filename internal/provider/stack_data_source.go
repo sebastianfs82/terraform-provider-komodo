@@ -40,7 +40,7 @@ type StackDataSourceModel struct {
 	ProjectName types.String `tfsdk:"project_name"`
 
 	Source *StackSourceModel `tfsdk:"source"`
-	Files  *FilesConfigModel `tfsdk:"files"`
+	Files  *FilesConfigModel `tfsdk:"compose"`
 
 	Environment *EnvironmentModel `tfsdk:"environment"`
 
@@ -138,7 +138,7 @@ func (d *StackDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 					},
 				},
 			},
-			"files": schema.SingleNestedAttribute{
+			"compose": schema.SingleNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "Compose file configuration.",
 				Attributes: map[string]schema.Attribute{
@@ -154,7 +154,7 @@ func (d *StackDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 						Computed:            true,
 						MarkdownDescription: "Directory to `cd` into before running `docker compose up`.",
 					},
-					"paths": schema.ListAttribute{
+					"file_paths": schema.ListAttribute{
 						Computed:            true,
 						ElementType:         types.StringType,
 						MarkdownDescription: "Paths to compose files relative to `directory`.",
@@ -381,7 +381,7 @@ func stackToDataSourceModel(ctx context.Context, stack *client.Stack, data *Stac
 		Contents:     strOrNull(stack.Config.FileContents),
 		LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
 		Directory:    strOrNull(stack.Config.RunDirectory),
-		Paths:        dsFilePaths,
+		FilePaths:    dsFilePaths,
 	}
 
 	data.Webhook = &StackDataSourceWebhookModel{

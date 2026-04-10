@@ -35,7 +35,8 @@ func TestAccRepoDataSource_fields(t *testing.T) {
 				Config: testAccRepoDataSourceConfig_withSource("tf-acc-repo-ds-fields"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_repo.test", "name", "tf-acc-repo-ds-fields"),
-					resource.TestCheckResourceAttr("data.komodo_repo.test", "source.url", "https://github.com"),
+					resource.TestCheckResourceAttr("data.komodo_repo.test", "source.domain", "github.com"),
+					resource.TestCheckResourceAttr("data.komodo_repo.test", "source.https_enabled", "true"),
 					resource.TestCheckResourceAttr("data.komodo_repo.test", "source.path", "owner/repo"),
 					resource.TestCheckResourceAttr("data.komodo_repo.test", "source.branch", "main"),
 					resource.TestCheckResourceAttrSet("data.komodo_repo.test", "id"),
@@ -95,9 +96,10 @@ func testAccRepoDataSourceConfig_withSource(name string) string {
 resource "komodo_repo" "src" {
   name = %q
   source = {
-    url    = "https://github.com"
-    path   = "owner/repo"
-    branch = "main"
+    domain        = "github.com"
+    https_enabled = true
+    path          = "owner/repo"
+    branch        = "main"
   }
 }
 

@@ -27,7 +27,9 @@ type StacksDataSource struct {
 }
 
 type StacksDataSourceModel struct {
-	Stacks []StackDataSourceModel `tfsdk:"stacks"`
+	ServerID types.String           `tfsdk:"server_id"`
+	RepoID   types.String           `tfsdk:"repo_id"`
+	Stacks   []StackDataSourceModel `tfsdk:"stacks"`
 }
 
 func (d *StacksDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -49,6 +51,14 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo stacks visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"server_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter stacks by server ID. When set, only stacks running on this server are returned.",
+			},
+			"repo_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter stacks by linked repo ID. When set, only stacks sourced from this repo are returned.",
+			},
 			"stacks": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of stacks.",
@@ -108,7 +118,7 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 								},
 							},
 						},
-						"files": schema.SingleNestedAttribute{
+						"compose": schema.SingleNestedAttribute{
 							Computed:            true,
 							MarkdownDescription: "Compose file configuration.",
 							Attributes: map[string]schema.Attribute{
@@ -124,7 +134,7 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 									Computed:            true,
 									MarkdownDescription: "Directory to `cd` into before running `docker compose up`.",
 								},
-								"paths": schema.ListAttribute{
+								"file_paths": schema.ListAttribute{
 									Computed:            true,
 									ElementType:         types.StringType,
 									MarkdownDescription: "Paths to compose files relative to `directory`.",
@@ -297,6 +307,12 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 
 	items := make([]StackDataSourceModel, 0, len(stacks))
 	for _, stack := range stacks {
+		if !data.ServerID.IsNull() && !data.ServerID.IsUnknown() && stack.Config.ServerID != data.ServerID.ValueString() {
+			continue
+		}
+		if !data.RepoID.IsNull() && !data.RepoID.IsUnknown() && stack.Config.LinkedRepo != data.RepoID.ValueString() {
+			continue
+		}
 		envVars := envStringToMap(strings.TrimRight(stack.Config.Environment, "\n"))
 		filePath := types.StringNull()
 		if stack.Config.EnvFilePath != "" {
@@ -342,7 +358,7 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 					Contents:     strOrNull(stack.Config.FileContents),
 					LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
 					Directory:    strOrNull(stack.Config.RunDirectory),
-					Paths:        f,
+					FilePaths:    f,
 				}
 			}(),
 			Environment:     environment,

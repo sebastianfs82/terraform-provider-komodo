@@ -26,7 +26,9 @@ type BuildsDataSource struct {
 }
 
 type BuildsDataSourceModel struct {
-	Builds []BuildListItemModel `tfsdk:"builds"`
+	RepoID    types.String         `tfsdk:"repo_id"`
+	BuilderID types.String         `tfsdk:"builder_id"`
+	Builds    []BuildListItemModel `tfsdk:"builds"`
 }
 
 type BuildListItemModel struct {
@@ -48,6 +50,14 @@ func (d *BuildsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo builds visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"repo_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter builds by linked repo ID. When set, only builds sourced from this repo are returned.",
+			},
+			"builder_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter builds by builder ID. When set, only builds using this builder are returned.",
+			},
 			"builds": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of builds.",
@@ -124,6 +134,12 @@ func (d *BuildsDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 
 	items := make([]BuildListItemModel, 0, len(builds))
 	for _, b := range builds {
+		if !data.RepoID.IsNull() && !data.RepoID.IsUnknown() && b.Config.LinkedRepo != data.RepoID.ValueString() {
+			continue
+		}
+		if !data.BuilderID.IsNull() && !data.BuilderID.IsUnknown() && b.Config.BuilderID != data.BuilderID.ValueString() {
+			continue
+		}
 		items = append(items, BuildListItemModel{
 			ID:             types.StringValue(b.ID.OID),
 			Name:           types.StringValue(b.Name),

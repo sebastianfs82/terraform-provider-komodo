@@ -26,6 +26,7 @@ type ResourceSyncsDataSource struct {
 }
 
 type ResourceSyncsDataSourceModel struct {
+	RepoID        types.String                `tfsdk:"repo_id"`
 	ResourceSyncs []ResourceSyncListItemModel `tfsdk:"resource_syncs"`
 }
 
@@ -46,6 +47,10 @@ func (d *ResourceSyncsDataSource) Schema(_ context.Context, _ datasource.SchemaR
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo resource syncs visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"repo_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter resource syncs by linked repo ID. When set, only resource syncs sourced from this repo are returned.",
+			},
 			"resource_syncs": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of resource syncs.",
@@ -114,6 +119,9 @@ func (d *ResourceSyncsDataSource) Read(ctx context.Context, req datasource.ReadR
 
 	items := make([]ResourceSyncListItemModel, 0, len(syncs))
 	for _, s := range syncs {
+		if !data.RepoID.IsNull() && !data.RepoID.IsUnknown() && s.Config.LinkedRepo != data.RepoID.ValueString() {
+			continue
+		}
 		items = append(items, ResourceSyncListItemModel{
 			ID:             types.StringValue(s.ID.OID),
 			Name:           types.StringValue(s.Name),

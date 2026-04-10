@@ -45,7 +45,8 @@ func TestAccRepoResource_withConfig(t *testing.T) {
 				),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_repo.test", "name", "tf-test-repo-full"),
-					resource.TestCheckResourceAttr("komodo_repo.test", "source.url", "https://github.com"),
+					resource.TestCheckResourceAttr("komodo_repo.test", "source.domain", "github.com"),
+					resource.TestCheckResourceAttr("komodo_repo.test", "source.https_enabled", "true"),
 					resource.TestCheckResourceAttr("komodo_repo.test", "source.path", "owner/my-repo"),
 					resource.TestCheckResourceAttr("komodo_repo.test", "source.branch", "main"),
 					resource.TestCheckResourceAttrSet("komodo_repo.test", "id"),
@@ -156,17 +157,18 @@ resource "komodo_repo" "test" {
 `, name)
 }
 
-func testAccRepoResourceConfig_withConfig(name, gitProvider, repo, branch string) string {
+func testAccRepoResourceConfig_withConfig(name, domain, repo, branch string) string {
 	return fmt.Sprintf(`
 resource "komodo_repo" "test" {
   name = "%s"
   source = {
-    url    = "https://%s"
-    path   = "%s"
-    branch = "%s"
+    domain        = "%s"
+    https_enabled = true
+    path          = "%s"
+    branch        = "%s"
   }
 }
-`, name, gitProvider, repo, branch)
+`, name, domain, repo, branch)
 }
 
 func testAccRepoResourceConfig_withOnClone(name string) string {

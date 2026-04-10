@@ -1240,6 +1240,55 @@ func (c *Client) DeleteGitProviderAccount(ctx context.Context, id string) error 
 	return nil
 }
 
+// ResolveGitAccountUsername resolves a git account identifier to a username.
+// If accountID is a 24-char hex ObjectId it fetches the GitProviderAccount and
+// returns its Username. Otherwise the value is already a username and returned as-is.
+func (c *Client) ResolveGitAccountUsername(ctx context.Context, accountID string) (string, error) {
+	if accountID == "" {
+		return "", nil
+	}
+	if len(accountID) == 24 && isHex(accountID) {
+		account, err := c.GetGitProviderAccount(ctx, accountID)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve git provider account %q: %w", accountID, err)
+		}
+		return account.Username, nil
+	}
+	return accountID, nil
+}
+
+// ResolveGitAccountFull resolves a git account identifier to the full GitProviderAccount.
+// Returns nil when accountID is empty, not a 24-char hex ObjectId, or the lookup fails.
+func (c *Client) ResolveGitAccountFull(ctx context.Context, accountID string) *GitProviderAccount {
+	if len(accountID) != 24 || !isHex(accountID) {
+		return nil
+	}
+	account, err := c.GetGitProviderAccount(ctx, accountID)
+	if err != nil {
+		return nil
+	}
+	return account
+}
+
+// ResolveGitAccountID resolves a git account username (as returned by the API) back
+// to the provider account ObjectId. It lists all provider accounts and matches by
+// domain + username. Returns the ObjectId when found, or the username as fallback.
+func (c *Client) ResolveGitAccountID(ctx context.Context, domain, username string) string {
+	if username == "" {
+		return ""
+	}
+	accounts, err := c.ListGitProviderAccounts(ctx)
+	if err != nil {
+		return username
+	}
+	for _, a := range accounts {
+		if a.Username == username && a.Domain == domain {
+			return a.ID.OID
+		}
+	}
+	return username
+}
+
 // DockerRegistryAccount CRUD
 
 func (c *Client) CreateDockerRegistryAccount(ctx context.Context, req CreateDockerRegistryAccountRequest) (*DockerRegistryAccount, error) {

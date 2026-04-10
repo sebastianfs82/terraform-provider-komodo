@@ -26,6 +26,7 @@ type DeploymentsDataSource struct {
 }
 
 type DeploymentsDataSourceModel struct {
+	ServerID    types.String              `tfsdk:"server_id"`
 	Deployments []DeploymentListItemModel `tfsdk:"deployments"`
 }
 
@@ -45,6 +46,10 @@ func (d *DeploymentsDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo deployments visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"server_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter deployments by server ID. When set, only deployments running on this server are returned.",
+			},
 			"deployments": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of deployments.",
@@ -109,6 +114,9 @@ func (d *DeploymentsDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 	items := make([]DeploymentListItemModel, 0, len(deployments))
 	for _, dep := range deployments {
+		if !data.ServerID.IsNull() && !data.ServerID.IsUnknown() && dep.Config.ServerID != data.ServerID.ValueString() {
+			continue
+		}
 		imageStr := ""
 		if dep.Config.Image.Image != nil {
 			imageStr = dep.Config.Image.Image.Image

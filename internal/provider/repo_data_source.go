@@ -79,9 +79,13 @@ func (d *RepoDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 				Computed:            true,
 				MarkdownDescription: "Git provider configuration.",
 				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
+					"domain": schema.StringAttribute{
 						Computed:            true,
-						MarkdownDescription: "The URL of the git provider, e.g. `https://github.com`.",
+						MarkdownDescription: "The git provider domain without protocol prefix (e.g. `github.com`).",
+					},
+					"https_enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether HTTPS is used for cloning.",
 					},
 					"account_id": schema.StringAttribute{
 						Computed:            true,
@@ -206,22 +210,17 @@ func (d *RepoDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	if repo.Config.GitAccount != "" {
 		gitAccount = types.StringValue(repo.Config.GitAccount)
 	}
-	var urlVal types.String
+	domainVal := types.StringNull()
 	if repo.Config.GitProvider != "" {
-		if repo.Config.GitHttps {
-			urlVal = types.StringValue("https://" + repo.Config.GitProvider)
-		} else {
-			urlVal = types.StringValue("http://" + repo.Config.GitProvider)
-		}
-	} else {
-		urlVal = types.StringNull()
+		domainVal = types.StringValue(repo.Config.GitProvider)
 	}
 	data.Source = &RepositoryProviderModel{
-		URL:       urlVal,
-		AccountID: gitAccount,
-		Path:      types.StringValue(repo.Config.Repo),
-		Branch:    types.StringValue(repo.Config.Branch),
-		Commit:    types.StringValue(repo.Config.Commit),
+		Domain:       domainVal,
+		HttpsEnabled: types.BoolValue(repo.Config.GitHttps),
+		AccountID:    gitAccount,
+		Path:         types.StringValue(repo.Config.Repo),
+		Branch:       types.StringValue(repo.Config.Branch),
+		Commit:       types.StringValue(repo.Config.Commit),
 	}
 	data.Path = types.StringValue(repo.Config.Path)
 	secret := types.StringNull()

@@ -44,42 +44,6 @@ func TestAccStackDataSource_withGit(t *testing.T) {
 	})
 }
 
-func TestAccStacksDataSource_basic(t *testing.T) {
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: testAccStacksDataSourceConfig_basic("tf-test-stacks-ds"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("data.komodo_stacks.test", "stacks.#"),
-				),
-			},
-		},
-	})
-}
-
-func TestAccStacksDataSource_containsCreatedStack(t *testing.T) {
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: testAccStacksDataSourceConfig_basic("tf-test-stacks-ds-find"),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckTypeSetElemNestedAttrs(
-						"data.komodo_stacks.test",
-						"stacks.*",
-						map[string]string{
-							"name": "tf-test-stacks-ds-find",
-						},
-					),
-				),
-			},
-		},
-	})
-}
-
 func testAccStackDataSourceConfig_basic(name string) string {
 	return `
 resource "komodo_stack" "test" {
@@ -107,18 +71,6 @@ resource "komodo_stack" "test" {
 
 data "komodo_stack" "test" {
   name       = komodo_stack.test.name
-  depends_on = [komodo_stack.test]
-}
-`
-}
-
-func testAccStacksDataSourceConfig_basic(name string) string {
-	return `
-resource "komodo_stack" "test" {
-  name = "` + name + `"
-}
-
-data "komodo_stacks" "test" {
   depends_on = [komodo_stack.test]
 }
 `
