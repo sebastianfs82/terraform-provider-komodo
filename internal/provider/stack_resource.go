@@ -118,6 +118,9 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 		"command": schema.StringAttribute{
 			Optional:            true,
 			MarkdownDescription: "The shell command to run.",
+			PlanModifiers: []planmodifier.String{
+				trimTrailingNewlinePlanModifier{},
+			},
 		},
 	}
 
@@ -181,6 +184,7 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					"reclone_enforced": schema.BoolAttribute{
 						Optional:            true,
 						Computed:            true,
+						Default:             booldefault.StaticBool(false),
 						MarkdownDescription: "Whether to delete and reclone the repo folder instead of `git pull`.",
 					},
 				},
@@ -948,6 +952,26 @@ func stackToModel(ctx context.Context, stack *client.Stack, data *StackResourceM
 
 	links, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.Links)
 	data.Links = links
+}
+
+// trimTrailingNewlinePlanModifier strips the trailing newline from a string plan
+// value. The Komodo API removes trailing newlines from command strings when
+// returning them, which would otherwise cause "inconsistent result" errors.
+type trimTrailingNewlinePlanModifier struct{}
+
+func (m trimTrailingNewlinePlanModifier) Description(_ context.Context) string {
+	return "Trims the trailing newline from the planned value."
+}
+
+func (m trimTrailingNewlinePlanModifier) MarkdownDescription(_ context.Context) string {
+	return "Trims the trailing newline from the planned value."
+}
+
+func (m trimTrailingNewlinePlanModifier) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	resp.PlanValue = types.StringValue(strings.TrimRight(req.PlanValue.ValueString(), "\n"))
 }
 
 // normalizeNewlinesPlanModifier replaces \r\n with \n in string plan values.
