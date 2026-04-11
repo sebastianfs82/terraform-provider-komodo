@@ -139,7 +139,7 @@ func NewDeployDeploymentAction() action.Action { return &DeployDeploymentAction{
 type DeployDeploymentAction struct{ client *client.Client }
 
 type DeployDeploymentModel struct {
-	ID types.String `tfsdk:"id"`
+	ID         types.String `tfsdk:"id"`
 	StopSignal types.String `tfsdk:"stop_signal"`
 	StopTime   types.Int64  `tfsdk:"stop_time"`
 }
@@ -208,9 +208,9 @@ func NewStopDeploymentAction() action.Action { return &StopDeploymentAction{} }
 type StopDeploymentAction struct{ client *client.Client }
 
 type StopDeploymentModel struct {
-	ID types.String `tfsdk:"id"`
-	Signal     types.String `tfsdk:"signal"`
-	Time       types.Int64  `tfsdk:"time"`
+	ID     types.String `tfsdk:"id"`
+	Signal types.String `tfsdk:"signal"`
+	Time   types.Int64  `tfsdk:"time"`
 }
 
 func (a *StopDeploymentAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -277,9 +277,9 @@ func NewDestroyDeploymentAction() action.Action { return &DestroyDeploymentActio
 type DestroyDeploymentAction struct{ client *client.Client }
 
 type DestroyDeploymentModel struct {
-	ID types.String `tfsdk:"id"`
-	Signal     types.String `tfsdk:"signal"`
-	Time       types.Int64  `tfsdk:"time"`
+	ID     types.String `tfsdk:"id"`
+	Signal types.String `tfsdk:"signal"`
+	Time   types.Int64  `tfsdk:"time"`
 }
 
 func (a *DestroyDeploymentAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {

@@ -25,7 +25,7 @@ func NewStackDeployAction() action.Action { return &StackDeployAction{} }
 type StackDeployAction struct{ client *client.Client }
 
 type StackDeployModel struct {
-	ID    types.String `tfsdk:"id"`
+	ID       types.String `tfsdk:"id"`
 	Services types.List   `tfsdk:"services"`
 	StopTime types.Int64  `tfsdk:"stop_time"`
 }
@@ -109,7 +109,7 @@ func NewStackStartAction() action.Action { return &StackStartAction{} }
 type StackStartAction struct{ client *client.Client }
 
 type StackStartModel struct {
-	ID    types.String `tfsdk:"id"`
+	ID       types.String `tfsdk:"id"`
 	Services types.List   `tfsdk:"services"`
 }
 
@@ -184,7 +184,7 @@ func NewStackStopAction() action.Action { return &StackStopAction{} }
 type StackStopAction struct{ client *client.Client }
 
 type StackStopModel struct {
-	ID    types.String `tfsdk:"id"`
+	ID       types.String `tfsdk:"id"`
 	Services types.List   `tfsdk:"services"`
 	StopTime types.Int64  `tfsdk:"stop_time"`
 }
@@ -268,7 +268,7 @@ func NewStackPauseAction() action.Action { return &StackPauseAction{} }
 type StackPauseAction struct{ client *client.Client }
 
 type StackPauseModel struct {
-	ID    types.String `tfsdk:"id"`
+	ID       types.String `tfsdk:"id"`
 	Services types.List   `tfsdk:"services"`
 }
 
@@ -343,7 +343,7 @@ func NewStackDestroyAction() action.Action { return &StackDestroyAction{} }
 type StackDestroyAction struct{ client *client.Client }
 
 type StackDestroyModel struct {
-	ID         types.String `tfsdk:"id"`
+	ID            types.String `tfsdk:"id"`
 	Services      types.List   `tfsdk:"services"`
 	RemoveOrphans types.Bool   `tfsdk:"remove_orphans"`
 	StopTime      types.Int64  `tfsdk:"stop_time"`
@@ -433,7 +433,7 @@ func NewStackRestartAction() action.Action { return &StackRestartAction{} }
 type StackRestartAction struct{ client *client.Client }
 
 type StackRestartModel struct {
-	ID    types.String `tfsdk:"id"`
+	ID       types.String `tfsdk:"id"`
 	Services types.List   `tfsdk:"services"`
 }
 
@@ -508,7 +508,7 @@ func NewStackUnpauseAction() action.Action { return &StackUnpauseAction{} }
 type StackUnpauseAction struct{ client *client.Client }
 
 type StackUnpauseModel struct {
-	ID    types.String `tfsdk:"id"`
+	ID       types.String `tfsdk:"id"`
 	Services types.List   `tfsdk:"services"`
 }
 
@@ -583,7 +583,7 @@ func NewStackPullAction() action.Action { return &StackPullAction{} }
 type StackPullAction struct{ client *client.Client }
 
 type StackPullModel struct {
-	ID    types.String `tfsdk:"id"`
+	ID       types.String `tfsdk:"id"`
 	Services types.List   `tfsdk:"services"`
 }
 
@@ -658,7 +658,7 @@ func NewStackDeployIfChangedAction() action.Action { return &StackDeployIfChange
 type StackDeployIfChangedAction struct{ client *client.Client }
 
 type StackDeployIfChangedModel struct {
-	ID    types.String `tfsdk:"id"`
+	ID       types.String `tfsdk:"id"`
 	StopTime types.Int64  `tfsdk:"stop_time"`
 }
 
@@ -729,7 +729,7 @@ func NewStackRunServiceAction() action.Action { return &StackRunServiceAction{} 
 type StackRunServiceAction struct{ client *client.Client }
 
 type StackRunServiceModel struct {
-	ID        types.String `tfsdk:"id"`
+	ID           types.String `tfsdk:"id"`
 	Service      types.String `tfsdk:"service"`
 	Command      types.List   `tfsdk:"command"`
 	NoTty        types.Bool   `tfsdk:"no_tty"`
