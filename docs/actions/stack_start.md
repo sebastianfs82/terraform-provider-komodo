@@ -17,7 +17,7 @@ Triggers a `docker compose start` on the target Komodo stack.
 
 ### Required
 
-- `stack` (String) Id or name of the stack to start.
+- `id` (String) The ID of the stack to start.
 
 ### Optional
 

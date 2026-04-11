@@ -29,25 +29,35 @@ data "komodo_servers" "all" {}
 Read-Only:
 
 - `address` (String) The ws/s address of the periphery client.
-- `auto_prune` (Boolean) Whether to run `docker image prune -a -f` every 24 hours.
-- `auto_rotate_keys` (Boolean) Whether to automatically rotate server keys.
+- `alerts` (Attributes) Alert configuration for this server. (see [below for nested schema](#nestedatt--servers--alerts))
+- `auto_prune_enabled` (Boolean) Whether to run `docker image prune -a -f` every 24 hours.
+- `auto_rotate_keys_enabled` (Boolean) Whether to automatically rotate server keys.
+- `enabled` (Boolean) Whether the server is enabled.
+- `external_address` (String) The address used for container links on this server.
+- `id` (String) The server identifier (ObjectId).
+- `links` (List of String) Quick links displayed in the Komodo UI for this server.
+- `mounts_ignored` (List of String) Mount paths filtered from system stats reports.
+- `name` (String) The name of the server.
+- `region` (String) An optional region label.
+- `tls_ignored` (Boolean) Whether periphery TLS certificate validation is skipped.
+
+<a id="nestedatt--servers--alerts"></a>
+### Nested Schema for `servers.alerts`
+
+Read-Only:
+
+- `enabled` (Boolean) Whether server stats monitoring and alerting is enabled.
+- `thresholds` (Attributes) Alert threshold percentages. (see [below for nested schema](#nestedatt--servers--alerts--thresholds))
+- `types` (Set of String) Enabled alert types.
+
+<a id="nestedatt--servers--alerts--thresholds"></a>
+### Nested Schema for `servers.alerts.thresholds`
+
+Read-Only:
+
 - `cpu_critical` (Number) CPU percentage threshold for CRITICAL state.
 - `cpu_warning` (Number) CPU percentage threshold for WARNING state.
 - `disk_critical` (Number) Disk percentage threshold for CRITICAL state.
 - `disk_warning` (Number) Disk percentage threshold for WARNING state.
-- `enabled` (Boolean) Whether the server is enabled.
-- `external_address` (String) The address used for container links on this server.
-- `id` (String) The server identifier (ObjectId).
-- `ignore_mounts` (List of String) Mount paths to filter from system stats reports.
-- `insecure_tls` (Boolean) Whether to skip periphery TLS certificate validation.
-- `links` (List of String) Quick links displayed in the Komodo UI for this server.
-- `mem_critical` (Number) Memory percentage threshold for CRITICAL state.
-- `mem_warning` (Number) Memory percentage threshold for WARNING state.
-- `name` (String) The name of the server.
-- `region` (String) An optional region label.
-- `send_cpu_alerts` (Boolean) Whether to send alerts about server CPU status.
-- `send_disk_alerts` (Boolean) Whether to send alerts about server disk status.
-- `send_mem_alerts` (Boolean) Whether to send alerts about server memory status.
-- `send_unreachable_alerts` (Boolean) Whether to send alerts about server reachability.
-- `send_version_mismatch_alerts` (Boolean) Whether to send alerts about version mismatches with core.
-- `stats_monitoring` (Boolean) Whether to monitor server stats beyond health checks.
+- `memory_critical` (Number) Memory percentage threshold for CRITICAL state.
+- `memory_warning` (Number) Memory percentage threshold for WARNING state.

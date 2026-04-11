@@ -17,7 +17,7 @@ Deploys (or redeploys) the container for the target deployment. Pulls the image,
 
 ### Required
 
-- `deployment` (String) Id or name of the deployment to deploy.
+- `id` (String) The ID of the deployment to deploy.
 
 ### Optional
 

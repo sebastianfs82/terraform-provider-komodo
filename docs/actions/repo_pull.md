@@ -17,4 +17,4 @@ Pulls the latest changes for the target repo on its attached server.
 
 ### Required
 
-- `repo` (String) Id or name of the repo to pull.
+- `id` (String) The ID of the repo to pull.

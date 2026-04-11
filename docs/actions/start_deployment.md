@@ -17,4 +17,4 @@ Starts the target deployment.
 
 ### Required
 
-- `deployment` (String) Id or name of the deployment to start.
+- `id` (String) The ID of the deployment to start.

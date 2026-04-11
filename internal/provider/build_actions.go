@@ -25,7 +25,7 @@ func NewRunBuildAction() action.Action { return &RunBuildAction{} }
 type RunBuildAction struct{ client *client.Client }
 
 type RunBuildModel struct {
-	Build types.String `tfsdk:"build"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *RunBuildAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -36,9 +36,9 @@ func (a *RunBuildAction) Schema(_ context.Context, _ action.SchemaRequest, resp 
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Runs the target build.",
 		Attributes: map[string]schema.Attribute{
-			"build": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the build to run.",
+				MarkdownDescription: "The ID of the build to run.",
 			},
 		},
 	}
@@ -56,8 +56,8 @@ func (a *RunBuildAction) Invoke(ctx context.Context, req action.InvokeRequest, r
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing RunBuild", map[string]interface{}{"build": data.Build.ValueString()})
-	if err := a.client.RunBuild(ctx, client.RunBuildRequest{Build: data.Build.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing RunBuild", map[string]interface{}{"build": data.ID.ValueString()})
+	if err := a.client.RunBuild(ctx, client.RunBuildRequest{Build: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to run build, got error: %s", err))
 		return
 	}

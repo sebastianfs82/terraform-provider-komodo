@@ -17,7 +17,7 @@ Triggers a `docker compose restart` on the target Komodo stack.
 
 ### Required
 
-- `stack` (String) Id or name of the stack to restart.
+- `id` (String) The ID of the stack to restart.
 
 ### Optional
 

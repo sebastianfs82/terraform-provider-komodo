@@ -25,7 +25,7 @@ func NewRunActionAction() action.Action { return &RunActionAction{} }
 type RunActionAction struct{ client *client.Client }
 
 type RunActionModel struct {
-	Action types.String `tfsdk:"action"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *RunActionAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -36,9 +36,9 @@ func (a *RunActionAction) Schema(_ context.Context, _ action.SchemaRequest, resp
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Runs the target action.",
 		Attributes: map[string]schema.Attribute{
-			"action": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the action to run.",
+				MarkdownDescription: "The ID of the action to run.",
 			},
 		},
 	}
@@ -56,8 +56,8 @@ func (a *RunActionAction) Invoke(ctx context.Context, req action.InvokeRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing RunAction", map[string]interface{}{"action": data.Action.ValueString()})
-	if err := a.client.RunAction(ctx, client.RunActionRequest{Action: data.Action.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing RunAction", map[string]interface{}{"action": data.ID.ValueString()})
+	if err := a.client.RunAction(ctx, client.RunActionRequest{Action: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to run action, got error: %s", err))
 		return
 	}

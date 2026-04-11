@@ -133,7 +133,7 @@ func (c *Client) GetUserGroup(ctx context.Context, name string) (*UserGroup, err
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "did not find") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
@@ -225,9 +225,16 @@ func NewClientWithApiKey(endpoint, apiKey, apiSecret string) *Client {
 	}
 }
 
-// LoginResponse represents the response from the login endpoint.
+// LoginResponse represents the JWT data inside a successful login response.
 type LoginResponse struct {
 	JWT string `json:"jwt"`
+}
+
+// loginLocalUserResponse is the tagged-union response from the Komodo 2.x
+// /auth/login/LoginLocalUser endpoint: {"type":"Jwt","data":{"jwt":"..."}}.
+type loginLocalUserResponse struct {
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
 }
 
 // ApiKey represents a Komodo API key.
@@ -281,7 +288,7 @@ func (c *Client) login(ctx context.Context) error {
 		return fmt.Errorf("failed to marshal login request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+"/auth/LoginLocalUser", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+"/auth/login/LoginLocalUser", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create login request: %w", err)
 	}
@@ -299,9 +306,18 @@ func (c *Client) login(ctx context.Context) error {
 		return fmt.Errorf("login failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var loginResp LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
+	var outer loginLocalUserResponse
+	if err := json.NewDecoder(resp.Body).Decode(&outer); err != nil {
 		return fmt.Errorf("failed to decode login response: %w", err)
+	}
+
+	if outer.Type != "Jwt" {
+		return fmt.Errorf("login requires additional authentication (%s) which is not supported by the Terraform provider; use an API key instead", outer.Type)
+	}
+
+	var loginResp LoginResponse
+	if err := json.Unmarshal(outer.Data, &loginResp); err != nil {
+		return fmt.Errorf("failed to decode JWT from login response: %w", err)
 	}
 
 	c.mu.Lock()
@@ -455,7 +471,7 @@ func (c *Client) GetApiKey(ctx context.Context, keyID string) (*ApiKey, error) {
 
 // CreateApiKey creates a new API key.
 func (c *Client) CreateApiKey(ctx context.Context, req CreateApiKeyRequest) (*ApiKey, error) {
-	resp, err := c.doRequest(ctx, "/user/CreateApiKey", req)
+	resp, err := c.doRequest(ctx, "/auth/manage/CreateApiKey", req)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +515,7 @@ func (c *Client) CreateApiKey(ctx context.Context, req CreateApiKeyRequest) (*Ap
 
 // DeleteApiKey deletes an API key.
 func (c *Client) DeleteApiKey(ctx context.Context, req DeleteApiKeyRequest) error {
-	resp, err := c.doRequest(ctx, "/user/DeleteApiKey", req)
+	resp, err := c.doRequest(ctx, "/auth/manage/DeleteApiKey", req)
 	if err != nil {
 		return err
 	}
@@ -880,7 +896,7 @@ func (c *Client) FindUser(ctx context.Context, user string) (*User, error) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "did not find") || strings.Contains(bodyStr, "no user found") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "did not find") || strings.Contains(bodyStr, "no user found") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -1166,7 +1182,7 @@ func (c *Client) GetGitProviderAccount(ctx context.Context, id string) (*GitProv
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "did not find") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
@@ -1325,7 +1341,7 @@ func (c *Client) GetDockerRegistryAccount(ctx context.Context, id string) (*Dock
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "did not find") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
@@ -1435,7 +1451,7 @@ func (c *Client) GetGitRepository(ctx context.Context, idOrName string) (*GitRep
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
@@ -1481,7 +1497,7 @@ func (c *Client) DeleteGitRepository(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -1600,7 +1616,7 @@ func (c *Client) GetStack(ctx context.Context, nameOrID string) (*Stack, error) 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
@@ -1646,7 +1662,7 @@ func (c *Client) DeleteStack(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if strings.Contains(bodyStr, "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
+		if strings.Contains(strings.ToLower(bodyStr), "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
@@ -1782,7 +1798,7 @@ func (c *Client) GetServer(ctx context.Context, nameOrID string) (*Server, error
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
@@ -1859,6 +1875,27 @@ func (c *Client) UpdateServer(ctx context.Context, req UpdateServerRequest) (*Se
 	return &server, nil
 }
 
+// UpdateServerPublicKey updates the public key for the given server.
+func (c *Client) UpdateServerPublicKey(ctx context.Context, serverID, publicKey string) error {
+	payload := map[string]interface{}{
+		"type": "UpdateServerPublicKey",
+		"params": UpdateServerPublicKeyRequest{
+			Server:    serverID,
+			PublicKey: publicKey,
+		},
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 // DeleteServer deletes the server with the given ID.
 func (c *Client) DeleteServer(ctx context.Context, id string) error {
 	payload := map[string]interface{}{
@@ -1873,7 +1910,7 @@ func (c *Client) DeleteServer(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if strings.Contains(bodyStr, "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
+		if strings.Contains(strings.ToLower(bodyStr), "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
@@ -2269,6 +2306,42 @@ func (c *Client) PullStack(ctx context.Context, req PullStackRequest) error {
 	return nil
 }
 
+// DeployStackIfChanged checks deployed contents vs latest and only deploys if changed.
+func (c *Client) DeployStackIfChanged(ctx context.Context, req DeployStackIfChangedRequest) error {
+	payload := map[string]interface{}{
+		"type":   "DeployStackIfChanged",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/execute", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// RunStackService runs a one-time command against a service using docker compose run.
+func (c *Client) RunStackService(ctx context.Context, req RunStackServiceRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RunStackService",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/execute", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 // TestAlerter tests the alerter's ability to reach the configured endpoint.
 func (c *Client) TestAlerter(ctx context.Context, req TestAlerterRequest) error {
 	payload := map[string]interface{}{
@@ -2323,7 +2396,7 @@ func (c *Client) GetBuilder(ctx context.Context, idOrName string) (*Builder, err
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2369,7 +2442,7 @@ func (c *Client) DeleteBuilder(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2478,7 +2551,7 @@ func (c *Client) DeleteAlerter(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2589,7 +2662,7 @@ func (c *Client) DeleteAction(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2656,7 +2729,7 @@ func (c *Client) GetBuild(ctx context.Context, idOrName string) (*Build, error) 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2713,7 +2786,7 @@ func (c *Client) DeleteBuild(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2781,7 +2854,7 @@ func (c *Client) GetDeployment(ctx context.Context, idOrName string) (*Deploymen
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2838,7 +2911,7 @@ func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2909,7 +2982,7 @@ func (c *Client) GetProcedure(ctx context.Context, idOrName string) (*Procedure,
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -2959,7 +3032,7 @@ func (c *Client) DeleteProcedure(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -3097,7 +3170,7 @@ func (c *Client) DeleteResourceSync(ctx context.Context, id string) error {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -3259,10 +3332,32 @@ func (c *Client) DeleteOnboardingKey(ctx context.Context, req DeleteOnboardingKe
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := strings.ToLower(string(body))
-		if strings.Contains(bodyStr, "not found") || strings.Contains(bodyStr, "did not find") {
+		if strings.Contains(strings.ToLower(bodyStr), "not found") || strings.Contains(strings.ToLower(bodyStr), "did not find") {
 			return nil
 		}
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 	return nil
+}
+
+// GetVersion returns the version of the Komodo Core API.
+func (c *Client) GetVersion(ctx context.Context) (*GetVersionResponse, error) {
+	payload := map[string]interface{}{
+		"type":   "GetVersion",
+		"params": map[string]interface{}{},
+	}
+	resp, err := c.doRequest(ctx, "/read", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var result GetVersionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &result, nil
 }

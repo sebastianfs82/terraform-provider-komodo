@@ -17,7 +17,7 @@ Triggers a `docker compose pull` on the target Komodo stack.
 
 ### Required
 
-- `stack` (String) Id or name of the stack to pull images for.
+- `id` (String) The ID of the stack to pull images for.
 
 ### Optional
 

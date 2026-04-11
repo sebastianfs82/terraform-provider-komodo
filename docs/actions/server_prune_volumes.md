@@ -17,4 +17,4 @@ Prunes the docker volumes on the target server.
 
 ### Required
 
-- `server` (String) Id or name of the server on which to prune volumes.
+- `id` (String) The ID of the server on which to prune volumes.

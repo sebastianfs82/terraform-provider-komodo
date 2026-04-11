@@ -25,7 +25,7 @@ func NewTestAlerterAction() action.Action { return &TestAlerterAction{} }
 type TestAlerterAction struct{ client *client.Client }
 
 type TestAlerterModel struct {
-	Alerter types.String `tfsdk:"alerter"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *TestAlerterAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -36,9 +36,9 @@ func (a *TestAlerterAction) Schema(_ context.Context, _ action.SchemaRequest, re
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Tests an alerter's ability to reach the configured endpoint.",
 		Attributes: map[string]schema.Attribute{
-			"alerter": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the alerter to test.",
+				MarkdownDescription: "The ID of the alerter to test.",
 			},
 		},
 	}
@@ -56,8 +56,8 @@ func (a *TestAlerterAction) Invoke(ctx context.Context, req action.InvokeRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing TestAlerter", map[string]interface{}{"alerter": data.Alerter.ValueString()})
-	if err := a.client.TestAlerter(ctx, client.TestAlerterRequest{Alerter: data.Alerter.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing TestAlerter", map[string]interface{}{"alerter": data.ID.ValueString()})
+	if err := a.client.TestAlerter(ctx, client.TestAlerterRequest{Alerter: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to test alerter, got error: %s", err))
 		return
 	}

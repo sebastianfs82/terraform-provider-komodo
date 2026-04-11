@@ -17,4 +17,4 @@ Runs the target build.
 
 ### Required
 
-- `build` (String) Id or name of the build to run.
+- `id` (String) The ID of the build to run.

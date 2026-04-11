@@ -31,7 +31,7 @@ resource "komodo_user" "example" {
 
 ### Optional
 
-- `admin` (Boolean) Whether the user has global admin permissions.
+- `admin` (Boolean) Whether the user has global admin permissions. **Requires the provider to be authenticated as a superuser** (the Komodo root/init admin). Regular admins cannot promote other users to admin.
 - `create_builds` (Boolean) Whether the user can create builds. Cannot be set when admin is true.
 - `create_servers` (Boolean) Whether the user can create servers. Cannot be set when admin is true.
 - `enabled` (Boolean) Whether the user is enabled and able to access the API.

@@ -1,3 +1,32 @@
+## 0.3.0 (April 11, 2026)
+
+FEATURES:
+
+* **`komodo_version` data source:** Reads the running Komodo Core API server version string.
+* **`komodo_stack_deploy_if_changed` action:** Deploys a stack only when its compose definition has changed since the last deployment.
+* **`komodo_stack_run_service` action:** Runs a one-off service in a stack via `docker compose run`.
+
+BREAKING CHANGES:
+
+* **All action resources:** The resource-specific identifier field (e.g. `deployment`, `stack`, `build`, `repo`, `server`, `procedure`, `action`, `alerter`, `sync`) has been renamed to `id` for consistency. Update all action resource configurations accordingly.
+* **`komodo_server` resource / data source:** Several fields have been renamed or restructured:
+  * `insecure_tls` → `certificate_verification_enabled` (semantics inverted — `true` means TLS verification is **on**)
+  * `auto_rotate_keys` → `auto_rotate_keys_enabled`
+  * `auto_prune` → `auto_prune_images_enabled`
+  * `stats_monitoring` → `historical_system_statistics_enabled`
+  * `ignore_mounts` → `ignored_disk_mounts`
+  * The individual alert flag attributes (`send_unreachable_alerts`, `send_cpu_alerts`, `send_mem_alerts`, `send_disk_alerts`, `send_version_mismatch_alerts`) and the separate threshold attributes (`cpu_warning`, `cpu_critical`, `mem_warning`, `mem_critical`, `disk_warning`, `disk_critical`) have been replaced by a single nested `alerts` block with `enabled`, `types` (set), and a `thresholds` sub-block.
+
+ENHANCEMENTS:
+
+* **`komodo_server` resource:** Added `public_key` (Computed) attribute that exposes the server's public key.
+* **`komodo_server` resource:** Added `maintenance` list block for configuring scheduled maintenance windows (name, schedule type, day/date, hour, minute, duration, timezone, enabled).
+* **`komodo_server` resource:** Config validation now rejects plans where `alerts.enabled = true` but `alerts.types` is empty, providing a clear error message.
+* **`komodo_onboarding_key` resource:** Added a plan-time version guard — plans fail with a descriptive error when the connected Komodo Core server is older than v2.0.0.
+* **`komodo_user` resource:** Improved `admin` attribute description to document that promoting a user to admin requires the provider to be authenticated as a superuser (root/init admin).
+
+---
+
 ## 0.2.0 (April 10, 2026)
 
 FEATURES:

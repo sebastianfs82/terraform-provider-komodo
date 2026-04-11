@@ -17,4 +17,4 @@ Restarts the container for the target deployment.
 
 ### Required
 
-- `deployment` (String) Id or name of the deployment to restart.
+- `id` (String) The ID of the deployment to restart.

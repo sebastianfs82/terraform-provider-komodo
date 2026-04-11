@@ -17,4 +17,4 @@ Builds the target repo using its attached builder.
 
 ### Required
 
-- `repo` (String) Id or name of the repo to build.
+- `id` (String) The ID of the repo to build.

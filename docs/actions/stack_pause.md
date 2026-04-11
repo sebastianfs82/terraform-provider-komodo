@@ -17,7 +17,7 @@ Triggers a `docker compose pause` on the target Komodo stack.
 
 ### Required
 
-- `stack` (String) Id or name of the stack to pause.
+- `id` (String) The ID of the stack to pause.
 
 ### Optional
 

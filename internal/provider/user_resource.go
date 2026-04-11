@@ -79,7 +79,7 @@ func (r *UserResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 			"admin": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Whether the user has global admin permissions.",
+				MarkdownDescription: "Whether the user has global admin permissions. **Requires the provider to be authenticated as a superuser** (the Komodo root/init admin). Regular admins cannot promote other users to admin.",
 			},
 			"create_servers": schema.BoolAttribute{
 				Optional:            true,

@@ -174,7 +174,7 @@ func testAccStackDeployActionConfig_basic(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_deploy" "test" {
   config {
-    stack = komodo_stack.test.name
+    id = komodo_stack.test.name
   }
 }
 `
@@ -184,7 +184,7 @@ func testAccStackDeployActionConfig_withServices(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_deploy" "test" {
   config {
-    stack    = komodo_stack.test.name
+    id = komodo_stack.test.name
     services = ["web"]
   }
 }
@@ -195,7 +195,7 @@ func testAccStackDeployActionConfig_withStopTime(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_deploy" "test" {
   config {
-    stack     = komodo_stack.test.name
+    id = komodo_stack.test.name
     stop_time = 30
   }
 }
@@ -206,7 +206,7 @@ func testAccStackStartActionConfig_basic(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_start" "test" {
   config {
-    stack = komodo_stack.test.name
+    id = komodo_stack.test.name
   }
 }
 `
@@ -216,7 +216,7 @@ func testAccStackStartActionConfig_withServices(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_start" "test" {
   config {
-    stack    = komodo_stack.test.name
+    id = komodo_stack.test.name
     services = ["web"]
   }
 }
@@ -227,7 +227,7 @@ func testAccStackStopActionConfig_basic(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_stop" "test" {
   config {
-    stack = komodo_stack.test.name
+    id = komodo_stack.test.name
   }
 }
 `
@@ -237,7 +237,7 @@ func testAccStackStopActionConfig_withStopTime(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_stop" "test" {
   config {
-    stack     = komodo_stack.test.name
+    id = komodo_stack.test.name
     stop_time = 30
   }
 }
@@ -248,7 +248,7 @@ func testAccStackPauseActionConfig_basic(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_pause" "test" {
   config {
-    stack = komodo_stack.test.name
+    id = komodo_stack.test.name
   }
 }
 `
@@ -258,7 +258,7 @@ func testAccStackPauseActionConfig_withServices(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_pause" "test" {
   config {
-    stack    = komodo_stack.test.name
+    id = komodo_stack.test.name
     services = ["web"]
   }
 }
@@ -269,7 +269,7 @@ func testAccStackDestroyActionConfig_basic(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_destroy" "test" {
   config {
-    stack = komodo_stack.test.name
+    id = komodo_stack.test.name
   }
 }
 `
@@ -279,9 +279,77 @@ func testAccStackDestroyActionConfig_withOptions(name string) string {
 	return testAccStackWithComposeConfig(name) + `
 action "komodo_stack_destroy" "test" {
   config {
-    stack          = komodo_stack.test.name
+    id = komodo_stack.test.name
     remove_orphans = true
     stop_time      = 30
+  }
+}
+`
+}
+
+func TestAccStackDeployIfChangedAction_basic(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStackDeployIfChangedActionConfig_basic("tf-test-deploy-if-changed"),
+			},
+		},
+	})
+}
+
+func TestAccStackDeployIfChangedAction_withStopTime(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStackDeployIfChangedActionConfig_withStopTime("tf-test-deploy-if-changed-st"),
+			},
+		},
+	})
+}
+
+func TestAccStackRunServiceAction_basic(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStackRunServiceActionConfig_basic("tf-test-run-service"),
+			},
+		},
+	})
+}
+
+func testAccStackDeployIfChangedActionConfig_basic(name string) string {
+	return testAccStackWithComposeConfig(name) + `
+action "komodo_stack_deploy_if_changed" "test" {
+  config {
+    id = komodo_stack.test.name
+  }
+}
+`
+}
+
+func testAccStackDeployIfChangedActionConfig_withStopTime(name string) string {
+	return testAccStackWithComposeConfig(name) + `
+action "komodo_stack_deploy_if_changed" "test" {
+  config {
+    id = komodo_stack.test.name
+    stop_time = 30
+  }
+}
+`
+}
+
+func testAccStackRunServiceActionConfig_basic(name string) string {
+	return testAccStackWithComposeConfig(name) + `
+action "komodo_stack_run_service" "test" {
+  config {
+    id = komodo_stack.test.name
+    service = "web"
   }
 }
 `

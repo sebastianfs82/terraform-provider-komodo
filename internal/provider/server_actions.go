@@ -34,7 +34,7 @@ func serverActionConfigure(providerData any, addError func(string, string)) *cli
 // ─── shared model ────────────────────────────────────────────────────────────
 
 type ServerPruneModel struct {
-	Server types.String `tfsdk:"server"`
+	ID types.String `tfsdk:"id"`
 }
 
 // ─── PruneBuildx ─────────────────────────────────────────────────────────────
@@ -54,9 +54,9 @@ func (a *ServerPruneBuildxAction) Schema(_ context.Context, _ action.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Prunes the docker buildx cache on the target server.",
 		Attributes: map[string]schema.Attribute{
-			"server": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the server on which to prune the buildx cache.",
+				MarkdownDescription: "The ID of the server on which to prune the buildx cache.",
 			},
 		},
 	}
@@ -74,8 +74,8 @@ func (a *ServerPruneBuildxAction) Invoke(ctx context.Context, req action.InvokeR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PruneBuildx", map[string]interface{}{"server": data.Server.ValueString()})
-	if err := a.client.PruneBuildx(ctx, client.PruneBuildxRequest{Server: data.Server.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PruneBuildx", map[string]interface{}{"server": data.ID.ValueString()})
+	if err := a.client.PruneBuildx(ctx, client.PruneBuildxRequest{Server: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to prune buildx cache, got error: %s", err))
 		return
 	}
@@ -99,9 +99,9 @@ func (a *ServerPruneContainersAction) Schema(_ context.Context, _ action.SchemaR
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Prunes the docker containers on the target server.",
 		Attributes: map[string]schema.Attribute{
-			"server": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the server on which to prune containers.",
+				MarkdownDescription: "The ID of the server on which to prune containers.",
 			},
 		},
 	}
@@ -119,8 +119,8 @@ func (a *ServerPruneContainersAction) Invoke(ctx context.Context, req action.Inv
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PruneContainers", map[string]interface{}{"server": data.Server.ValueString()})
-	if err := a.client.PruneContainers(ctx, client.PruneContainersRequest{Server: data.Server.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PruneContainers", map[string]interface{}{"server": data.ID.ValueString()})
+	if err := a.client.PruneContainers(ctx, client.PruneContainersRequest{Server: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to prune containers, got error: %s", err))
 		return
 	}
@@ -144,9 +144,9 @@ func (a *ServerPruneBuildersAction) Schema(_ context.Context, _ action.SchemaReq
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Prunes the docker builders on the target server.",
 		Attributes: map[string]schema.Attribute{
-			"server": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the server on which to prune docker builders.",
+				MarkdownDescription: "The ID of the server on which to prune docker builders.",
 			},
 		},
 	}
@@ -164,8 +164,8 @@ func (a *ServerPruneBuildersAction) Invoke(ctx context.Context, req action.Invok
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PruneDockerBuilders", map[string]interface{}{"server": data.Server.ValueString()})
-	if err := a.client.PruneDockerBuilders(ctx, client.PruneDockerBuildersRequest{Server: data.Server.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PruneDockerBuilders", map[string]interface{}{"server": data.ID.ValueString()})
+	if err := a.client.PruneDockerBuilders(ctx, client.PruneDockerBuildersRequest{Server: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to prune docker builders, got error: %s", err))
 		return
 	}
@@ -189,9 +189,9 @@ func (a *ServerPruneImagesAction) Schema(_ context.Context, _ action.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Prunes the docker images on the target server.",
 		Attributes: map[string]schema.Attribute{
-			"server": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the server on which to prune images.",
+				MarkdownDescription: "The ID of the server on which to prune images.",
 			},
 		},
 	}
@@ -209,8 +209,8 @@ func (a *ServerPruneImagesAction) Invoke(ctx context.Context, req action.InvokeR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PruneImages", map[string]interface{}{"server": data.Server.ValueString()})
-	if err := a.client.PruneImages(ctx, client.PruneImagesRequest{Server: data.Server.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PruneImages", map[string]interface{}{"server": data.ID.ValueString()})
+	if err := a.client.PruneImages(ctx, client.PruneImagesRequest{Server: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to prune images, got error: %s", err))
 		return
 	}
@@ -234,9 +234,9 @@ func (a *ServerPruneNetworksAction) Schema(_ context.Context, _ action.SchemaReq
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Prunes the docker networks on the target server.",
 		Attributes: map[string]schema.Attribute{
-			"server": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the server on which to prune networks.",
+				MarkdownDescription: "The ID of the server on which to prune networks.",
 			},
 		},
 	}
@@ -254,8 +254,8 @@ func (a *ServerPruneNetworksAction) Invoke(ctx context.Context, req action.Invok
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PruneNetworks", map[string]interface{}{"server": data.Server.ValueString()})
-	if err := a.client.PruneNetworks(ctx, client.PruneNetworksRequest{Server: data.Server.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PruneNetworks", map[string]interface{}{"server": data.ID.ValueString()})
+	if err := a.client.PruneNetworks(ctx, client.PruneNetworksRequest{Server: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to prune networks, got error: %s", err))
 		return
 	}
@@ -279,9 +279,9 @@ func (a *ServerPruneSystemAction) Schema(_ context.Context, _ action.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Prunes the docker system on the target server, including volumes.",
 		Attributes: map[string]schema.Attribute{
-			"server": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the server on which to prune the docker system.",
+				MarkdownDescription: "The ID of the server on which to prune the docker system.",
 			},
 		},
 	}
@@ -299,8 +299,8 @@ func (a *ServerPruneSystemAction) Invoke(ctx context.Context, req action.InvokeR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PruneSystem", map[string]interface{}{"server": data.Server.ValueString()})
-	if err := a.client.PruneSystem(ctx, client.PruneSystemRequest{Server: data.Server.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PruneSystem", map[string]interface{}{"server": data.ID.ValueString()})
+	if err := a.client.PruneSystem(ctx, client.PruneSystemRequest{Server: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to prune docker system, got error: %s", err))
 		return
 	}
@@ -324,9 +324,9 @@ func (a *ServerPruneVolumesAction) Schema(_ context.Context, _ action.SchemaRequ
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Prunes the docker volumes on the target server.",
 		Attributes: map[string]schema.Attribute{
-			"server": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the server on which to prune volumes.",
+				MarkdownDescription: "The ID of the server on which to prune volumes.",
 			},
 		},
 	}
@@ -344,8 +344,8 @@ func (a *ServerPruneVolumesAction) Invoke(ctx context.Context, req action.Invoke
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PruneVolumes", map[string]interface{}{"server": data.Server.ValueString()})
-	if err := a.client.PruneVolumes(ctx, client.PruneVolumesRequest{Server: data.Server.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PruneVolumes", map[string]interface{}{"server": data.ID.ValueString()})
+	if err := a.client.PruneVolumes(ctx, client.PruneVolumesRequest{Server: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to prune volumes, got error: %s", err))
 		return
 	}

@@ -32,7 +32,7 @@ resource "komodo_repo" "test" {
 
 action "komodo_repo_build" "test" {
   config {
-    repo = komodo_repo.test.name
+    id = komodo_repo.test.name
   }
 }
 `, name)
@@ -60,7 +60,7 @@ resource "komodo_repo" "test" {
 
 action "komodo_repo_clone" "test" {
   config {
-    repo = komodo_repo.test.name
+    id = komodo_repo.test.name
   }
 }
 `, name)
@@ -88,7 +88,7 @@ resource "komodo_repo" "test" {
 
 action "komodo_repo_pull" "test" {
   config {
-    repo = komodo_repo.test.name
+    id = komodo_repo.test.name
   }
 }
 `, name)

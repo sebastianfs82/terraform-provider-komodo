@@ -25,7 +25,7 @@ func NewRunSyncAction() action.Action { return &RunSyncAction{} }
 type RunSyncAction struct{ client *client.Client }
 
 type RunSyncModel struct {
-	Sync types.String `tfsdk:"sync"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *RunSyncAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -36,7 +36,7 @@ func (a *RunSyncAction) Schema(_ context.Context, _ action.SchemaRequest, resp *
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Runs the target resource sync.",
 		Attributes: map[string]schema.Attribute{
-			"sync": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "Id or name of the resource sync to run.",
 			},
@@ -56,8 +56,8 @@ func (a *RunSyncAction) Invoke(ctx context.Context, req action.InvokeRequest, re
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing RunSync", map[string]interface{}{"sync": data.Sync.ValueString()})
-	if err := a.client.RunSync(ctx, client.RunSyncRequest{Sync: data.Sync.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing RunSync", map[string]interface{}{"sync": data.ID.ValueString()})
+	if err := a.client.RunSync(ctx, client.RunSyncRequest{Sync: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to run sync, got error: %s", err))
 		return
 	}

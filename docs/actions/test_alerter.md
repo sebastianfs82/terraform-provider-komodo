@@ -17,4 +17,4 @@ Tests an alerter's ability to reach the configured endpoint.
 
 ### Required
 
-- `alerter` (String) Id or name of the alerter to test.
+- `id` (String) The ID of the alerter to test.

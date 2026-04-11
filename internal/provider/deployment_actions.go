@@ -41,7 +41,7 @@ func NewStartDeploymentAction() action.Action { return &StartDeploymentAction{} 
 type StartDeploymentAction struct{ client *client.Client }
 
 type StartDeploymentModel struct {
-	Deployment types.String `tfsdk:"deployment"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *StartDeploymentAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -52,9 +52,9 @@ func (a *StartDeploymentAction) Schema(_ context.Context, _ action.SchemaRequest
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Starts the target deployment.",
 		Attributes: map[string]schema.Attribute{
-			"deployment": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the deployment to start.",
+				MarkdownDescription: "The ID of the deployment to start.",
 			},
 		},
 	}
@@ -72,8 +72,8 @@ func (a *StartDeploymentAction) Invoke(ctx context.Context, req action.InvokeReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing StartDeployment", map[string]interface{}{"deployment": data.Deployment.ValueString()})
-	if err := a.client.StartDeployment(ctx, client.StartDeploymentRequest{Deployment: data.Deployment.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing StartDeployment", map[string]interface{}{"deployment": data.ID.ValueString()})
+	if err := a.client.StartDeployment(ctx, client.StartDeploymentRequest{Deployment: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to start deployment, got error: %s", err))
 		return
 	}
@@ -90,7 +90,7 @@ func NewPullDeploymentAction() action.Action { return &PullDeploymentAction{} }
 type PullDeploymentAction struct{ client *client.Client }
 
 type PullDeploymentModel struct {
-	Deployment types.String `tfsdk:"deployment"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *PullDeploymentAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -101,9 +101,9 @@ func (a *PullDeploymentAction) Schema(_ context.Context, _ action.SchemaRequest,
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Pulls the latest image for the target deployment.",
 		Attributes: map[string]schema.Attribute{
-			"deployment": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the deployment to pull.",
+				MarkdownDescription: "The ID of the deployment to pull.",
 			},
 		},
 	}
@@ -121,8 +121,8 @@ func (a *PullDeploymentAction) Invoke(ctx context.Context, req action.InvokeRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PullDeployment", map[string]interface{}{"deployment": data.Deployment.ValueString()})
-	if err := a.client.PullDeployment(ctx, client.PullDeploymentRequest{Deployment: data.Deployment.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PullDeployment", map[string]interface{}{"deployment": data.ID.ValueString()})
+	if err := a.client.PullDeployment(ctx, client.PullDeploymentRequest{Deployment: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to pull deployment, got error: %s", err))
 		return
 	}
@@ -139,7 +139,7 @@ func NewDeployDeploymentAction() action.Action { return &DeployDeploymentAction{
 type DeployDeploymentAction struct{ client *client.Client }
 
 type DeployDeploymentModel struct {
-	Deployment types.String `tfsdk:"deployment"`
+	ID types.String `tfsdk:"id"`
 	StopSignal types.String `tfsdk:"stop_signal"`
 	StopTime   types.Int64  `tfsdk:"stop_time"`
 }
@@ -152,9 +152,9 @@ func (a *DeployDeploymentAction) Schema(_ context.Context, _ action.SchemaReques
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Deploys (or redeploys) the container for the target deployment. Pulls the image, stops the existing container, and starts a new one.",
 		Attributes: map[string]schema.Attribute{
-			"deployment": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the deployment to deploy.",
+				MarkdownDescription: "The ID of the deployment to deploy.",
 			},
 			"stop_signal": schema.StringAttribute{
 				Optional:            true,
@@ -181,7 +181,7 @@ func (a *DeployDeploymentAction) Invoke(ctx context.Context, req action.InvokeRe
 		return
 	}
 	execReq := client.DeployRequest{
-		Deployment: data.Deployment.ValueString(),
+		Deployment: data.ID.ValueString(),
 	}
 	if !data.StopSignal.IsNull() && !data.StopSignal.IsUnknown() {
 		execReq.StopSignal = data.StopSignal.ValueString()
@@ -208,7 +208,7 @@ func NewStopDeploymentAction() action.Action { return &StopDeploymentAction{} }
 type StopDeploymentAction struct{ client *client.Client }
 
 type StopDeploymentModel struct {
-	Deployment types.String `tfsdk:"deployment"`
+	ID types.String `tfsdk:"id"`
 	Signal     types.String `tfsdk:"signal"`
 	Time       types.Int64  `tfsdk:"time"`
 }
@@ -221,9 +221,9 @@ func (a *StopDeploymentAction) Schema(_ context.Context, _ action.SchemaRequest,
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Stops the container for the target deployment.",
 		Attributes: map[string]schema.Attribute{
-			"deployment": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the deployment to stop.",
+				MarkdownDescription: "The ID of the deployment to stop.",
 			},
 			"signal": schema.StringAttribute{
 				Optional:            true,
@@ -250,7 +250,7 @@ func (a *StopDeploymentAction) Invoke(ctx context.Context, req action.InvokeRequ
 		return
 	}
 	execReq := client.StopDeploymentRequest{
-		Deployment: data.Deployment.ValueString(),
+		Deployment: data.ID.ValueString(),
 	}
 	if !data.Signal.IsNull() && !data.Signal.IsUnknown() {
 		execReq.Signal = data.Signal.ValueString()
@@ -277,7 +277,7 @@ func NewDestroyDeploymentAction() action.Action { return &DestroyDeploymentActio
 type DestroyDeploymentAction struct{ client *client.Client }
 
 type DestroyDeploymentModel struct {
-	Deployment types.String `tfsdk:"deployment"`
+	ID types.String `tfsdk:"id"`
 	Signal     types.String `tfsdk:"signal"`
 	Time       types.Int64  `tfsdk:"time"`
 }
@@ -290,9 +290,9 @@ func (a *DestroyDeploymentAction) Schema(_ context.Context, _ action.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Stops and removes the container for the target deployment.",
 		Attributes: map[string]schema.Attribute{
-			"deployment": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the deployment to destroy.",
+				MarkdownDescription: "The ID of the deployment to destroy.",
 			},
 			"signal": schema.StringAttribute{
 				Optional:            true,
@@ -319,7 +319,7 @@ func (a *DestroyDeploymentAction) Invoke(ctx context.Context, req action.InvokeR
 		return
 	}
 	execReq := client.DestroyDeploymentRequest{
-		Deployment: data.Deployment.ValueString(),
+		Deployment: data.ID.ValueString(),
 	}
 	if !data.Signal.IsNull() && !data.Signal.IsUnknown() {
 		execReq.Signal = data.Signal.ValueString()
@@ -346,7 +346,7 @@ func NewRestartDeploymentAction() action.Action { return &RestartDeploymentActio
 type RestartDeploymentAction struct{ client *client.Client }
 
 type RestartDeploymentModel struct {
-	Deployment types.String `tfsdk:"deployment"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *RestartDeploymentAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -357,9 +357,9 @@ func (a *RestartDeploymentAction) Schema(_ context.Context, _ action.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Restarts the container for the target deployment.",
 		Attributes: map[string]schema.Attribute{
-			"deployment": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the deployment to restart.",
+				MarkdownDescription: "The ID of the deployment to restart.",
 			},
 		},
 	}
@@ -377,8 +377,8 @@ func (a *RestartDeploymentAction) Invoke(ctx context.Context, req action.InvokeR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing RestartDeployment", map[string]interface{}{"deployment": data.Deployment.ValueString()})
-	if err := a.client.RestartDeployment(ctx, client.RestartDeploymentRequest{Deployment: data.Deployment.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing RestartDeployment", map[string]interface{}{"deployment": data.ID.ValueString()})
+	if err := a.client.RestartDeployment(ctx, client.RestartDeploymentRequest{Deployment: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to restart deployment, got error: %s", err))
 		return
 	}
@@ -395,7 +395,7 @@ func NewPauseDeploymentAction() action.Action { return &PauseDeploymentAction{} 
 type PauseDeploymentAction struct{ client *client.Client }
 
 type PauseDeploymentModel struct {
-	Deployment types.String `tfsdk:"deployment"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *PauseDeploymentAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -406,9 +406,9 @@ func (a *PauseDeploymentAction) Schema(_ context.Context, _ action.SchemaRequest
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Pauses the container for the target deployment.",
 		Attributes: map[string]schema.Attribute{
-			"deployment": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the deployment to pause.",
+				MarkdownDescription: "The ID of the deployment to pause.",
 			},
 		},
 	}
@@ -426,8 +426,8 @@ func (a *PauseDeploymentAction) Invoke(ctx context.Context, req action.InvokeReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing PauseDeployment", map[string]interface{}{"deployment": data.Deployment.ValueString()})
-	if err := a.client.PauseDeployment(ctx, client.PauseDeploymentRequest{Deployment: data.Deployment.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing PauseDeployment", map[string]interface{}{"deployment": data.ID.ValueString()})
+	if err := a.client.PauseDeployment(ctx, client.PauseDeploymentRequest{Deployment: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to pause deployment, got error: %s", err))
 		return
 	}
@@ -444,7 +444,7 @@ func NewUnpauseDeploymentAction() action.Action { return &UnpauseDeploymentActio
 type UnpauseDeploymentAction struct{ client *client.Client }
 
 type UnpauseDeploymentModel struct {
-	Deployment types.String `tfsdk:"deployment"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *UnpauseDeploymentAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -455,9 +455,9 @@ func (a *UnpauseDeploymentAction) Schema(_ context.Context, _ action.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Unpauses the container for the target deployment.",
 		Attributes: map[string]schema.Attribute{
-			"deployment": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the deployment to unpause.",
+				MarkdownDescription: "The ID of the deployment to unpause.",
 			},
 		},
 	}
@@ -475,8 +475,8 @@ func (a *UnpauseDeploymentAction) Invoke(ctx context.Context, req action.InvokeR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing UnpauseDeployment", map[string]interface{}{"deployment": data.Deployment.ValueString()})
-	if err := a.client.UnpauseDeployment(ctx, client.UnpauseDeploymentRequest{Deployment: data.Deployment.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing UnpauseDeployment", map[string]interface{}{"deployment": data.ID.ValueString()})
+	if err := a.client.UnpauseDeployment(ctx, client.UnpauseDeploymentRequest{Deployment: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to unpause deployment, got error: %s", err))
 		return
 	}

@@ -32,34 +32,21 @@ type ServerDataSourceModel struct {
 
 	// Connection
 	Address         types.String `tfsdk:"address"`
-	InsecureTLS     types.Bool   `tfsdk:"insecure_tls"`
+	TLSIgnored      types.Bool   `tfsdk:"tls_ignored"`
 	ExternalAddress types.String `tfsdk:"external_address"`
 	Region          types.String `tfsdk:"region"`
 
 	// Behaviour
-	Enabled         types.Bool `tfsdk:"enabled"`
-	AutoRotateKeys  types.Bool `tfsdk:"auto_rotate_keys"`
-	AutoPrune       types.Bool `tfsdk:"auto_prune"`
-	StatsMonitoring types.Bool `tfsdk:"stats_monitoring"`
+	Enabled               types.Bool `tfsdk:"enabled"`
+	AutoRotateKeysEnabled types.Bool `tfsdk:"auto_rotate_keys_enabled"`
+	AutoPruneEnabled      types.Bool `tfsdk:"auto_prune_enabled"`
 
 	// Mounts / links
-	IgnoreMounts types.List `tfsdk:"ignore_mounts"`
-	Links        types.List `tfsdk:"links"`
+	MountsIgnored types.List `tfsdk:"mounts_ignored"`
+	Links         types.List `tfsdk:"links"`
 
-	// Alert flags
-	SendUnreachableAlerts     types.Bool `tfsdk:"send_unreachable_alerts"`
-	SendCPUAlerts             types.Bool `tfsdk:"send_cpu_alerts"`
-	SendMemAlerts             types.Bool `tfsdk:"send_mem_alerts"`
-	SendDiskAlerts            types.Bool `tfsdk:"send_disk_alerts"`
-	SendVersionMismatchAlerts types.Bool `tfsdk:"send_version_mismatch_alerts"`
-
-	// Alert thresholds
-	CPUWarning   types.Float64 `tfsdk:"cpu_warning"`
-	CPUCritical  types.Float64 `tfsdk:"cpu_critical"`
-	MemWarning   types.Float64 `tfsdk:"mem_warning"`
-	MemCritical  types.Float64 `tfsdk:"mem_critical"`
-	DiskWarning  types.Float64 `tfsdk:"disk_warning"`
-	DiskCritical types.Float64 `tfsdk:"disk_critical"`
+	// Alerts
+	Alerts *ServerAlertsModel `tfsdk:"alerts"`
 }
 
 func (d *ServerDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -84,9 +71,9 @@ func (d *ServerDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 				MarkdownDescription: "The ws/s address of the periphery client.",
 			},
-			"insecure_tls": schema.BoolAttribute{
+			"tls_ignored": schema.BoolAttribute{
 				Computed:            true,
-				MarkdownDescription: "Whether to skip periphery TLS certificate validation.",
+				MarkdownDescription: "Whether periphery TLS certificate validation is skipped.",
 			},
 			"external_address": schema.StringAttribute{
 				Computed:            true,
@@ -100,71 +87,68 @@ func (d *ServerDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				Computed:            true,
 				MarkdownDescription: "Whether the server is enabled.",
 			},
-			"auto_rotate_keys": schema.BoolAttribute{
+			"auto_rotate_keys_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether to automatically rotate server keys.",
 			},
-			"auto_prune": schema.BoolAttribute{
+			"auto_prune_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether to run `docker image prune -a -f` every 24 hours.",
 			},
-			"stats_monitoring": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether to monitor server stats beyond health checks.",
-			},
-			"ignore_mounts": schema.ListAttribute{
+			"mounts_ignored": schema.ListAttribute{
 				Computed:            true,
 				ElementType:         types.StringType,
-				MarkdownDescription: "Mount paths to filter from system stats reports.",
+				MarkdownDescription: "Mount paths filtered from system stats reports.",
 			},
 			"links": schema.ListAttribute{
 				Computed:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "Quick links displayed in the Komodo UI for this server.",
 			},
-			"send_unreachable_alerts": schema.BoolAttribute{
+			"alerts": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about server reachability.",
-			},
-			"send_cpu_alerts": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about server CPU status.",
-			},
-			"send_mem_alerts": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about server memory status.",
-			},
-			"send_disk_alerts": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about server disk status.",
-			},
-			"send_version_mismatch_alerts": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about version mismatches with core.",
-			},
-			"cpu_warning": schema.Float64Attribute{
-				Computed:            true,
-				MarkdownDescription: "CPU percentage threshold for WARNING state.",
-			},
-			"cpu_critical": schema.Float64Attribute{
-				Computed:            true,
-				MarkdownDescription: "CPU percentage threshold for CRITICAL state.",
-			},
-			"mem_warning": schema.Float64Attribute{
-				Computed:            true,
-				MarkdownDescription: "Memory percentage threshold for WARNING state.",
-			},
-			"mem_critical": schema.Float64Attribute{
-				Computed:            true,
-				MarkdownDescription: "Memory percentage threshold for CRITICAL state.",
-			},
-			"disk_warning": schema.Float64Attribute{
-				Computed:            true,
-				MarkdownDescription: "Disk percentage threshold for WARNING state.",
-			},
-			"disk_critical": schema.Float64Attribute{
-				Computed:            true,
-				MarkdownDescription: "Disk percentage threshold for CRITICAL state.",
+				MarkdownDescription: "Alert configuration for this server.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether server stats monitoring and alerting is enabled.",
+					},
+					"types": schema.SetAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Enabled alert types.",
+					},
+					"thresholds": schema.SingleNestedAttribute{
+						Computed:            true,
+						MarkdownDescription: "Alert threshold percentages.",
+						Attributes: map[string]schema.Attribute{
+							"cpu_critical": schema.Float64Attribute{
+								Computed:            true,
+								MarkdownDescription: "CPU percentage threshold for CRITICAL state.",
+							},
+							"cpu_warning": schema.Float64Attribute{
+								Computed:            true,
+								MarkdownDescription: "CPU percentage threshold for WARNING state.",
+							},
+							"disk_critical": schema.Float64Attribute{
+								Computed:            true,
+								MarkdownDescription: "Disk percentage threshold for CRITICAL state.",
+							},
+							"disk_warning": schema.Float64Attribute{
+								Computed:            true,
+								MarkdownDescription: "Disk percentage threshold for WARNING state.",
+							},
+							"memory_critical": schema.Float64Attribute{
+								Computed:            true,
+								MarkdownDescription: "Memory percentage threshold for CRITICAL state.",
+							},
+							"memory_warning": schema.Float64Attribute{
+								Computed:            true,
+								MarkdownDescription: "Memory percentage threshold for WARNING state.",
+							},
+						},
+					},
+				},
 			},
 		},
 	}
@@ -249,46 +233,53 @@ func serverToDataSourceModel(ctx context.Context, s *client.Server, data *Server
 
 	cfg := s.Config
 	data.Address = types.StringValue(cfg.Address)
-	data.InsecureTLS = types.BoolValue(cfg.InsecureTLS)
+	data.TLSIgnored = types.BoolValue(cfg.InsecureTLS)
 	data.ExternalAddress = types.StringValue(cfg.ExternalAddress)
 	data.Region = types.StringValue(cfg.Region)
 	data.Enabled = types.BoolValue(cfg.Enabled)
-	data.AutoRotateKeys = types.BoolValue(cfg.AutoRotateKeys)
-	data.AutoPrune = types.BoolValue(cfg.AutoPrune)
-	data.StatsMonitoring = types.BoolValue(cfg.StatsMonitoring)
+	data.AutoRotateKeysEnabled = types.BoolValue(cfg.AutoRotateKeys)
+	data.AutoPruneEnabled = types.BoolValue(cfg.AutoPrune)
 
 	if cfg.IgnoreMounts != nil {
-		elems := make([]types.String, len(cfg.IgnoreMounts))
-		for i, v := range cfg.IgnoreMounts {
-			elems[i] = types.StringValue(v)
-		}
-		listVal, _ := types.ListValueFrom(ctx, types.StringType, elems)
-		data.IgnoreMounts = listVal
+		data.MountsIgnored, _ = types.ListValueFrom(ctx, types.StringType, cfg.IgnoreMounts)
 	} else {
-		data.IgnoreMounts, _ = types.ListValueFrom(ctx, types.StringType, []types.String{})
+		data.MountsIgnored, _ = types.ListValueFrom(ctx, types.StringType, []string{})
 	}
 
 	if cfg.Links != nil {
-		elems := make([]types.String, len(cfg.Links))
-		for i, v := range cfg.Links {
-			elems[i] = types.StringValue(v)
-		}
-		listVal, _ := types.ListValueFrom(ctx, types.StringType, elems)
-		data.Links = listVal
+		data.Links, _ = types.ListValueFrom(ctx, types.StringType, cfg.Links)
 	} else {
-		data.Links, _ = types.ListValueFrom(ctx, types.StringType, []types.String{})
+		data.Links, _ = types.ListValueFrom(ctx, types.StringType, []string{})
 	}
 
-	data.SendUnreachableAlerts = types.BoolValue(cfg.SendUnreachableAlerts)
-	data.SendCPUAlerts = types.BoolValue(cfg.SendCPUAlerts)
-	data.SendMemAlerts = types.BoolValue(cfg.SendMemAlerts)
-	data.SendDiskAlerts = types.BoolValue(cfg.SendDiskAlerts)
-	data.SendVersionMismatchAlerts = types.BoolValue(cfg.SendVersionMismatchAlerts)
+	var alertTypes []string
+	if cfg.SendCPUAlerts {
+		alertTypes = append(alertTypes, "cpu")
+	}
+	if cfg.SendDiskAlerts {
+		alertTypes = append(alertTypes, "disk")
+	}
+	if cfg.SendMemAlerts {
+		alertTypes = append(alertTypes, "memory")
+	}
+	if cfg.SendUnreachableAlerts {
+		alertTypes = append(alertTypes, "unreachable")
+	}
+	if cfg.SendVersionMismatchAlerts {
+		alertTypes = append(alertTypes, "version")
+	}
+	typesSet, _ := types.SetValueFrom(ctx, types.StringType, alertTypes)
 
-	data.CPUWarning = types.Float64Value(cfg.CPUWarning)
-	data.CPUCritical = types.Float64Value(cfg.CPUCritical)
-	data.MemWarning = types.Float64Value(cfg.MemWarning)
-	data.MemCritical = types.Float64Value(cfg.MemCritical)
-	data.DiskWarning = types.Float64Value(cfg.DiskWarning)
-	data.DiskCritical = types.Float64Value(cfg.DiskCritical)
+	data.Alerts = &ServerAlertsModel{
+		Enabled: types.BoolValue(cfg.StatsMonitoring),
+		Types:   typesSet,
+		Thresholds: ServerAlertsThresholdsModel{
+			CPUCritical:    types.Float64Value(cfg.CPUCritical),
+			CPUWarning:     types.Float64Value(cfg.CPUWarning),
+			DiskCritical:   types.Float64Value(cfg.DiskCritical),
+			DiskWarning:    types.Float64Value(cfg.DiskWarning),
+			MemoryCritical: types.Float64Value(cfg.MemCritical),
+			MemoryWarning:  types.Float64Value(cfg.MemWarning),
+		},
+	}
 }

@@ -17,4 +17,4 @@ Runs the target resource sync.
 
 ### Required
 
-- `sync` (String) Id or name of the resource sync to run.
+- `id` (String) Id or name of the resource sync to run.

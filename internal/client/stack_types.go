@@ -121,3 +121,25 @@ type PullStackRequest struct {
 	Stack    string   `json:"stack"`
 	Services []string `json:"services"`
 }
+
+// DeployStackIfChangedRequest is the request body for the DeployStackIfChanged execute action.
+type DeployStackIfChangedRequest struct {
+	Stack    string `json:"stack"`
+	StopTime *int64 `json:"stop_time,omitempty"`
+}
+
+// RunStackServiceRequest is the request body for the RunStackService execute action.
+type RunStackServiceRequest struct {
+	Stack        string            `json:"stack"`
+	Service      string            `json:"service"`
+	Command      []string          `json:"command,omitempty"`
+	NoTty        *bool             `json:"no_tty,omitempty"`
+	NoDeps       *bool             `json:"no_deps,omitempty"`
+	Detach       *bool             `json:"detach,omitempty"`
+	ServicePorts *bool             `json:"service_ports,omitempty"`
+	Env          map[string]string `json:"env,omitempty"`
+	Workdir      *string           `json:"workdir,omitempty"`
+	User         *string           `json:"user,omitempty"`
+	Entrypoint   *string           `json:"entrypoint,omitempty"`
+	Pull         *bool             `json:"pull,omitempty"`
+}

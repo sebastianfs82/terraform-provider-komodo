@@ -240,6 +240,8 @@ func (p *KomodoProvider) Actions(ctx context.Context) []func() action.Action {
 		NewStackRestartAction,
 		NewStackUnpauseAction,
 		NewStackPullAction,
+		NewStackDeployIfChangedAction,
+		NewStackRunServiceAction,
 	}
 }
 
@@ -286,6 +288,7 @@ func (p *KomodoProvider) DataSources(ctx context.Context) []func() datasource.Da
 		NewResourceSyncDataSource,
 		NewResourceSyncsDataSource,
 		NewOnboardingKeyDataSource,
+		NewVersionDataSource,
 	}
 }
 

@@ -50,8 +50,8 @@ func TestLogin(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("Expected POST request, got %s", r.Method)
 		}
-		if r.URL.Path != "/auth/LoginLocalUser" {
-			t.Errorf("Expected path /auth/LoginLocalUser, got %s", r.URL.Path)
+		if r.URL.Path != "/auth/login/LoginLocalUser" {
+			t.Errorf("Expected path /auth/login/LoginLocalUser, got %s", r.URL.Path)
 		}
 
 		// Verify request body
@@ -68,13 +68,9 @@ func TestLogin(t *testing.T) {
 			t.Errorf("Expected password 'test-pass', got %s", req["password"])
 		}
 
-		// Return mock JWT
-		resp := LoginResponse{
-			JWT: "test-jwt-token",
-		}
-
+		// Return mock JWT in Komodo 2.x JwtOrTwoFactor format
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"test-jwt-token"}}`))
 	}))
 	defer server.Close()
 
@@ -97,12 +93,11 @@ func TestListApiKeys(t *testing.T) {
 
 		// First call is login
 		if callCount == 1 {
-			if r.URL.Path != "/auth/LoginLocalUser" {
+			if r.URL.Path != "/auth/login/LoginLocalUser" {
 				t.Errorf("Expected first call to be login, got %s", r.URL.Path)
 			}
-			resp := LoginResponse{JWT: "test-jwt"}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"test-jwt"}}`))
 			return
 		}
 
@@ -182,9 +177,8 @@ func TestGetApiKey(t *testing.T) {
 
 		// First call is login
 		if callCount == 1 {
-			resp := LoginResponse{JWT: "test-jwt"}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"test-jwt"}}`))
 			return
 		}
 
@@ -239,9 +233,8 @@ func TestGetApiKey_notFound(t *testing.T) {
 
 		// First call is login
 		if callCount == 1 {
-			resp := LoginResponse{JWT: "test-jwt"}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"test-jwt"}}`))
 			return
 		}
 
@@ -273,9 +266,8 @@ func TestCreateApiKey(t *testing.T) {
 
 		// First call is login
 		if callCount == 1 {
-			resp := LoginResponse{JWT: "test-jwt"}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"test-jwt"}}`))
 			return
 		}
 
@@ -284,8 +276,8 @@ func TestCreateApiKey(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Errorf("Expected POST request, got %s", r.Method)
 			}
-			if r.URL.Path != "/user/CreateApiKey" {
-				t.Errorf("Expected path /user/CreateApiKey, got %s", r.URL.Path)
+			if r.URL.Path != "/auth/manage/CreateApiKey" {
+				t.Errorf("Expected path /auth/manage/CreateApiKey, got %s", r.URL.Path)
 			}
 
 			// Verify request body
@@ -377,17 +369,16 @@ func TestDeleteApiKey(t *testing.T) {
 
 		// First call is login
 		if callCount == 1 {
-			resp := LoginResponse{JWT: "test-jwt"}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"test-jwt"}}`))
 			return
 		}
 
 		if r.Method != http.MethodPost {
 			t.Errorf("Expected POST request, got %s", r.Method)
 		}
-		if r.URL.Path != "/user/DeleteApiKey" {
-			t.Errorf("Expected path /user/DeleteApiKey, got %s", r.URL.Path)
+		if r.URL.Path != "/auth/manage/DeleteApiKey" {
+			t.Errorf("Expected path /auth/manage/DeleteApiKey, got %s", r.URL.Path)
 		}
 
 		// Verify request body
@@ -421,10 +412,9 @@ func TestClient_tokenRefresh(t *testing.T) {
 		callCount++
 
 		// Handle login requests
-		if r.URL.Path == "/auth/LoginLocalUser" {
-			resp := LoginResponse{JWT: "test-jwt"}
+		if r.URL.Path == "/auth/login/LoginLocalUser" {
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"test-jwt"}}`))
 			return
 		}
 
@@ -455,10 +445,9 @@ func TestClient_errorHandling(t *testing.T) {
 		callCount++
 
 		// Handle login
-		if r.URL.Path == "/auth/LoginLocalUser" {
-			resp := LoginResponse{JWT: "test-jwt"}
+		if r.URL.Path == "/auth/login/LoginLocalUser" {
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"test-jwt"}}`))
 			return
 		}
 

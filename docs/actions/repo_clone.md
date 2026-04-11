@@ -17,4 +17,4 @@ Clones the target repo onto its attached server.
 
 ### Required
 
-- `repo` (String) Id or name of the repo to clone.
+- `id` (String) The ID of the repo to clone.

@@ -13,23 +13,47 @@ Manages a Komodo server.
 ## Example Usage
 
 ```terraform
+# Minimal server
 resource "komodo_server" "example" {
   name    = "my-server"
-  address = "https://192.168.1.100:8120"
+  address = "wss://192.168.1.100:8120"
 }
 
+# Server with alerts, maintenance window, and extra options
 resource "komodo_server" "production" {
-  name             = "prod-server"
-  address          = "https://prod.example.com:8120"
-  region           = "us-east"
-  enabled          = true
-  send_cpu_alerts  = true
-  send_mem_alerts  = true
-  send_disk_alerts = true
-  cpu_warning      = 80.0
-  cpu_critical     = 95.0
-  mem_warning      = 80.0
-  mem_critical     = 95.0
+  name                                 = "prod-server"
+  address                              = "wss://prod.example.com:8120"
+  region                               = "us-east"
+  enabled                              = true
+  certificate_verification_enabled     = true
+  auto_prune_images_enabled            = true
+  auto_rotate_keys_enabled             = true
+  historical_system_statistics_enabled = true
+
+  alerts = {
+    enabled = true
+    types   = ["cpu", "memory", "disk", "unreachable"]
+    thresholds = {
+      cpu_warning     = 75.0
+      cpu_critical    = 90.0
+      memory_warning  = 75.0
+      memory_critical = 90.0
+      disk_warning    = 80.0
+      disk_critical   = 95.0
+    }
+  }
+
+  maintenance {
+    name             = "weekly-patching"
+    description      = "Saturday night patch window"
+    schedule_type    = "Weekly"
+    day_of_week      = "Saturday"
+    hour             = 2
+    minute           = 0
+    duration_minutes = 120
+    timezone         = "America/New_York"
+    enabled          = true
+  }
 }
 ```
 
@@ -43,30 +67,64 @@ resource "komodo_server" "production" {
 ### Optional
 
 - `address` (String) The ws/s address of the periphery client. If unset, server expects Periphery → Core connection.
-- `auto_prune` (Boolean) Whether to run `docker image prune -a -f` every 24 hours.
-- `auto_rotate_keys` (Boolean) Whether to automatically rotate server keys when `RotateAllServerKeys` is called.
-- `cpu_critical` (Number) CPU percentage threshold for CRITICAL state.
-- `cpu_warning` (Number) CPU percentage threshold for WARNING state.
-- `disk_critical` (Number) Disk percentage threshold for CRITICAL state.
-- `disk_warning` (Number) Disk percentage threshold for WARNING state.
+- `alerts` (Attributes) Alert configuration for this server. (see [below for nested schema](#nestedatt--alerts))
+- `auto_prune_images_enabled` (Boolean) Whether to run `docker image prune -a -f` every 24 hours. Defaults to `false`.
+- `auto_rotate_keys_enabled` (Boolean) Whether to automatically rotate server keys when `RotateAllServerKeys` is called. Defaults to `true`.
+- `certificate_verification_enabled` (Boolean) Whether to verify the periphery TLS certificate. When `false`, certificate validation is skipped (useful for self-signed certs). Defaults to `true`.
 - `enabled` (Boolean) Whether the server is enabled.
 - `external_address` (String) The address used for container links on this server. If empty, uses `address`.
-- `ignore_mounts` (List of String) Mount paths to filter from system stats reports.
-- `insecure_tls` (Boolean) Whether to skip periphery TLS certificate validation. Defaults to `true` because periphery generates self-signed certificates by default.
+- `historical_system_statistics_enabled` (Boolean) Whether server stats monitoring is enabled. Defaults to `true`.
+- `ignored_disk_mounts` (List of String) Mount paths to filter from system stats reports. Defaults to `[]`.
 - `links` (List of String) Quick links displayed in the Komodo UI for this server.
-- `mem_critical` (Number) Memory percentage threshold for CRITICAL state.
-- `mem_warning` (Number) Memory percentage threshold for WARNING state.
+- `maintenance` (Block List) Scheduled maintenance windows during which alerts from this server will be suppressed. (see [below for nested schema](#nestedblock--maintenance))
+- `public_key` (String) Custom public key for the Periphery agent. If provided, the associated private key must be set as Periphery `private_key`. Required for Periphery → Core connections unless `public_key` is set in Core config. Note: the API does not return this value, so external changes cannot be detected.
 - `region` (String) An optional region label.
-- `send_cpu_alerts` (Boolean) Whether to send alerts about server CPU status.
-- `send_disk_alerts` (Boolean) Whether to send alerts about server disk status.
-- `send_mem_alerts` (Boolean) Whether to send alerts about server memory status.
-- `send_unreachable_alerts` (Boolean) Whether to send alerts about server reachability.
-- `send_version_mismatch_alerts` (Boolean) Whether to send alerts about version mismatches with core.
-- `stats_monitoring` (Boolean) Whether to monitor server stats beyond health checks.
 
 ### Read-Only
 
 - `id` (String) The server identifier (ObjectId).
+
+<a id="nestedatt--alerts"></a>
+### Nested Schema for `alerts`
+
+Optional:
+
+- `enabled` (Boolean) Whether alerting is enabled. When `false`, all alert types are disabled regardless of `types`. Defaults to `true`.
+- `thresholds` (Attributes) Alert threshold percentages. (see [below for nested schema](#nestedatt--alerts--thresholds))
+- `types` (Set of String) Alert types to enable when `enabled` is `true`. Valid values: `cpu`, `disk`, `memory`, `unreachable`, `version`. Required (non-empty) when `enabled` is `true`. Defaults to `[]`.
+
+<a id="nestedatt--alerts--thresholds"></a>
+### Nested Schema for `alerts.thresholds`
+
+Optional:
+
+- `cpu_critical` (Number) CPU percentage threshold for CRITICAL state. Defaults to `99`.
+- `cpu_warning` (Number) CPU percentage threshold for WARNING state. Defaults to `90`.
+- `disk_critical` (Number) Disk percentage threshold for CRITICAL state. Defaults to `95`.
+- `disk_warning` (Number) Disk percentage threshold for WARNING state. Defaults to `75`.
+- `memory_critical` (Number) Memory percentage threshold for CRITICAL state. Defaults to `95`.
+- `memory_warning` (Number) Memory percentage threshold for WARNING state. Defaults to `75`.
+
+
+
+<a id="nestedblock--maintenance"></a>
+### Nested Schema for `maintenance`
+
+Required:
+
+- `duration_minutes` (Number) Duration of the maintenance window in minutes.
+- `name` (String) Name for the maintenance window.
+- `schedule_type` (String) Schedule type: `Daily`, `Weekly`, or `OneTime`.
+
+Optional:
+
+- `date` (String) For `OneTime` windows: ISO 8601 date in `YYYY-MM-DD` format.
+- `day_of_week` (String) For `Weekly` schedules: day of the week (e.g. `Monday`, `Tuesday`).
+- `description` (String) Description of what maintenance is performed.
+- `enabled` (Boolean) Whether this maintenance window is active. Defaults to `true`.
+- `hour` (Number) Start hour in 24-hour format (0–23). Defaults to `0`.
+- `minute` (Number) Start minute (0–59). Defaults to `0`.
+- `timezone` (String) Timezone for the maintenance window. If empty, uses the Core timezone.
 
 ## Import
 

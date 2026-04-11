@@ -17,4 +17,4 @@ Runs the target action.
 
 ### Required
 
-- `action` (String) Id or name of the action to run.
+- `id` (String) The ID of the action to run.

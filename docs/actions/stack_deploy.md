@@ -17,7 +17,7 @@ Triggers a `docker compose up` on the target Komodo stack.
 
 ### Required
 
-- `stack` (String) Id or name of the stack to deploy.
+- `id` (String) The ID of the stack to deploy.
 
 ### Optional
 

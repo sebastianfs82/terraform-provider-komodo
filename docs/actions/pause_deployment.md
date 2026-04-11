@@ -17,4 +17,4 @@ Pauses the container for the target deployment.
 
 ### Required
 
-- `deployment` (String) Id or name of the deployment to pause.
+- `id` (String) The ID of the deployment to pause.

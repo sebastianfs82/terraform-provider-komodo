@@ -17,7 +17,7 @@ Stops and removes the container for the target deployment.
 
 ### Required
 
-- `deployment` (String) Id or name of the deployment to destroy.
+- `id` (String) The ID of the deployment to destroy.
 
 ### Optional
 

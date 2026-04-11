@@ -112,8 +112,8 @@ func TestAccServerResource_withAlertThresholds(t *testing.T) {
 				Config: testAccServerResourceConfigWithThresholds("tf-acc-server-thresholds", 80.0, 95.0),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_server.test", "name", "tf-acc-server-thresholds"),
-					resource.TestCheckResourceAttr("komodo_server.test", "cpu_warning", "80"),
-					resource.TestCheckResourceAttr("komodo_server.test", "cpu_critical", "95"),
+					resource.TestCheckResourceAttr("komodo_server.test", "alerts.thresholds.cpu_warning", "80"),
+					resource.TestCheckResourceAttr("komodo_server.test", "alerts.thresholds.cpu_critical", "95"),
 				),
 			},
 		},
@@ -173,9 +173,13 @@ resource "komodo_server" "test" {
 func testAccServerResourceConfigWithThresholds(name string, cpuWarn, cpuCrit float64) string {
 	return fmt.Sprintf(`
 resource "komodo_server" "test" {
-  name         = %q
-  cpu_warning  = %g
-  cpu_critical = %g
+  name = %q
+  alerts = {
+    thresholds = {
+      cpu_warning  = %g
+      cpu_critical = %g
+    }
+  }
 }
 `, name, cpuWarn, cpuCrit)
 }

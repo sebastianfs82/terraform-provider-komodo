@@ -6,6 +6,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -23,6 +25,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &OnboardingKeyResource{}
 var _ resource.ResourceWithImportState = &OnboardingKeyResource{}
+var _ resource.ResourceWithModifyPlan = &OnboardingKeyResource{}
 
 func NewOnboardingKeyResource() resource.Resource {
 	return &OnboardingKeyResource{}
@@ -360,4 +363,70 @@ func (r *OnboardingKeyResource) Delete(ctx context.Context, req resource.DeleteR
 
 func (r *OnboardingKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("public_key"), req, resp)
+}
+
+// ModifyPlan runs during the plan phase and rejects plans if the Komodo Core server
+// is older than v2.0.0, which is when onboarding keys were introduced.
+func (r *OnboardingKeyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Skip version check for destroy operations (plan is null).
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	if r.client == nil {
+		return
+	}
+
+	versionResp, err := r.client.GetVersion(ctx)
+	if err != nil {
+		resp.Diagnostics.AddWarning(
+			"Version Check Failed",
+			fmt.Sprintf("Unable to verify Komodo server version: %s. Proceeding with plan, but komodo_onboarding_key requires v2.0.0+.", err),
+		)
+		return
+	}
+
+	if !versionAtLeast(versionResp.Version, 2, 0, 0) {
+		resp.Diagnostics.AddError(
+			"Unsupported Komodo Server Version",
+			fmt.Sprintf(
+				"komodo_onboarding_key requires Komodo Core v2.0.0 or later, but the server is running v%s. "+
+					"Please upgrade your Komodo Core installation.",
+				versionResp.Version,
+			),
+		)
+	}
+}
+
+// versionAtLeast returns true when versionStr (e.g. "2.1.0") is >= the given major.minor.patch.
+// Pre-release suffixes (e.g. "2.0.0-beta") are treated as less than the release version.
+func versionAtLeast(versionStr string, major, minor, patch int) bool {
+	// Strip any pre-release or build-metadata suffix.
+	core := strings.FieldsFunc(versionStr, func(r rune) bool {
+		return r == '-' || r == '+'
+	})
+	if len(core) == 0 {
+		return false
+	}
+	parts := strings.SplitN(core[0], ".", 3)
+	for len(parts) < 3 {
+		parts = append(parts, "0")
+	}
+	parsePart := func(s string) int {
+		v, err := strconv.Atoi(s)
+		if err != nil {
+			return -1
+		}
+		return v
+	}
+	gotMajor := parsePart(parts[0])
+	gotMinor := parsePart(parts[1])
+	gotPatch := parsePart(parts[2])
+	switch {
+	case gotMajor != major:
+		return gotMajor > major
+	case gotMinor != minor:
+		return gotMinor > minor
+	default:
+		return gotPatch >= patch
+	}
 }

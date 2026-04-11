@@ -25,7 +25,7 @@ func NewRunProcedureAction() action.Action { return &RunProcedureAction{} }
 type RunProcedureAction struct{ client *client.Client }
 
 type RunProcedureModel struct {
-	Procedure types.String `tfsdk:"procedure"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *RunProcedureAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -36,9 +36,9 @@ func (a *RunProcedureAction) Schema(_ context.Context, _ action.SchemaRequest, r
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Runs the target procedure.",
 		Attributes: map[string]schema.Attribute{
-			"procedure": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the procedure to run.",
+				MarkdownDescription: "The ID of the procedure to run.",
 			},
 		},
 	}
@@ -56,8 +56,8 @@ func (a *RunProcedureAction) Invoke(ctx context.Context, req action.InvokeReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Executing RunProcedure", map[string]interface{}{"procedure": data.Procedure.ValueString()})
-	if err := a.client.RunProcedure(ctx, client.RunProcedureRequest{Procedure: data.Procedure.ValueString()}); err != nil {
+	tflog.Debug(ctx, "Executing RunProcedure", map[string]interface{}{"procedure": data.ID.ValueString()})
+	if err := a.client.RunProcedure(ctx, client.RunProcedureRequest{Procedure: data.ID.ValueString()}); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to run procedure, got error: %s", err))
 		return
 	}

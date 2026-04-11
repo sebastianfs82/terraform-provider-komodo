@@ -25,7 +25,7 @@ func NewRepoBuildAction() action.Action { return &RepoBuildAction{} }
 type RepoBuildAction struct{ client *client.Client }
 
 type RepoBuildModel struct {
-	Repo types.String `tfsdk:"repo"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *RepoBuildAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -36,9 +36,9 @@ func (a *RepoBuildAction) Schema(_ context.Context, _ action.SchemaRequest, resp
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Builds the target repo using its attached builder.",
 		Attributes: map[string]schema.Attribute{
-			"repo": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the repo to build.",
+				MarkdownDescription: "The ID of the repo to build.",
 			},
 		},
 	}
@@ -65,7 +65,7 @@ func (a *RepoBuildAction) Invoke(ctx context.Context, req action.InvokeRequest, 
 		return
 	}
 
-	execReq := client.BuildRepoRequest{Repo: data.Repo.ValueString()}
+	execReq := client.BuildRepoRequest{Repo: data.ID.ValueString()}
 
 	tflog.Debug(ctx, "Executing BuildRepo", map[string]interface{}{"repo": execReq.Repo})
 	if err := a.client.BuildRepo(ctx, execReq); err != nil {
@@ -85,7 +85,7 @@ func NewRepoCloneAction() action.Action { return &RepoCloneAction{} }
 type RepoCloneAction struct{ client *client.Client }
 
 type RepoCloneModel struct {
-	Repo types.String `tfsdk:"repo"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *RepoCloneAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -96,9 +96,9 @@ func (a *RepoCloneAction) Schema(_ context.Context, _ action.SchemaRequest, resp
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Clones the target repo onto its attached server.",
 		Attributes: map[string]schema.Attribute{
-			"repo": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the repo to clone.",
+				MarkdownDescription: "The ID of the repo to clone.",
 			},
 		},
 	}
@@ -125,7 +125,7 @@ func (a *RepoCloneAction) Invoke(ctx context.Context, req action.InvokeRequest, 
 		return
 	}
 
-	execReq := client.CloneRepoRequest{Repo: data.Repo.ValueString()}
+	execReq := client.CloneRepoRequest{Repo: data.ID.ValueString()}
 
 	tflog.Debug(ctx, "Executing CloneRepo", map[string]interface{}{"repo": execReq.Repo})
 	if err := a.client.CloneRepo(ctx, execReq); err != nil {
@@ -145,7 +145,7 @@ func NewRepoPullAction() action.Action { return &RepoPullAction{} }
 type RepoPullAction struct{ client *client.Client }
 
 type RepoPullModel struct {
-	Repo types.String `tfsdk:"repo"`
+	ID types.String `tfsdk:"id"`
 }
 
 func (a *RepoPullAction) Metadata(_ context.Context, req action.MetadataRequest, resp *action.MetadataResponse) {
@@ -156,9 +156,9 @@ func (a *RepoPullAction) Schema(_ context.Context, _ action.SchemaRequest, resp 
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Pulls the latest changes for the target repo on its attached server.",
 		Attributes: map[string]schema.Attribute{
-			"repo": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Id or name of the repo to pull.",
+				MarkdownDescription: "The ID of the repo to pull.",
 			},
 		},
 	}
@@ -185,7 +185,7 @@ func (a *RepoPullAction) Invoke(ctx context.Context, req action.InvokeRequest, r
 		return
 	}
 
-	execReq := client.PullRepoRequest{Repo: data.Repo.ValueString()}
+	execReq := client.PullRepoRequest{Repo: data.ID.ValueString()}
 
 	tflog.Debug(ctx, "Executing PullRepo", map[string]interface{}{"repo": execReq.Repo})
 	if err := a.client.PullRepo(ctx, execReq); err != nil {

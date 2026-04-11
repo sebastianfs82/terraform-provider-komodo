@@ -17,4 +17,4 @@ Runs the target procedure.
 
 ### Required
 
-- `procedure` (String) Id or name of the procedure to run.
+- `id` (String) The ID of the procedure to run.

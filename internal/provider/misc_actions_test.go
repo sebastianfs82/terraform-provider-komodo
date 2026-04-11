@@ -32,7 +32,7 @@ resource "komodo_deployment" "test" {
 
 action "komodo_start_deployment" "test" {
   config {
-    deployment = komodo_deployment.test.name
+    id = komodo_deployment.test.name
   }
 }
 `, name)
@@ -60,7 +60,7 @@ resource "komodo_deployment" "test" {
 
 action "komodo_pull_deployment" "test" {
   config {
-    deployment = komodo_deployment.test.name
+    id = komodo_deployment.test.name
   }
 }
 `, name)
@@ -88,7 +88,7 @@ resource "komodo_action" "test" {
 
 action "komodo_run_action" "test" {
   config {
-    action = komodo_action.test.name
+    id = komodo_action.test.name
   }
 }
 `, name)
@@ -116,7 +116,7 @@ resource "komodo_build" "test" {
 
 action "komodo_run_build" "test" {
   config {
-    build = komodo_build.test.name
+    id = komodo_build.test.name
   }
 }
 `, name)
@@ -144,7 +144,7 @@ resource "komodo_procedure" "test" {
 
 action "komodo_run_procedure" "test" {
   config {
-    procedure = komodo_procedure.test.name
+    id = komodo_procedure.test.name
   }
 }
 `, name)

@@ -47,9 +47,9 @@ func (d *ServersDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 			Computed:            true,
 			MarkdownDescription: "The ws/s address of the periphery client.",
 		},
-		"insecure_tls": schema.BoolAttribute{
+		"tls_ignored": schema.BoolAttribute{
 			Computed:            true,
-			MarkdownDescription: "Whether to skip periphery TLS certificate validation.",
+			MarkdownDescription: "Whether periphery TLS certificate validation is skipped.",
 		},
 		"external_address": schema.StringAttribute{
 			Computed:            true,
@@ -63,71 +63,68 @@ func (d *ServersDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 			Computed:            true,
 			MarkdownDescription: "Whether the server is enabled.",
 		},
-		"auto_rotate_keys": schema.BoolAttribute{
+		"auto_rotate_keys_enabled": schema.BoolAttribute{
 			Computed:            true,
 			MarkdownDescription: "Whether to automatically rotate server keys.",
 		},
-		"auto_prune": schema.BoolAttribute{
+		"auto_prune_enabled": schema.BoolAttribute{
 			Computed:            true,
 			MarkdownDescription: "Whether to run `docker image prune -a -f` every 24 hours.",
 		},
-		"stats_monitoring": schema.BoolAttribute{
-			Computed:            true,
-			MarkdownDescription: "Whether to monitor server stats beyond health checks.",
-		},
-		"ignore_mounts": schema.ListAttribute{
+		"mounts_ignored": schema.ListAttribute{
 			Computed:            true,
 			ElementType:         types.StringType,
-			MarkdownDescription: "Mount paths to filter from system stats reports.",
+			MarkdownDescription: "Mount paths filtered from system stats reports.",
 		},
 		"links": schema.ListAttribute{
 			Computed:            true,
 			ElementType:         types.StringType,
 			MarkdownDescription: "Quick links displayed in the Komodo UI for this server.",
 		},
-		"send_unreachable_alerts": schema.BoolAttribute{
+		"alerts": schema.SingleNestedAttribute{
 			Computed:            true,
-			MarkdownDescription: "Whether to send alerts about server reachability.",
-		},
-		"send_cpu_alerts": schema.BoolAttribute{
-			Computed:            true,
-			MarkdownDescription: "Whether to send alerts about server CPU status.",
-		},
-		"send_mem_alerts": schema.BoolAttribute{
-			Computed:            true,
-			MarkdownDescription: "Whether to send alerts about server memory status.",
-		},
-		"send_disk_alerts": schema.BoolAttribute{
-			Computed:            true,
-			MarkdownDescription: "Whether to send alerts about server disk status.",
-		},
-		"send_version_mismatch_alerts": schema.BoolAttribute{
-			Computed:            true,
-			MarkdownDescription: "Whether to send alerts about version mismatches with core.",
-		},
-		"cpu_warning": schema.Float64Attribute{
-			Computed:            true,
-			MarkdownDescription: "CPU percentage threshold for WARNING state.",
-		},
-		"cpu_critical": schema.Float64Attribute{
-			Computed:            true,
-			MarkdownDescription: "CPU percentage threshold for CRITICAL state.",
-		},
-		"mem_warning": schema.Float64Attribute{
-			Computed:            true,
-			MarkdownDescription: "Memory percentage threshold for WARNING state.",
-		},
-		"mem_critical": schema.Float64Attribute{
-			Computed:            true,
-			MarkdownDescription: "Memory percentage threshold for CRITICAL state.",
-		},
-		"disk_warning": schema.Float64Attribute{
-			Computed:            true,
-			MarkdownDescription: "Disk percentage threshold for WARNING state.",
-		},
-		"disk_critical": schema.Float64Attribute{
-			Computed:            true,
-			MarkdownDescription: "Disk percentage threshold for CRITICAL state.",
+			MarkdownDescription: "Alert configuration for this server.",
+			Attributes: map[string]schema.Attribute{
+				"enabled": schema.BoolAttribute{
+					Computed:            true,
+					MarkdownDescription: "Whether server stats monitoring and alerting is enabled.",
+				},
+				"types": schema.SetAttribute{
+					Computed:            true,
+					ElementType:         types.StringType,
+					MarkdownDescription: "Enabled alert types.",
+				},
+				"thresholds": schema.SingleNestedAttribute{
+					Computed:            true,
+					MarkdownDescription: "Alert threshold percentages.",
+					Attributes: map[string]schema.Attribute{
+						"cpu_critical": schema.Float64Attribute{
+							Computed:            true,
+							MarkdownDescription: "CPU percentage threshold for CRITICAL state.",
+						},
+						"cpu_warning": schema.Float64Attribute{
+							Computed:            true,
+							MarkdownDescription: "CPU percentage threshold for WARNING state.",
+						},
+						"disk_critical": schema.Float64Attribute{
+							Computed:            true,
+							MarkdownDescription: "Disk percentage threshold for CRITICAL state.",
+						},
+						"disk_warning": schema.Float64Attribute{
+							Computed:            true,
+							MarkdownDescription: "Disk percentage threshold for WARNING state.",
+						},
+						"memory_critical": schema.Float64Attribute{
+							Computed:            true,
+							MarkdownDescription: "Memory percentage threshold for CRITICAL state.",
+						},
+						"memory_warning": schema.Float64Attribute{
+							Computed:            true,
+							MarkdownDescription: "Memory percentage threshold for WARNING state.",
+						},
+					},
+				},
+			},
 		},
 	}
 

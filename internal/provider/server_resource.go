@@ -7,14 +7,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -24,6 +28,7 @@ import (
 
 var _ resource.Resource = &ServerResource{}
 var _ resource.ResourceWithImportState = &ServerResource{}
+var _ resource.ResourceWithValidateConfig = &ServerResource{}
 
 func NewServerResource() resource.Resource {
 	return &ServerResource{}
@@ -33,44 +38,87 @@ type ServerResource struct {
 	client *client.Client
 }
 
+// MaintenanceWindowModel represents a single scheduled maintenance window.
+type MaintenanceWindowModel struct {
+	Name            types.String `tfsdk:"name"`
+	Description     types.String `tfsdk:"description"`
+	ScheduleType    types.String `tfsdk:"schedule_type"`
+	DayOfWeek       types.String `tfsdk:"day_of_week"`
+	Date            types.String `tfsdk:"date"`
+	Hour            types.Int64  `tfsdk:"hour"`
+	Minute          types.Int64  `tfsdk:"minute"`
+	DurationMinutes types.Int64  `tfsdk:"duration_minutes"`
+	Timezone        types.String `tfsdk:"timezone"`
+	Enabled         types.Bool   `tfsdk:"enabled"`
+}
+
+// ServerAlertsThresholdsModel holds alert threshold percentages.
+type ServerAlertsThresholdsModel struct {
+	CPUCritical    types.Float64 `tfsdk:"cpu_critical"`
+	CPUWarning     types.Float64 `tfsdk:"cpu_warning"`
+	DiskCritical   types.Float64 `tfsdk:"disk_critical"`
+	DiskWarning    types.Float64 `tfsdk:"disk_warning"`
+	MemoryCritical types.Float64 `tfsdk:"memory_critical"`
+	MemoryWarning  types.Float64 `tfsdk:"memory_warning"`
+}
+
+// ServerAlertsModel holds the alert configuration for a server.
+type ServerAlertsModel struct {
+	Enabled    types.Bool                  `tfsdk:"enabled"`
+	Types      types.Set                   `tfsdk:"types"`
+	Thresholds ServerAlertsThresholdsModel `tfsdk:"thresholds"`
+}
+
 type ServerResourceModel struct {
 	ID   types.String `tfsdk:"id"`
 	Name types.String `tfsdk:"name"`
 
 	// Connection
-	Address         types.String `tfsdk:"address"`
-	InsecureTLS     types.Bool   `tfsdk:"insecure_tls"`
-	ExternalAddress types.String `tfsdk:"external_address"`
-	Region          types.String `tfsdk:"region"`
+	Address                        types.String `tfsdk:"address"`
+	CertificateVerificationEnabled types.Bool   `tfsdk:"certificate_verification_enabled"`
+	ExternalAddress                types.String `tfsdk:"external_address"`
+	Region                         types.String `tfsdk:"region"`
+	PublicKey                      types.String `tfsdk:"public_key"`
 
 	// Behaviour
-	Enabled         types.Bool `tfsdk:"enabled"`
-	AutoRotateKeys  types.Bool `tfsdk:"auto_rotate_keys"`
-	AutoPrune       types.Bool `tfsdk:"auto_prune"`
-	StatsMonitoring types.Bool `tfsdk:"stats_monitoring"`
+	Enabled                           types.Bool `tfsdk:"enabled"`
+	AutoRotateKeysEnabled             types.Bool `tfsdk:"auto_rotate_keys_enabled"`
+	AutoPruneImagesEnabled            types.Bool `tfsdk:"auto_prune_images_enabled"`
+	HistoricalSystemStatisticsEnabled types.Bool `tfsdk:"historical_system_statistics_enabled"`
 
 	// Mounts / links
-	IgnoreMounts types.List `tfsdk:"ignore_mounts"`
-	Links        types.List `tfsdk:"links"`
+	IgnoredDiskMounts types.List `tfsdk:"ignored_disk_mounts"`
+	Links             types.List `tfsdk:"links"`
 
-	// Alert flags
-	SendUnreachableAlerts     types.Bool `tfsdk:"send_unreachable_alerts"`
-	SendCPUAlerts             types.Bool `tfsdk:"send_cpu_alerts"`
-	SendMemAlerts             types.Bool `tfsdk:"send_mem_alerts"`
-	SendDiskAlerts            types.Bool `tfsdk:"send_disk_alerts"`
-	SendVersionMismatchAlerts types.Bool `tfsdk:"send_version_mismatch_alerts"`
+	// Alerts (nested object)
+	Alerts *ServerAlertsModel `tfsdk:"alerts"`
 
-	// Alert thresholds
-	CPUWarning   types.Float64 `tfsdk:"cpu_warning"`
-	CPUCritical  types.Float64 `tfsdk:"cpu_critical"`
-	MemWarning   types.Float64 `tfsdk:"mem_warning"`
-	MemCritical  types.Float64 `tfsdk:"mem_critical"`
-	DiskWarning  types.Float64 `tfsdk:"disk_warning"`
-	DiskCritical types.Float64 `tfsdk:"disk_critical"`
+	// Maintenance windows
+	Maintenance []MaintenanceWindowModel `tfsdk:"maintenance"`
 }
 
 func (r *ServerResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_server"
+}
+
+func (r *ServerResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data ServerResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Alerts == nil {
+		return
+	}
+	if !data.Alerts.Enabled.IsNull() && !data.Alerts.Enabled.IsUnknown() && data.Alerts.Enabled.ValueBool() {
+		if !data.Alerts.Types.IsUnknown() && (data.Alerts.Types.IsNull() || len(data.Alerts.Types.Elements()) == 0) {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("alerts").AtName("types"),
+				"Invalid alerts configuration",
+				"alerts.types must not be empty when alerts.enabled is true. Specify at least one of: cpu, disk, memory, unreachable, version.",
+			)
+		}
+	}
 }
 
 func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -99,12 +147,18 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"insecure_tls": schema.BoolAttribute{
+			"certificate_verification_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Whether to skip periphery TLS certificate validation. Defaults to `true` because periphery generates self-signed certificates by default.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
+				Default:             booldefault.StaticBool(true),
+				MarkdownDescription: "Whether to verify the periphery TLS certificate. When `false`, certificate validation is skipped (useful for self-signed certs). Defaults to `true`.",
+			},
+			"public_key": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Custom public key for the Periphery agent. If provided, the associated private key must be set as Periphery `private_key`. Required for Periphery → Core connections unless `public_key` is set in Core config. Note: the API does not return this value, so external changes cannot be detected.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"external_address": schema.StringAttribute{
@@ -131,134 +185,154 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"auto_rotate_keys": schema.BoolAttribute{
+			"auto_rotate_keys_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Whether to automatically rotate server keys when `RotateAllServerKeys` is called.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
+				Default:             booldefault.StaticBool(true),
+				MarkdownDescription: "Whether to automatically rotate server keys when `RotateAllServerKeys` is called. Defaults to `true`.",
 			},
-			"auto_prune": schema.BoolAttribute{
+			"auto_prune_images_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Whether to run `docker image prune -a -f` every 24 hours.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
+				Default:             booldefault.StaticBool(false),
+				MarkdownDescription: "Whether to run `docker image prune -a -f` every 24 hours. Defaults to `false`.",
 			},
-			"stats_monitoring": schema.BoolAttribute{
+			"historical_system_statistics_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Whether to monitor server stats beyond health checks.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
+				Default:             booldefault.StaticBool(true),
+				MarkdownDescription: "Whether server stats monitoring is enabled. Defaults to `true`.",
 			},
-			"ignore_mounts": schema.ListAttribute{
+			"ignored_disk_mounts": schema.ListAttribute{
 				Optional:            true,
 				Computed:            true,
 				ElementType:         types.StringType,
-				MarkdownDescription: "Mount paths to filter from system stats reports.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-				},
+				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
+				MarkdownDescription: "Mount paths to filter from system stats reports. Defaults to `[]`.",
 			},
 			"links": schema.ListAttribute{
 				Optional:            true,
 				Computed:            true,
 				ElementType:         types.StringType,
+				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
 				MarkdownDescription: "Quick links displayed in the Komodo UI for this server.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-				},
 			},
-			"send_unreachable_alerts": schema.BoolAttribute{
+			"alerts": schema.SingleNestedAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about server reachability.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
+				MarkdownDescription: "Alert configuration for this server.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(true),
+						MarkdownDescription: "Whether alerting is enabled. When `false`, all alert types are disabled regardless of `types`. Defaults to `true`.",
+					},
+					"types": schema.SetAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						Default:             setdefault.StaticValue(types.SetValueMust(types.StringType, []attr.Value{})),
+						MarkdownDescription: "Alert types to enable when `enabled` is `true`. Valid values: `cpu`, `disk`, `memory`, `unreachable`, `version`. Required (non-empty) when `enabled` is `true`. Defaults to `[]`.",
+					},
+					"thresholds": schema.SingleNestedAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Alert threshold percentages.",
+						Attributes: map[string]schema.Attribute{
+							"cpu_critical": schema.Float64Attribute{
+								Optional:            true,
+								Computed:            true,
+								Default:             float64default.StaticFloat64(99),
+								MarkdownDescription: "CPU percentage threshold for CRITICAL state. Defaults to `99`.",
+							},
+							"cpu_warning": schema.Float64Attribute{
+								Optional:            true,
+								Computed:            true,
+								Default:             float64default.StaticFloat64(90),
+								MarkdownDescription: "CPU percentage threshold for WARNING state. Defaults to `90`.",
+							},
+							"disk_critical": schema.Float64Attribute{
+								Optional:            true,
+								Computed:            true,
+								Default:             float64default.StaticFloat64(95),
+								MarkdownDescription: "Disk percentage threshold for CRITICAL state. Defaults to `95`.",
+							},
+							"disk_warning": schema.Float64Attribute{
+								Optional:            true,
+								Computed:            true,
+								Default:             float64default.StaticFloat64(75),
+								MarkdownDescription: "Disk percentage threshold for WARNING state. Defaults to `75`.",
+							},
+							"memory_critical": schema.Float64Attribute{
+								Optional:            true,
+								Computed:            true,
+								Default:             float64default.StaticFloat64(95),
+								MarkdownDescription: "Memory percentage threshold for CRITICAL state. Defaults to `95`.",
+							},
+							"memory_warning": schema.Float64Attribute{
+								Optional:            true,
+								Computed:            true,
+								Default:             float64default.StaticFloat64(75),
+								MarkdownDescription: "Memory percentage threshold for WARNING state. Defaults to `75`.",
+							},
+						},
+					},
 				},
 			},
-			"send_cpu_alerts": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about server CPU status.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"send_mem_alerts": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about server memory status.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"send_disk_alerts": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about server disk status.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"send_version_mismatch_alerts": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send alerts about version mismatches with core.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"cpu_warning": schema.Float64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "CPU percentage threshold for WARNING state.",
-				PlanModifiers: []planmodifier.Float64{
-					float64planmodifier.UseStateForUnknown(),
-				},
-			},
-			"cpu_critical": schema.Float64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "CPU percentage threshold for CRITICAL state.",
-				PlanModifiers: []planmodifier.Float64{
-					float64planmodifier.UseStateForUnknown(),
-				},
-			},
-			"mem_warning": schema.Float64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Memory percentage threshold for WARNING state.",
-				PlanModifiers: []planmodifier.Float64{
-					float64planmodifier.UseStateForUnknown(),
-				},
-			},
-			"mem_critical": schema.Float64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Memory percentage threshold for CRITICAL state.",
-				PlanModifiers: []planmodifier.Float64{
-					float64planmodifier.UseStateForUnknown(),
-				},
-			},
-			"disk_warning": schema.Float64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Disk percentage threshold for WARNING state.",
-				PlanModifiers: []planmodifier.Float64{
-					float64planmodifier.UseStateForUnknown(),
-				},
-			},
-			"disk_critical": schema.Float64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Disk percentage threshold for CRITICAL state.",
-				PlanModifiers: []planmodifier.Float64{
-					float64planmodifier.UseStateForUnknown(),
+		},
+		Blocks: map[string]schema.Block{
+			"maintenance": schema.ListNestedBlock{
+				MarkdownDescription: "Scheduled maintenance windows during which alerts from this server will be suppressed.",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Name for the maintenance window.",
+						},
+						"description": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "Description of what maintenance is performed.",
+						},
+						"schedule_type": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Schedule type: `Daily`, `Weekly`, or `OneTime`.",
+						},
+						"day_of_week": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "For `Weekly` schedules: day of the week (e.g. `Monday`, `Tuesday`).",
+						},
+						"date": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "For `OneTime` windows: ISO 8601 date in `YYYY-MM-DD` format.",
+						},
+						"hour": schema.Int64Attribute{
+							Optional:            true,
+							Computed:            true,
+							Default:             int64default.StaticInt64(0),
+							MarkdownDescription: "Start hour in 24-hour format (0–23). Defaults to `0`.",
+						},
+						"minute": schema.Int64Attribute{
+							Optional:            true,
+							Computed:            true,
+							Default:             int64default.StaticInt64(0),
+							MarkdownDescription: "Start minute (0–59). Defaults to `0`.",
+						},
+						"duration_minutes": schema.Int64Attribute{
+							Required:            true,
+							MarkdownDescription: "Duration of the maintenance window in minutes.",
+						},
+						"timezone": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "Timezone for the maintenance window. If empty, uses the Core timezone.",
+						},
+						"enabled": schema.BoolAttribute{
+							Optional:            true,
+							Computed:            true,
+							Default:             booldefault.StaticBool(true),
+							MarkdownDescription: "Whether this maintenance window is active. Defaults to `true`.",
+						},
+					},
 				},
 			},
 		},
@@ -295,9 +369,14 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	var pubKey *string
+	if !data.PublicKey.IsNull() && !data.PublicKey.IsUnknown() && data.PublicKey.ValueString() != "" {
+		pubKey = client.StringPtr(data.PublicKey.ValueString())
+	}
 	server, err := r.client.CreateServer(ctx, client.CreateServerRequest{
-		Name:   data.Name.ValueString(),
-		Config: cfg,
+		Name:      data.Name.ValueString(),
+		Config:    cfg,
+		PublicKey: pubKey,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create server, got error: %s", err))
@@ -359,12 +438,29 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	if !data.PublicKey.IsNull() && !data.PublicKey.IsUnknown() && data.PublicKey.ValueString() != "" {
+		if err := r.client.UpdateServerPublicKey(ctx, data.ID.ValueString(), data.PublicKey.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update server public key, got error: %s", err))
+			return
+		}
+	}
 	server, err := r.client.UpdateServer(ctx, client.UpdateServerRequest{
 		ID:     data.ID.ValueString(),
 		Config: cfg,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update server, got error: %s", err))
+		return
+	}
+	// UpdateServer uses _PartialServerConfig (all Option<T> fields). The response
+	// may not fully reflect merged state, so re-read to get the authoritative values.
+	server, err = r.client.GetServer(ctx, server.ID.OID)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read server after update, got error: %s", err))
+		return
+	}
+	if server == nil {
+		resp.Diagnostics.AddError("Client Error", "Server not found after update")
 		return
 	}
 
@@ -397,42 +493,123 @@ func (r *ServerResource) ImportState(ctx context.Context, req resource.ImportSta
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// serverConfigFromModel converts the resource model to a ServerConfig for API calls.
-func serverConfigFromModel(ctx context.Context, data *ServerResourceModel) (client.ServerConfig, diag.Diagnostics) {
+// serverConfigFromModel converts the resource model to a PartialServerConfig for API calls.
+// Only fields that are known (not null/unknown) are set so the API applies its own defaults
+// for omitted fields instead of receiving an explicit false/zero.
+func serverConfigFromModel(ctx context.Context, data *ServerResourceModel) (client.PartialServerConfig, diag.Diagnostics) {
 	var diags diag.Diagnostics
+	var cfg client.PartialServerConfig
 
-	cfg := client.ServerConfig{
-		Address:                   data.Address.ValueString(),
-		InsecureTLS:               data.InsecureTLS.ValueBool(),
-		ExternalAddress:           data.ExternalAddress.ValueString(),
-		Region:                    data.Region.ValueString(),
-		Enabled:                   data.Enabled.ValueBool(),
-		AutoRotateKeys:            data.AutoRotateKeys.ValueBool(),
-		AutoPrune:                 data.AutoPrune.ValueBool(),
-		StatsMonitoring:           data.StatsMonitoring.ValueBool(),
-		SendUnreachableAlerts:     data.SendUnreachableAlerts.ValueBool(),
-		SendCPUAlerts:             data.SendCPUAlerts.ValueBool(),
-		SendMemAlerts:             data.SendMemAlerts.ValueBool(),
-		SendDiskAlerts:            data.SendDiskAlerts.ValueBool(),
-		SendVersionMismatchAlerts: data.SendVersionMismatchAlerts.ValueBool(),
-		CPUWarning:                data.CPUWarning.ValueFloat64(),
-		CPUCritical:               data.CPUCritical.ValueFloat64(),
-		MemWarning:                data.MemWarning.ValueFloat64(),
-		MemCritical:               data.MemCritical.ValueFloat64(),
-		DiskWarning:               data.DiskWarning.ValueFloat64(),
-		DiskCritical:              data.DiskCritical.ValueFloat64(),
+	if !data.Address.IsNull() && !data.Address.IsUnknown() {
+		cfg.Address = client.StringPtr(data.Address.ValueString())
+	}
+	if !data.CertificateVerificationEnabled.IsNull() && !data.CertificateVerificationEnabled.IsUnknown() {
+		cfg.InsecureTLS = client.BoolPtr(!data.CertificateVerificationEnabled.ValueBool())
+	}
+	if !data.ExternalAddress.IsNull() && !data.ExternalAddress.IsUnknown() {
+		cfg.ExternalAddress = client.StringPtr(data.ExternalAddress.ValueString())
+	}
+	if !data.Region.IsNull() && !data.Region.IsUnknown() {
+		cfg.Region = client.StringPtr(data.Region.ValueString())
+	}
+	if !data.Enabled.IsNull() && !data.Enabled.IsUnknown() {
+		cfg.Enabled = client.BoolPtr(data.Enabled.ValueBool())
+	}
+	if !data.AutoRotateKeysEnabled.IsNull() && !data.AutoRotateKeysEnabled.IsUnknown() {
+		cfg.AutoRotateKeys = client.BoolPtr(data.AutoRotateKeysEnabled.ValueBool())
+	}
+	if !data.AutoPruneImagesEnabled.IsNull() && !data.AutoPruneImagesEnabled.IsUnknown() {
+		cfg.AutoPrune = client.BoolPtr(data.AutoPruneImagesEnabled.ValueBool())
 	}
 
-	if !data.IgnoreMounts.IsNull() && !data.IgnoreMounts.IsUnknown() {
+	if !data.IgnoredDiskMounts.IsNull() && !data.IgnoredDiskMounts.IsUnknown() {
 		var mounts []string
-		diags.Append(data.IgnoreMounts.ElementsAs(ctx, &mounts, false)...)
-		cfg.IgnoreMounts = mounts
+		diags.Append(data.IgnoredDiskMounts.ElementsAs(ctx, &mounts, false)...)
+		cfg.IgnoreMounts = &mounts
 	}
-
 	if !data.Links.IsNull() && !data.Links.IsUnknown() {
 		var links []string
 		diags.Append(data.Links.ElementsAs(ctx, &links, false)...)
-		cfg.Links = links
+		cfg.Links = &links
+	}
+	if !data.HistoricalSystemStatisticsEnabled.IsNull() && !data.HistoricalSystemStatisticsEnabled.IsUnknown() {
+		cfg.StatsMonitoring = client.BoolPtr(data.HistoricalSystemStatisticsEnabled.ValueBool())
+	}
+
+	if data.Alerts != nil {
+		if !data.Alerts.Enabled.IsNull() && !data.Alerts.Enabled.IsUnknown() {
+			if !data.Alerts.Enabled.ValueBool() {
+				// alerts.enabled = false → disable all send_*_alerts, ignore types
+				cfg.SendCPUAlerts = client.BoolPtr(false)
+				cfg.SendDiskAlerts = client.BoolPtr(false)
+				cfg.SendMemAlerts = client.BoolPtr(false)
+				cfg.SendUnreachableAlerts = client.BoolPtr(false)
+				cfg.SendVersionMismatchAlerts = client.BoolPtr(false)
+			} else {
+				var alertTypes []string
+				diags.Append(data.Alerts.Types.ElementsAs(ctx, &alertTypes, false)...)
+				wantCPU, wantDisk, wantMem, wantUnreachable, wantVersion := false, false, false, false, false
+				for _, t := range alertTypes {
+					switch t {
+					case "cpu":
+						wantCPU = true
+					case "disk":
+						wantDisk = true
+					case "memory":
+						wantMem = true
+					case "unreachable":
+						wantUnreachable = true
+					case "version":
+						wantVersion = true
+					}
+				}
+				cfg.SendCPUAlerts = client.BoolPtr(wantCPU)
+				cfg.SendDiskAlerts = client.BoolPtr(wantDisk)
+				cfg.SendMemAlerts = client.BoolPtr(wantMem)
+				cfg.SendUnreachableAlerts = client.BoolPtr(wantUnreachable)
+				cfg.SendVersionMismatchAlerts = client.BoolPtr(wantVersion)
+			}
+		}
+
+		th := data.Alerts.Thresholds
+		if !th.CPUCritical.IsNull() && !th.CPUCritical.IsUnknown() {
+			cfg.CPUCritical = client.Float64Ptr(th.CPUCritical.ValueFloat64())
+		}
+		if !th.CPUWarning.IsNull() && !th.CPUWarning.IsUnknown() {
+			cfg.CPUWarning = client.Float64Ptr(th.CPUWarning.ValueFloat64())
+		}
+		if !th.DiskCritical.IsNull() && !th.DiskCritical.IsUnknown() {
+			cfg.DiskCritical = client.Float64Ptr(th.DiskCritical.ValueFloat64())
+		}
+		if !th.DiskWarning.IsNull() && !th.DiskWarning.IsUnknown() {
+			cfg.DiskWarning = client.Float64Ptr(th.DiskWarning.ValueFloat64())
+		}
+		if !th.MemoryCritical.IsNull() && !th.MemoryCritical.IsUnknown() {
+			cfg.MemCritical = client.Float64Ptr(th.MemoryCritical.ValueFloat64())
+		}
+		if !th.MemoryWarning.IsNull() && !th.MemoryWarning.IsUnknown() {
+			cfg.MemWarning = client.Float64Ptr(th.MemoryWarning.ValueFloat64())
+		}
+	}
+
+	// Maintenance windows
+	if data.Maintenance != nil {
+		windows := make([]client.MaintenanceWindow, len(data.Maintenance))
+		for i, w := range data.Maintenance {
+			windows[i] = client.MaintenanceWindow{
+				Name:            w.Name.ValueString(),
+				Description:     w.Description.ValueString(),
+				ScheduleType:    w.ScheduleType.ValueString(),
+				DayOfWeek:       w.DayOfWeek.ValueString(),
+				Date:            w.Date.ValueString(),
+				Hour:            w.Hour.ValueInt64(),
+				Minute:          w.Minute.ValueInt64(),
+				DurationMinutes: w.DurationMinutes.ValueInt64(),
+				Timezone:        w.Timezone.ValueString(),
+				Enabled:         w.Enabled.ValueBool(),
+			}
+		}
+		cfg.MaintenanceWindows = &windows
 	}
 
 	return cfg, diags
@@ -447,51 +624,113 @@ func serverToResourceModel(ctx context.Context, s *client.Server, data *ServerRe
 
 	cfg := s.Config
 	data.Address = types.StringValue(cfg.Address)
-	data.InsecureTLS = types.BoolValue(cfg.InsecureTLS)
+	data.CertificateVerificationEnabled = types.BoolValue(!cfg.InsecureTLS)
 	data.ExternalAddress = types.StringValue(cfg.ExternalAddress)
 	data.Region = types.StringValue(cfg.Region)
+	// public_key is not returned by the API; leave state unchanged so the stored value is preserved.
 	data.Enabled = types.BoolValue(cfg.Enabled)
-	data.AutoRotateKeys = types.BoolValue(cfg.AutoRotateKeys)
-	data.AutoPrune = types.BoolValue(cfg.AutoPrune)
-	data.StatsMonitoring = types.BoolValue(cfg.StatsMonitoring)
-	data.SendUnreachableAlerts = types.BoolValue(cfg.SendUnreachableAlerts)
-	data.SendCPUAlerts = types.BoolValue(cfg.SendCPUAlerts)
-	data.SendMemAlerts = types.BoolValue(cfg.SendMemAlerts)
-	data.SendDiskAlerts = types.BoolValue(cfg.SendDiskAlerts)
-	data.SendVersionMismatchAlerts = types.BoolValue(cfg.SendVersionMismatchAlerts)
-	data.CPUWarning = types.Float64Value(cfg.CPUWarning)
-	data.CPUCritical = types.Float64Value(cfg.CPUCritical)
-	data.MemWarning = types.Float64Value(cfg.MemWarning)
-	data.MemCritical = types.Float64Value(cfg.MemCritical)
-	data.DiskWarning = types.Float64Value(cfg.DiskWarning)
-	data.DiskCritical = types.Float64Value(cfg.DiskCritical)
+	data.AutoRotateKeysEnabled = types.BoolValue(cfg.AutoRotateKeys)
+	data.AutoPruneImagesEnabled = types.BoolValue(cfg.AutoPrune)
+	data.HistoricalSystemStatisticsEnabled = types.BoolValue(cfg.StatsMonitoring)
 
 	if cfg.IgnoreMounts != nil {
-		elems := make([]types.String, len(cfg.IgnoreMounts))
-		for i, v := range cfg.IgnoreMounts {
-			elems[i] = types.StringValue(v)
-		}
-		listVal, d := types.ListValueFrom(ctx, types.StringType, elems)
+		listVal, d := types.ListValueFrom(ctx, types.StringType, cfg.IgnoreMounts)
 		diags.Append(d...)
-		data.IgnoreMounts = listVal
+		data.IgnoredDiskMounts = listVal
 	} else {
-		listVal, d := types.ListValueFrom(ctx, types.StringType, []types.String{})
+		listVal, d := types.ListValueFrom(ctx, types.StringType, []string{})
 		diags.Append(d...)
-		data.IgnoreMounts = listVal
+		data.IgnoredDiskMounts = listVal
 	}
 
 	if cfg.Links != nil {
-		elems := make([]types.String, len(cfg.Links))
-		for i, v := range cfg.Links {
-			elems[i] = types.StringValue(v)
-		}
-		listVal, d := types.ListValueFrom(ctx, types.StringType, elems)
+		listVal, d := types.ListValueFrom(ctx, types.StringType, cfg.Links)
 		diags.Append(d...)
 		data.Links = listVal
 	} else {
-		listVal, d := types.ListValueFrom(ctx, types.StringType, []types.String{})
+		listVal, d := types.ListValueFrom(ctx, types.StringType, []string{})
 		diags.Append(d...)
 		data.Links = listVal
+	}
+
+	// Build alerts.types from individual API boolean flags.
+	anyAlertEnabled := cfg.SendCPUAlerts || cfg.SendDiskAlerts || cfg.SendMemAlerts || cfg.SendUnreachableAlerts || cfg.SendVersionMismatchAlerts
+	var typesSet types.Set
+	if anyAlertEnabled {
+		var alertTypes []string
+		if cfg.SendCPUAlerts {
+			alertTypes = append(alertTypes, "cpu")
+		}
+		if cfg.SendDiskAlerts {
+			alertTypes = append(alertTypes, "disk")
+		}
+		if cfg.SendMemAlerts {
+			alertTypes = append(alertTypes, "memory")
+		}
+		if cfg.SendUnreachableAlerts {
+			alertTypes = append(alertTypes, "unreachable")
+		}
+		if cfg.SendVersionMismatchAlerts {
+			alertTypes = append(alertTypes, "version")
+		}
+		var d diag.Diagnostics
+		typesSet, d = types.SetValueFrom(ctx, types.StringType, alertTypes)
+		diags.Append(d...)
+	} else if data.Alerts != nil && !data.Alerts.Types.IsNull() && !data.Alerts.Types.IsUnknown() {
+		// All alert flags are disabled on the API. Preserve the configured types so
+		// the state stays consistent with the plan (alerts.enabled = false with types
+		// is valid config; types are the "desired" set to restore when re-enabled).
+		typesSet = data.Alerts.Types
+	} else {
+		var d diag.Diagnostics
+		typesSet, d = types.SetValueFrom(ctx, types.StringType, []string{})
+		diags.Append(d...)
+	}
+	data.Alerts = &ServerAlertsModel{
+		Enabled: types.BoolValue(anyAlertEnabled),
+		Types:   typesSet,
+		Thresholds: ServerAlertsThresholdsModel{
+			CPUCritical:    types.Float64Value(cfg.CPUCritical),
+			CPUWarning:     types.Float64Value(cfg.CPUWarning),
+			DiskCritical:   types.Float64Value(cfg.DiskCritical),
+			DiskWarning:    types.Float64Value(cfg.DiskWarning),
+			MemoryCritical: types.Float64Value(cfg.MemCritical),
+			MemoryWarning:  types.Float64Value(cfg.MemWarning),
+		},
+	}
+
+	// Maintenance windows
+	if len(cfg.MaintenanceWindows) > 0 {
+		windows := make([]MaintenanceWindowModel, len(cfg.MaintenanceWindows))
+		for i, w := range cfg.MaintenanceWindows {
+			windows[i] = MaintenanceWindowModel{
+				Name:            types.StringValue(w.Name),
+				Description:     types.StringValue(w.Description),
+				ScheduleType:    types.StringValue(w.ScheduleType),
+				DayOfWeek:       types.StringValue(w.DayOfWeek),
+				Date:            types.StringValue(w.Date),
+				Hour:            types.Int64Value(w.Hour),
+				Minute:          types.Int64Value(w.Minute),
+				DurationMinutes: types.Int64Value(w.DurationMinutes),
+				Timezone:        types.StringValue(w.Timezone),
+				Enabled:         types.BoolValue(w.Enabled),
+			}
+			// Fix: Map empty string fields to null for optional attributes
+			if w.Description == "" {
+				windows[i].Description = types.StringNull()
+			}
+			if w.Date == "" {
+				windows[i].Date = types.StringNull()
+			}
+			if w.Timezone == "" {
+				windows[i].Timezone = types.StringNull()
+			}
+		}
+		data.Maintenance = windows
+	} else if data.Maintenance != nil && len(data.Maintenance) == 0 {
+		data.Maintenance = []MaintenanceWindowModel{}
+	} else {
+		data.Maintenance = nil
 	}
 
 	return diags

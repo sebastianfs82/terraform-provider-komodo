@@ -17,7 +17,7 @@ Triggers a `docker compose down` on the target Komodo stack.
 
 ### Required
 
-- `stack` (String) Id or name of the stack to destroy.
+- `id` (String) The ID of the stack to destroy.
 
 ### Optional
 

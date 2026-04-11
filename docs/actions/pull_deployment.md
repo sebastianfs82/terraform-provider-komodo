@@ -17,4 +17,4 @@ Pulls the latest image for the target deployment.
 
 ### Required
 
-- `deployment` (String) Id or name of the deployment to pull.
+- `id` (String) The ID of the deployment to pull.

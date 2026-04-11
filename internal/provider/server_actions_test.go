@@ -41,7 +41,7 @@ func testAccServerPruneBuildxActionConfig(serverID string) string {
 	return fmt.Sprintf(`
 action "komodo_server_prune_buildx" "test" {
   config {
-    server = %q
+    id = %q
   }
 }
 `, serverID)
@@ -66,7 +66,7 @@ func testAccServerPruneContainersActionConfig(serverID string) string {
 	return fmt.Sprintf(`
 action "komodo_server_prune_containers" "test" {
   config {
-    server = %q
+    id = %q
   }
 }
 `, serverID)
@@ -91,7 +91,7 @@ func testAccServerPruneBuildersActionConfig(serverID string) string {
 	return fmt.Sprintf(`
 action "komodo_server_prune_builders" "test" {
   config {
-    server = %q
+    id = %q
   }
 }
 `, serverID)
@@ -116,7 +116,7 @@ func testAccServerPruneImagesActionConfig(serverID string) string {
 	return fmt.Sprintf(`
 action "komodo_server_prune_images" "test" {
   config {
-    server = %q
+    id = %q
   }
 }
 `, serverID)
@@ -141,7 +141,7 @@ func testAccServerPruneNetworksActionConfig(serverID string) string {
 	return fmt.Sprintf(`
 action "komodo_server_prune_networks" "test" {
   config {
-    server = %q
+    id = %q
   }
 }
 `, serverID)
@@ -166,7 +166,7 @@ func testAccServerPruneSystemActionConfig(serverID string) string {
 	return fmt.Sprintf(`
 action "komodo_server_prune_system" "test" {
   config {
-    server = %q
+    id = %q
   }
 }
 `, serverID)
@@ -191,7 +191,7 @@ func testAccServerPruneVolumesActionConfig(serverID string) string {
 	return fmt.Sprintf(`
 action "komodo_server_prune_volumes" "test" {
   config {
-    server = %q
+    id = %q
   }
 }
 `, serverID)
