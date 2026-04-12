@@ -24,7 +24,7 @@ func TestAccBuilderResource_basic(t *testing.T) {
 				Config: testAccBuilderResourceUrlConfig("tf-acc-builder-basic", "http://localhost:8120"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_builder.test", "name", "tf-acc-builder-basic"),
-					resource.TestCheckResourceAttr("komodo_builder.test", "builder_type", "Url"),
+					resource.TestCheckResourceAttr("komodo_builder.test", "type", "Url"),
 					resource.TestCheckResourceAttr("komodo_builder.test", "url_config.address", "http://localhost:8120"),
 					resource.TestCheckResourceAttrSet("komodo_builder.test", "id"),
 				),
@@ -163,4 +163,57 @@ resource "komodo_builder" "test" {
   }
 }
 `, name, address)
+}
+
+func TestAccBuilderResource_tags(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBuilderWithTagConfig("tf-acc-builder-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_builder.test", "tags.#", "1"),
+					resource.TestCheckResourceAttrPair("komodo_builder.test", "tags.0", "komodo_tag.test", "id"),
+				),
+			},
+			{
+				Config: testAccBuilderClearTagsConfig("tf-acc-builder-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_builder.test", "tags.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func testAccBuilderWithTagConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_tag" "test" {
+  name  = "tf-acc-tag-builder"
+  color = "Green"
+}
+
+resource "komodo_builder" "test" {
+  name         = %q
+  type         = "Url"
+  url_config = {
+    address = "http://localhost:8120"
+  }
+  tags = [komodo_tag.test.id]
+}
+`, name)
+}
+
+func testAccBuilderClearTagsConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_builder" "test" {
+  name         = %q
+  type         = "Url"
+  url_config = {
+    address = "http://localhost:8120"
+  }
+  tags = []
+}
+`, name)
 }

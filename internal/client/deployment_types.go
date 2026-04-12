@@ -84,6 +84,7 @@ func (d *DeploymentImage) UnmarshalJSON(data []byte) error {
 type Deployment struct {
 	ID     OID              `json:"_id"`
 	Name   string           `json:"name"`
+	Tags   []string         `json:"tags"`
 	Config DeploymentConfig `json:"config"`
 }
 

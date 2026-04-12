@@ -9,6 +9,7 @@ import "encoding/json"
 type Procedure struct {
 	ID     OID             `json:"_id"`
 	Name   string          `json:"name"`
+	Tags   []string        `json:"tags"`
 	Config ProcedureConfig `json:"config"`
 }
 

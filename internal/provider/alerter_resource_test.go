@@ -164,3 +164,56 @@ resource "komodo_alerter" "test" {
 }
 `, name, url)
 }
+
+func TestAccAlerterResource_tags(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAlerterWithTagConfig("tf-acc-alerter-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_alerter.test", "tags.#", "1"),
+					resource.TestCheckResourceAttrPair("komodo_alerter.test", "tags.0", "komodo_tag.test", "id"),
+				),
+			},
+			{
+				Config: testAccAlerterClearTagsConfig("tf-acc-alerter-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_alerter.test", "tags.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func testAccAlerterWithTagConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_tag" "test" {
+  name  = "tf-acc-tag-alerter"
+  color = "Green"
+}
+
+resource "komodo_alerter" "test" {
+  name = %q
+  endpoint = {
+    type = "Custom"
+    url  = "http://localhost:7000"
+  }
+  tags = [komodo_tag.test.id]
+}
+`, name)
+}
+
+func testAccAlerterClearTagsConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_alerter" "test" {
+  name = %q
+  endpoint = {
+    type = "Custom"
+    url  = "http://localhost:7000"
+  }
+  tags = []
+}
+`, name)
+}

@@ -547,3 +547,48 @@ resource "komodo_stack" "test" {
 }
 `, name)
 }
+
+func TestAccStackResource_tags(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccStackWithTagConfig("tf-acc-stack-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_stack.test", "tags.#", "1"),
+					resource.TestCheckResourceAttrPair("komodo_stack.test", "tags.0", "komodo_tag.test", "id"),
+				),
+			},
+			{
+				Config: testAccStackClearTagsConfig("tf-acc-stack-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_stack.test", "tags.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func testAccStackWithTagConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_tag" "test" {
+  name  = "tf-acc-tag-stack"
+  color = "Green"
+}
+
+resource "komodo_stack" "test" {
+  name = %q
+  tags = [komodo_tag.test.id]
+}
+`, name)
+}
+
+func testAccStackClearTagsConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  tags = []
+}
+`, name)
+}

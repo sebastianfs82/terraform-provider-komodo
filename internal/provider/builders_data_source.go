@@ -32,7 +32,7 @@ type BuildersDataSourceModel struct {
 type BuilderListItemModel struct {
 	ID          types.String `tfsdk:"id"`
 	Name        types.String `tfsdk:"name"`
-	BuilderType types.String `tfsdk:"builder_type"`
+	BuilderType types.String `tfsdk:"type"`
 }
 
 func (d *BuildersDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -56,7 +56,7 @@ func (d *BuildersDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:            true,
 							MarkdownDescription: "The name of the builder.",
 						},
-						"builder_type": schema.StringAttribute{
+						"type": schema.StringAttribute{
 							Computed:            true,
 							MarkdownDescription: "The builder type (Server, Aws, or Url).",
 						},

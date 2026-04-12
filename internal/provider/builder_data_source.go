@@ -29,7 +29,7 @@ type BuilderDataSource struct {
 type BuilderDataSourceModel struct {
 	ID           types.String       `tfsdk:"id"`
 	Name         types.String       `tfsdk:"name"`
-	BuilderType  types.String       `tfsdk:"builder_type"`
+	BuilderType  types.String       `tfsdk:"type"`
 	UrlConfig    *UrlConfigModel    `tfsdk:"url_config"`
 	ServerConfig *ServerConfigModel `tfsdk:"server_config"`
 	AwsConfig    *AwsConfigModel    `tfsdk:"aws_config"`
@@ -53,13 +53,13 @@ func (d *BuilderDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed:            true,
 				MarkdownDescription: "The builder name. One of `name` or `id` must be set.",
 			},
-			"builder_type": schema.StringAttribute{
+			"type": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The builder type: `Url`, `Server`, or `Aws`.",
 			},
 			"url_config": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Configuration for a URL builder. Populated when `builder_type` is `Url`.",
+				MarkdownDescription: "Configuration for a URL builder. Populated when `type` is `Url`.",
 				Attributes: map[string]schema.Attribute{
 					"address": schema.StringAttribute{
 						Computed:            true,
@@ -81,7 +81,7 @@ func (d *BuilderDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 			},
 			"server_config": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Configuration for a server builder. Populated when `builder_type` is `Server`.",
+				MarkdownDescription: "Configuration for a server builder. Populated when `type` is `Server`.",
 				Attributes: map[string]schema.Attribute{
 					"server_id": schema.StringAttribute{
 						Computed:            true,
@@ -91,7 +91,7 @@ func (d *BuilderDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 			},
 			"aws_config": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Configuration for an AWS builder. Populated when `builder_type` is `Aws`.",
+				MarkdownDescription: "Configuration for an AWS builder. Populated when `type` is `Aws`.",
 				Attributes: map[string]schema.Attribute{
 					"region": schema.StringAttribute{
 						Computed:            true,

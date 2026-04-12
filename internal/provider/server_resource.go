@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -72,6 +73,7 @@ type ServerAlertsModel struct {
 type ServerResourceModel struct {
 	ID   types.String `tfsdk:"id"`
 	Name types.String `tfsdk:"name"`
+	Tags types.List   `tfsdk:"tags"`
 
 	// Connection
 	Address                        types.String `tfsdk:"address"`
@@ -135,6 +137,15 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"name": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The unique name of the server.",
+			},
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"address": schema.StringAttribute{
 				Optional:            true,
@@ -387,11 +398,25 @@ func (r *ServerResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	plannedTags := data.Tags
 	resp.Diagnostics.Append(serverToResourceModel(ctx, server, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Server", ID: server.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on server, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	tflog.Trace(ctx, "Created server resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -475,11 +500,25 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	plannedTags := data.Tags
 	resp.Diagnostics.Append(serverToResourceModel(ctx, server, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Server", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on server, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -632,13 +671,27 @@ func serverToResourceModel(ctx context.Context, s *client.Server, data *ServerRe
 
 	data.ID = types.StringValue(s.ID.OID)
 	data.Name = types.StringValue(s.Name)
+	tagsSlice := s.Tags
+	if tagsSlice == nil {
+		tagsSlice = []string{}
+	}
+	tags, tagsDiags := types.ListValueFrom(ctx, types.StringType, tagsSlice)
+	diags.Append(tagsDiags...)
+	if diags.HasError() {
+		return diags
+	}
+	data.Tags = tags
 
 	cfg := s.Config
 	data.Address = types.StringValue(cfg.Address)
 	data.CertificateVerificationEnabled = types.BoolValue(!cfg.InsecureTLS)
 	data.ExternalAddress = types.StringValue(cfg.ExternalAddress)
 	data.Region = types.StringValue(cfg.Region)
-	// public_key is not returned by the API; leave state unchanged so the stored value is preserved.
+	// public_key is not returned by the API; preserve any known value from state/plan,
+	// but resolve unknown (e.g. first apply with no prior state) to null.
+	if data.PublicKey.IsUnknown() {
+		data.PublicKey = types.StringNull()
+	}
 	data.Enabled = types.BoolValue(cfg.Enabled)
 	data.AutoRotateKeysEnabled = types.BoolValue(cfg.AutoRotateKeys)
 	data.AutoPruneImagesEnabled = types.BoolValue(cfg.AutoPrune)

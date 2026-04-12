@@ -27,17 +27,12 @@ type ProcedureDataSource struct {
 }
 
 type ProcedureDataSourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	Stages           types.String `tfsdk:"stages"`
-	ScheduleFormat   types.String `tfsdk:"schedule_format"`
-	Schedule         types.String `tfsdk:"schedule"`
-	ScheduleEnabled  types.Bool   `tfsdk:"schedule_enabled"`
-	ScheduleTimezone types.String `tfsdk:"schedule_timezone"`
-	ScheduleAlert    types.Bool   `tfsdk:"schedule_alert"`
-	FailureAlert     types.Bool   `tfsdk:"failure_alert"`
-	WebhookEnabled   types.Bool   `tfsdk:"webhook_enabled"`
-	WebhookSecret    types.String `tfsdk:"webhook_secret"`
+	ID           types.String   `tfsdk:"id"`
+	Name         types.String   `tfsdk:"name"`
+	Stages       types.String   `tfsdk:"stages"`
+	Schedule     *ScheduleModel `tfsdk:"schedule"`
+	FailureAlert types.Bool     `tfsdk:"failure_alert"`
+	Webhook      *WebhookModel  `tfsdk:"webhook"`
 }
 
 func (d *ProcedureDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -62,38 +57,50 @@ func (d *ProcedureDataSource) Schema(ctx context.Context, req datasource.SchemaR
 				Computed:            true,
 				MarkdownDescription: "JSON array of procedure stages.",
 			},
-			"schedule_format": schema.StringAttribute{
+			"schedule": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "The schedule format: `Cron` or `English`.",
-			},
-			"schedule": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "The schedule expression.",
-			},
-			"schedule_enabled": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether the schedule is enabled.",
-			},
-			"schedule_timezone": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Timezone for the schedule (IANA TZ identifier).",
-			},
-			"schedule_alert": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether an alert is sent on scheduled runs.",
+				MarkdownDescription: "Schedule configuration for the procedure.",
+				Attributes: map[string]schema.Attribute{
+					"format": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "The schedule format: `Cron` or `English`.",
+					},
+					"expression": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "The schedule expression.",
+					},
+					"enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether the schedule is enabled.",
+					},
+					"timezone": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Timezone for the schedule (IANA TZ identifier).",
+					},
+					"alert_enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether an alert is sent on scheduled runs.",
+					},
+				},
 			},
 			"failure_alert": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether an alert is sent on procedure failure.",
 			},
-			"webhook_enabled": schema.BoolAttribute{
+			"webhook": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Whether webhook triggering is enabled.",
-			},
-			"webhook_secret": schema.StringAttribute{
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "The webhook secret override for this procedure.",
+				MarkdownDescription: "Webhook configuration for the procedure.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether webhook triggering is enabled.",
+					},
+					"secret": schema.StringAttribute{
+						Computed:            true,
+						Sensitive:           true,
+						MarkdownDescription: "The webhook secret override for this procedure.",
+					},
+				},
 			},
 		},
 	}
@@ -164,13 +171,29 @@ func (d *ProcedureDataSource) Read(ctx context.Context, req datasource.ReadReque
 		data.Stages = types.StringNull()
 	}
 
-	data.ScheduleFormat = types.StringValue(proc.Config.ScheduleFormat)
-	data.Schedule = types.StringValue(proc.Config.Schedule)
-	data.ScheduleEnabled = types.BoolValue(proc.Config.ScheduleEnabled)
-	data.ScheduleTimezone = types.StringValue(proc.Config.ScheduleTimezone)
-	data.ScheduleAlert = types.BoolValue(proc.Config.ScheduleAlert)
+	if proc.Config.ScheduleEnabled || proc.Config.Schedule != "" || proc.Config.ScheduleTimezone != "" || proc.Config.ScheduleAlert {
+		data.Schedule = &ScheduleModel{
+			Format:       types.StringValue(proc.Config.ScheduleFormat),
+			Expression:   types.StringValue(proc.Config.Schedule),
+			Enabled:      types.BoolValue(proc.Config.ScheduleEnabled),
+			Timezone:     types.StringValue(proc.Config.ScheduleTimezone),
+			AlertEnabled: types.BoolValue(proc.Config.ScheduleAlert),
+		}
+	} else {
+		data.Schedule = nil
+	}
 	data.FailureAlert = types.BoolValue(proc.Config.FailureAlert)
-	data.WebhookEnabled = types.BoolValue(proc.Config.WebhookEnabled)
-	data.WebhookSecret = types.StringValue(proc.Config.WebhookSecret)
+	webhookSecret := types.StringNull()
+	if proc.Config.WebhookSecret != "" {
+		webhookSecret = types.StringValue(proc.Config.WebhookSecret)
+	}
+	if proc.Config.WebhookEnabled || proc.Config.WebhookSecret != "" {
+		data.Webhook = &WebhookModel{
+			Enabled: types.BoolValue(proc.Config.WebhookEnabled),
+			Secret:  webhookSecret,
+		}
+	} else {
+		data.Webhook = nil
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

@@ -45,8 +45,7 @@ type BuildDataSourceModel struct {
 	Repo                 types.String               `tfsdk:"repo"`
 	Branch               types.String               `tfsdk:"branch"`
 	Commit               types.String               `tfsdk:"commit"`
-	WebhookEnabled       types.Bool                 `tfsdk:"webhook_enabled"`
-	WebhookSecret        types.String               `tfsdk:"webhook_secret"`
+	Webhook              *WebhookModel              `tfsdk:"webhook"`
 	FilesOnHost          types.Bool                 `tfsdk:"files_on_host"`
 	BuildPath            types.String               `tfsdk:"build_path"`
 	DockerfilePath       types.String               `tfsdk:"dockerfile_path"`
@@ -169,14 +168,20 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed:            true,
 				MarkdownDescription: "Specific commit hash built.",
 			},
-			"webhook_enabled": schema.BoolAttribute{
+			"webhook": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Whether webhook triggering is enabled.",
-			},
-			"webhook_secret": schema.StringAttribute{
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "The webhook secret override for this build.",
+				MarkdownDescription: "Webhook configuration for the build.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether webhook triggering is enabled.",
+					},
+					"secret": schema.StringAttribute{
+						Computed:            true,
+						Sensitive:           true,
+						MarkdownDescription: "The webhook secret override for this build.",
+					},
+				},
 			},
 			"files_on_host": schema.BoolAttribute{
 				Computed:            true,
@@ -328,8 +333,18 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	data.Repo = types.StringValue(b.Config.Repo)
 	data.Branch = types.StringValue(b.Config.Branch)
 	data.Commit = types.StringValue(b.Config.Commit)
-	data.WebhookEnabled = types.BoolValue(b.Config.WebhookEnabled)
-	data.WebhookSecret = types.StringValue(b.Config.WebhookSecret)
+	webhookSecret := types.StringNull()
+	if b.Config.WebhookSecret != "" {
+		webhookSecret = types.StringValue(b.Config.WebhookSecret)
+	}
+	if b.Config.WebhookEnabled || b.Config.WebhookSecret != "" {
+		data.Webhook = &WebhookModel{
+			Enabled: types.BoolValue(b.Config.WebhookEnabled),
+			Secret:  webhookSecret,
+		}
+	} else {
+		data.Webhook = nil
+	}
 	data.FilesOnHost = types.BoolValue(b.Config.FilesOnHost)
 	data.BuildPath = types.StringValue(b.Config.BuildPath)
 	data.DockerfilePath = types.StringValue(b.Config.DockerfilePath)

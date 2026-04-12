@@ -35,7 +35,7 @@ func TestAccBuilderDataSource_fields(t *testing.T) {
 				Config: testAccBuilderDataSourceConfig_byName("tf-acc-builder-ds-fields", "http://localhost:8121"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_builder.by_name", "name", "tf-acc-builder-ds-fields"),
-					resource.TestCheckResourceAttr("data.komodo_builder.by_name", "builder_type", "Url"),
+					resource.TestCheckResourceAttr("data.komodo_builder.by_name", "type", "Url"),
 					resource.TestCheckResourceAttr("data.komodo_builder.by_name", "url_config.address", "http://localhost:8121"),
 				),
 			},
@@ -53,7 +53,7 @@ func TestAccBuilderDataSource_byID(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("data.komodo_builder.by_id", "id"),
 					resource.TestCheckResourceAttr("data.komodo_builder.by_id", "name", "tf-acc-builder-ds-byid"),
-					resource.TestCheckResourceAttr("data.komodo_builder.by_id", "builder_type", "Url"),
+					resource.TestCheckResourceAttr("data.komodo_builder.by_id", "type", "Url"),
 				),
 			},
 		},
@@ -63,8 +63,8 @@ func TestAccBuilderDataSource_byID(t *testing.T) {
 func testAccBuilderDataSourceConfig_byName(name, address string) string {
 	return fmt.Sprintf(`
 resource "komodo_builder" "src" {
-  name         = %q
-  builder_type = "Url"
+  name       = %q
+  type       = "Url"
   url_config = {
     address = %q
   }
@@ -79,8 +79,8 @@ data "komodo_builder" "by_name" {
 func testAccBuilderDataSourceConfig_byID(name, address string) string {
 	return fmt.Sprintf(`
 resource "komodo_builder" "src" {
-  name         = %q
-  builder_type = "Url"
+  name       = %q
+  type       = "Url"
   url_config = {
     address = %q
   }

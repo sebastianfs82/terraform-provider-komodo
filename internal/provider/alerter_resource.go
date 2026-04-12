@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -39,6 +40,7 @@ type AlerterResource struct {
 type AlerterResourceModel struct {
 	ID          types.String             `tfsdk:"id"`
 	Name        types.String             `tfsdk:"name"`
+	Tags        types.List               `tfsdk:"tags"`
 	Enabled     types.Bool               `tfsdk:"enabled"`
 	AlertTypes  types.List               `tfsdk:"types"`
 	Resources   []ResourceTargetModel    `tfsdk:"resource"`
@@ -76,6 +78,15 @@ func (r *AlerterResource) Schema(ctx context.Context, req resource.SchemaRequest
 			"name": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The unique name of the alerter.",
+			},
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"enabled": schema.BoolAttribute{
 				Optional:            true,
@@ -250,9 +261,24 @@ func (r *AlerterResource) Create(ctx context.Context, req resource.CreateRequest
 		)
 		return
 	}
+	plannedTags := data.Tags
 	resp.Diagnostics.Append(alerterToModel(ctx, a, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Alerter", ID: a.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on alerter, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
 	}
 	tflog.Trace(ctx, "Created alerter resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -317,9 +343,24 @@ func (r *AlerterResource) Update(ctx context.Context, req resource.UpdateRequest
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update alerter, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	resp.Diagnostics.Append(alerterToModel(ctx, a, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Alerter", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on alerter, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -436,6 +477,16 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 
 	data.ID = types.StringValue(a.ID.OID)
 	data.Name = types.StringValue(a.Name)
+	tagsSlice := a.Tags
+	if tagsSlice == nil {
+		tagsSlice = []string{}
+	}
+	tags, tagsDiags := types.ListValueFrom(ctx, types.StringType, tagsSlice)
+	diags.Append(tagsDiags...)
+	if diags.HasError() {
+		return diags
+	}
+	data.Tags = tags
 	data.Enabled = types.BoolValue(a.Config.Enabled)
 
 	// types
@@ -535,6 +586,9 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 			}
 			if w.Description == "" {
 				windows[i].Description = types.StringNull()
+			}
+			if w.DayOfWeek == "" {
+				windows[i].DayOfWeek = types.StringNull()
 			}
 			if w.Date == "" {
 				windows[i].Date = types.StringNull()

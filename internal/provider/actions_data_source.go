@@ -30,13 +30,13 @@ type ActionsDataSourceModel struct {
 }
 
 type ActionListItemModel struct {
-	ID              types.String `tfsdk:"id"`
-	Name            types.String `tfsdk:"name"`
-	FileContents    types.String `tfsdk:"file_contents"`
-	RunAtStartup    types.Bool   `tfsdk:"run_at_startup"`
-	Schedule        types.String `tfsdk:"schedule"`
-	ScheduleEnabled types.Bool   `tfsdk:"schedule_enabled"`
-	WebhookEnabled  types.Bool   `tfsdk:"webhook_enabled"`
+	ID                  types.String `tfsdk:"id"`
+	Name                types.String `tfsdk:"name"`
+	FileContents        types.String `tfsdk:"file_contents"`
+	RunOnStartupEnabled types.Bool   `tfsdk:"run_on_startup_enabled"`
+	Schedule            types.String `tfsdk:"schedule"`
+	ScheduleEnabled     types.Bool   `tfsdk:"schedule_enabled"`
+	WebhookEnabled      types.Bool   `tfsdk:"webhook_enabled"`
 }
 
 func (d *ActionsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -64,7 +64,7 @@ func (d *ActionsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 							Computed:            true,
 							MarkdownDescription: "The Deno TypeScript file contents of the action.",
 						},
-						"run_at_startup": schema.BoolAttribute{
+						"run_on_startup_enabled": schema.BoolAttribute{
 							Computed:            true,
 							MarkdownDescription: "Whether the action runs at Komodo startup.",
 						},
@@ -120,13 +120,13 @@ func (d *ActionsDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	items := make([]ActionListItemModel, 0, len(actions))
 	for _, a := range actions {
 		items = append(items, ActionListItemModel{
-			ID:              types.StringValue(a.ID.OID),
-			Name:            types.StringValue(a.Name),
-			FileContents:    types.StringValue(a.Config.FileContents),
-			RunAtStartup:    types.BoolValue(a.Config.RunAtStartup),
-			Schedule:        types.StringValue(a.Config.Schedule),
-			ScheduleEnabled: types.BoolValue(a.Config.ScheduleEnabled),
-			WebhookEnabled:  types.BoolValue(a.Config.WebhookEnabled),
+			ID:                  types.StringValue(a.ID.OID),
+			Name:                types.StringValue(a.Name),
+			FileContents:        types.StringValue(a.Config.FileContents),
+			RunOnStartupEnabled: types.BoolValue(a.Config.RunAtStartup),
+			Schedule:            types.StringValue(a.Config.Schedule),
+			ScheduleEnabled:     types.BoolValue(a.Config.ScheduleEnabled),
+			WebhookEnabled:      types.BoolValue(a.Config.WebhookEnabled),
 		})
 	}
 	data.Actions = items

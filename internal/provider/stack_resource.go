@@ -67,6 +67,7 @@ type FilesConfigModel struct {
 type StackResourceModel struct {
 	ID          types.String `tfsdk:"id"`
 	Name        types.String `tfsdk:"name"`
+	Tags        types.List   `tfsdk:"tags"`
 	ServerID    types.String `tfsdk:"server_id"`
 	SwarmID     types.String `tfsdk:"swarm_id"`
 	ProjectName types.String `tfsdk:"project_name"`
@@ -138,6 +139,15 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"name": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The unique name of the stack.",
+			},
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"server_id": schema.StringAttribute{
 				Optional:            true,
@@ -579,7 +589,22 @@ func (r *StackResource) Create(ctx context.Context, req resource.CreateRequest, 
 		)
 		return
 	}
+	plannedTags := data.Tags
 	stackToModel(ctx, r.client, stack, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Stack", ID: stack.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on stack, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	tflog.Trace(ctx, "Created stack resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -638,7 +663,22 @@ func (r *StackResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update stack, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	stackToModel(ctx, r.client, stack, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Stack", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on stack, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -821,6 +861,12 @@ func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackReso
 func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, data *StackResourceModel) {
 	data.ID = types.StringValue(stack.ID.OID)
 	data.Name = types.StringValue(stack.Name)
+	tagsSlice := stack.Tags
+	if tagsSlice == nil {
+		tagsSlice = []string{}
+	}
+	tags, _ := types.ListValueFrom(ctx, types.StringType, tagsSlice)
+	data.Tags = tags
 
 	strOrNull := func(s string) types.String {
 		if s != "" {

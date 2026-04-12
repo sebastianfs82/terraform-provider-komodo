@@ -39,6 +39,7 @@ func (r *ResourceTarget) UnmarshalJSON(data []byte) error {
 type Alerter struct {
 	ID     OID           `json:"_id"`
 	Name   string        `json:"name"`
+	Tags   []string      `json:"tags"`
 	Config AlerterConfig `json:"config"`
 }
 

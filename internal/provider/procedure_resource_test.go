@@ -46,9 +46,9 @@ func TestAccProcedureResource_update(t *testing.T) {
 			{
 				Config: testAccProcedureResourceConfigWithSchedule(name),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule_format", "Cron"),
-					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule", "0 * * * *"),
-					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule_enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.format", "Cron"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.expression", "0 * * * *"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.enabled", "true"),
 				),
 			},
 		},
@@ -84,7 +84,7 @@ func TestAccProcedureResource_importState(t *testing.T) {
 				ImportStateIdFunc: func(s *terraform.State) (string, error) {
 					return procedureID, nil
 				},
-				ImportStateVerifyIgnore: []string{"webhook_secret"},
+				ImportStateVerifyIgnore: []string{"webhook"},
 			},
 		},
 	})
@@ -168,10 +168,137 @@ resource "komodo_procedure" "test" {
 func testAccProcedureResourceConfigWithSchedule(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_procedure" "test" {
-  name             = %q
-  schedule_format  = "Cron"
-  schedule         = "0 * * * *"
-  schedule_enabled = true
+  name = %q
+  schedule {
+    format     = "Cron"
+    expression = "0 * * * *"
+    enabled    = true
+  }
+}
+`, name)
+}
+
+func TestAccProcedureResource_tags(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureWithTagConfig("tf-acc-procedure-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "tags.#", "1"),
+					resource.TestCheckResourceAttrPair("komodo_procedure.test", "tags.0", "komodo_tag.test", "id"),
+				),
+			},
+			{
+				Config: testAccProcedureClearTagsConfig("tf-acc-procedure-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "tags.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func testAccProcedureWithTagConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_tag" "test" {
+  name  = "tf-acc-tag-procedure"
+  color = "Green"
+}
+
+resource "komodo_procedure" "test" {
+  name = %q
+  tags = [komodo_tag.test.id]
+}
+`, name)
+}
+
+func testAccProcedureClearTagsConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "test" {
+  name = %q
+  tags = []
+}
+`, name)
+}
+
+func TestAccProcedureResource_scheduleAlertEnabled(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureResourceConfigWithFullSchedule("tf-acc-procedure-schedule-alert"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.format", "Cron"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.expression", "0 * * * *"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.alert_enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.timezone", "Europe/Berlin"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccProcedureResource_scheduleTimezone(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureResourceConfigWithFullSchedule("tf-acc-procedure-schedule-tz"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.timezone", "Europe/Berlin"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccProcedureResource_scheduleDefaults(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureResourceConfigWithMinimalSchedule("tf-acc-procedure-schedule-defaults"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.format", "Cron"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.expression", "0 * * * *"),
+					// enabled and alert_enabled default to true; timezone defaults to ""
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.alert_enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "schedule.timezone", ""),
+				),
+			},
+		},
+	})
+}
+
+func testAccProcedureResourceConfigWithFullSchedule(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "test" {
+  name = %q
+  schedule {
+    format        = "Cron"
+    expression    = "0 * * * *"
+    enabled       = true
+    alert_enabled = true
+    timezone      = "Europe/Berlin"
+  }
+}
+`, name)
+}
+
+func testAccProcedureResourceConfigWithMinimalSchedule(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "test" {
+  name = %q
+  schedule {
+    format     = "Cron"
+    expression = "0 * * * *"
+  }
 }
 `, name)
 }

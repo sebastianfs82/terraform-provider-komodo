@@ -5,14 +5,19 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -31,22 +36,32 @@ type ActionResource struct {
 	client *client.Client
 }
 
+// ArgumentModel holds a single key-value argument for an action.
+type ArgumentModel struct {
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
+}
+
+// ScheduleModel holds the nested schedule block attributes shared by Action and Procedure resources.
+type ScheduleModel struct {
+	Format       types.String `tfsdk:"format"`
+	Expression   types.String `tfsdk:"expression"`
+	Enabled      types.Bool   `tfsdk:"enabled"`
+	Timezone     types.String `tfsdk:"timezone"`
+	AlertEnabled types.Bool   `tfsdk:"alert_enabled"`
+}
+
 type ActionResourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	RunAtStartup     types.Bool   `tfsdk:"run_at_startup"`
-	ScheduleFormat   types.String `tfsdk:"schedule_format"`
-	Schedule         types.String `tfsdk:"schedule"`
-	ScheduleEnabled  types.Bool   `tfsdk:"schedule_enabled"`
-	ScheduleTimezone types.String `tfsdk:"schedule_timezone"`
-	ScheduleAlert    types.Bool   `tfsdk:"schedule_alert"`
-	FailureAlert     types.Bool   `tfsdk:"failure_alert"`
-	WebhookEnabled   types.Bool   `tfsdk:"webhook_enabled"`
-	WebhookSecret    types.String `tfsdk:"webhook_secret"`
-	ReloadDenoDeps   types.Bool   `tfsdk:"reload_deno_deps"`
-	FileContents     types.String `tfsdk:"file_contents"`
-	ArgumentsFormat  types.String `tfsdk:"arguments_format"`
-	Arguments        types.String `tfsdk:"arguments"`
+	ID                        types.String    `tfsdk:"id"`
+	Name                      types.String    `tfsdk:"name"`
+	Tags                      types.List      `tfsdk:"tags"`
+	RunOnStartupEnabled       types.Bool      `tfsdk:"run_on_startup_enabled"`
+	Schedule                  *ScheduleModel  `tfsdk:"schedule"`
+	FailureAlert              types.Bool      `tfsdk:"failure_alert_enabled"`
+	Webhook                   *WebhookModel   `tfsdk:"webhook"`
+	ReloadDependenciesEnabled types.Bool      `tfsdk:"reload_dependencies_enabled"`
+	FileContents              types.String    `tfsdk:"file_contents"`
+	Arguments                 []ArgumentModel `tfsdk:"argument"`
 }
 
 func (r *ActionResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -68,7 +83,16 @@ func (r *ActionResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Required:            true,
 				MarkdownDescription: "The unique name of the action.",
 			},
-			"run_at_startup": schema.BoolAttribute{
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"run_on_startup_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Whether to run the action at Komodo startup.",
@@ -76,72 +100,77 @@ func (r *ActionResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"schedule_format": schema.StringAttribute{
+			"schedule": schema.SingleNestedAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The schedule format. One of `Cron` or `English`.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+				MarkdownDescription: "Schedule configuration for the action.",
+				Attributes: map[string]schema.Attribute{
+					"format": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "The schedule format. One of `Cron` or `English`.",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"expression": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "The schedule expression (cron string or English description).",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Whether the schedule is enabled.",
+						Default:             booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"timezone": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Timezone for the schedule (IANA TZ identifier, e.g. `America/New_York`). Defaults to `\"\"` (Core local timezone).",
+						Default:             stringdefault.StaticString(""),
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"alert_enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Whether to send an alert when the action runs on schedule.",
+						Default:             booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
+						},
+					},
 				},
 			},
-			"schedule": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The schedule expression (cron string or English description).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"schedule_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether the schedule is enabled.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"schedule_timezone": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Timezone for the schedule (IANA TZ identifier, e.g. `America/New_York`).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"schedule_alert": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send an alert when the action runs on schedule.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"failure_alert": schema.BoolAttribute{
+			"failure_alert_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Whether to send an alert when the action fails.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
+				Default:             booldefault.StaticBool(true),
 			},
-			"webhook_enabled": schema.BoolAttribute{
+			"webhook": schema.SingleNestedAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to allow triggering the action via webhook.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
+				MarkdownDescription: "Webhook configuration for the action.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether to allow triggering the action via webhook.",
+					},
+					"secret": schema.StringAttribute{
+						Optional:            true,
+						Sensitive:           true,
+						MarkdownDescription: "Override the default webhook secret for this action.",
+					},
 				},
 			},
-			"webhook_secret": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Override the default webhook secret for this action.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"reload_deno_deps": schema.BoolAttribute{
+			"reload_dependencies_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Whether to reload Deno dependencies on each run.",
@@ -157,20 +186,21 @@ func (r *ActionResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"arguments_format": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The format for action arguments (e.g. `KeyValue` or `Toml`).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"arguments": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Default arguments passed to the action as the `ARGS` variable.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+		},
+		Blocks: map[string]schema.Block{
+			"argument": schema.ListNestedBlock{
+				MarkdownDescription: "Key-value arguments passed to the action as the `ARGS` variable.",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The argument name (environment variable name).",
+						},
+						"value": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The argument value.",
+						},
+					},
 				},
 			},
 		},
@@ -216,7 +246,22 @@ func (r *ActionResource) Create(ctx context.Context, req resource.CreateRequest,
 		)
 		return
 	}
+	plannedTags := data.Tags
 	actionToModel(a, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Action", ID: a.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on action, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	tflog.Trace(ctx, "Created action resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -272,7 +317,22 @@ func (r *ActionResource) Update(ctx context.Context, req resource.UpdateRequest,
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update action, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	actionToModel(a, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Action", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on action, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -298,56 +358,76 @@ func (r *ActionResource) ImportState(ctx context.Context, req resource.ImportSta
 // partialActionConfigFromModel converts the Terraform model into a PartialActionConfig.
 func partialActionConfigFromModel(data *ActionResourceModel) client.PartialActionConfig {
 	cfg := client.PartialActionConfig{}
-	if !data.RunAtStartup.IsNull() && !data.RunAtStartup.IsUnknown() {
-		v := data.RunAtStartup.ValueBool()
+	if !data.RunOnStartupEnabled.IsNull() && !data.RunOnStartupEnabled.IsUnknown() {
+		v := data.RunOnStartupEnabled.ValueBool()
 		cfg.RunAtStartup = &v
 	}
-	if !data.ScheduleFormat.IsNull() && !data.ScheduleFormat.IsUnknown() {
-		v := data.ScheduleFormat.ValueString()
-		cfg.ScheduleFormat = &v
-	}
-	if !data.Schedule.IsNull() && !data.Schedule.IsUnknown() {
-		v := data.Schedule.ValueString()
-		cfg.Schedule = &v
-	}
-	if !data.ScheduleEnabled.IsNull() && !data.ScheduleEnabled.IsUnknown() {
-		v := data.ScheduleEnabled.ValueBool()
-		cfg.ScheduleEnabled = &v
-	}
-	if !data.ScheduleTimezone.IsNull() && !data.ScheduleTimezone.IsUnknown() {
-		v := data.ScheduleTimezone.ValueString()
-		cfg.ScheduleTimezone = &v
-	}
-	if !data.ScheduleAlert.IsNull() && !data.ScheduleAlert.IsUnknown() {
-		v := data.ScheduleAlert.ValueBool()
-		cfg.ScheduleAlert = &v
+	if data.Schedule != nil {
+		if !data.Schedule.Format.IsNull() && !data.Schedule.Format.IsUnknown() {
+			v := data.Schedule.Format.ValueString()
+			cfg.ScheduleFormat = &v
+		}
+		if !data.Schedule.Expression.IsNull() && !data.Schedule.Expression.IsUnknown() {
+			v := data.Schedule.Expression.ValueString()
+			cfg.Schedule = &v
+		}
+		if !data.Schedule.Enabled.IsNull() && !data.Schedule.Enabled.IsUnknown() {
+			v := data.Schedule.Enabled.ValueBool()
+			cfg.ScheduleEnabled = &v
+		}
+		if !data.Schedule.Timezone.IsNull() && !data.Schedule.Timezone.IsUnknown() {
+			v := data.Schedule.Timezone.ValueString()
+			cfg.ScheduleTimezone = &v
+		}
+		if !data.Schedule.AlertEnabled.IsNull() && !data.Schedule.AlertEnabled.IsUnknown() {
+			v := data.Schedule.AlertEnabled.ValueBool()
+			cfg.ScheduleAlert = &v
+		}
+	} else {
+		f, s := false, ""
+		cfg.ScheduleEnabled = &f
+		cfg.Schedule = &s
+		cfg.ScheduleTimezone = &s
+		cfg.ScheduleAlert = &f
 	}
 	if !data.FailureAlert.IsNull() && !data.FailureAlert.IsUnknown() {
 		v := data.FailureAlert.ValueBool()
 		cfg.FailureAlert = &v
 	}
-	if !data.WebhookEnabled.IsNull() && !data.WebhookEnabled.IsUnknown() {
-		v := data.WebhookEnabled.ValueBool()
-		cfg.WebhookEnabled = &v
+	if data.Webhook != nil {
+		if !data.Webhook.Enabled.IsNull() && !data.Webhook.Enabled.IsUnknown() {
+			v := data.Webhook.Enabled.ValueBool()
+			cfg.WebhookEnabled = &v
+		}
+		if !data.Webhook.Secret.IsNull() && !data.Webhook.Secret.IsUnknown() {
+			v := data.Webhook.Secret.ValueString()
+			cfg.WebhookSecret = &v
+		}
+	} else {
+		f, s := false, ""
+		cfg.WebhookEnabled = &f
+		cfg.WebhookSecret = &s
 	}
-	if !data.WebhookSecret.IsNull() && !data.WebhookSecret.IsUnknown() {
-		v := data.WebhookSecret.ValueString()
-		cfg.WebhookSecret = &v
-	}
-	if !data.ReloadDenoDeps.IsNull() && !data.ReloadDenoDeps.IsUnknown() {
-		v := data.ReloadDenoDeps.ValueBool()
+	if !data.ReloadDependenciesEnabled.IsNull() && !data.ReloadDependenciesEnabled.IsUnknown() {
+		v := data.ReloadDependenciesEnabled.ValueBool()
 		cfg.ReloadDenoDeps = &v
 	}
 	if !data.FileContents.IsNull() && !data.FileContents.IsUnknown() {
 		v := data.FileContents.ValueString()
 		cfg.FileContents = &v
 	}
-	if !data.ArgumentsFormat.IsNull() && !data.ArgumentsFormat.IsUnknown() {
-		v := data.ArgumentsFormat.ValueString()
-		cfg.ArgumentsFormat = &v
-	}
-	if !data.Arguments.IsNull() && !data.Arguments.IsUnknown() {
-		v := data.Arguments.ValueString()
+	format := "json"
+	cfg.ArgumentsFormat = &format
+	if len(data.Arguments) > 0 {
+		m := make(map[string]string, len(data.Arguments))
+		for _, arg := range data.Arguments {
+			m[arg.Name.ValueString()] = arg.Value.ValueString()
+		}
+		b, _ := json.Marshal(m)
+		v := string(b)
+		cfg.Arguments = &v
+	} else {
+		v := "{}"
 		cfg.Arguments = &v
 	}
 	return cfg
@@ -357,17 +437,78 @@ func partialActionConfigFromModel(data *ActionResourceModel) client.PartialActio
 func actionToModel(a *client.Action, data *ActionResourceModel) {
 	data.ID = types.StringValue(a.ID.OID)
 	data.Name = types.StringValue(a.Name)
-	data.RunAtStartup = types.BoolValue(a.Config.RunAtStartup)
-	data.ScheduleFormat = types.StringValue(a.Config.ScheduleFormat)
-	data.Schedule = types.StringValue(a.Config.Schedule)
-	data.ScheduleEnabled = types.BoolValue(a.Config.ScheduleEnabled)
-	data.ScheduleTimezone = types.StringValue(a.Config.ScheduleTimezone)
-	data.ScheduleAlert = types.BoolValue(a.Config.ScheduleAlert)
+	tagVals := make([]attr.Value, len(a.Tags))
+	for i, t := range a.Tags {
+		tagVals[i] = types.StringValue(t)
+	}
+	data.Tags = types.ListValueMust(types.StringType, tagVals)
+	data.RunOnStartupEnabled = types.BoolValue(a.Config.RunAtStartup)
+	if a.Config.ScheduleEnabled || a.Config.Schedule != "" || a.Config.ScheduleTimezone != "" || a.Config.ScheduleAlert {
+		data.Schedule = &ScheduleModel{
+			Format:       types.StringValue(a.Config.ScheduleFormat),
+			Expression:   types.StringValue(a.Config.Schedule),
+			Enabled:      types.BoolValue(a.Config.ScheduleEnabled),
+			Timezone:     types.StringValue(a.Config.ScheduleTimezone),
+			AlertEnabled: types.BoolValue(a.Config.ScheduleAlert),
+		}
+	} else {
+		data.Schedule = nil
+	}
 	data.FailureAlert = types.BoolValue(a.Config.FailureAlert)
-	data.WebhookEnabled = types.BoolValue(a.Config.WebhookEnabled)
-	data.WebhookSecret = types.StringValue(a.Config.WebhookSecret)
-	data.ReloadDenoDeps = types.BoolValue(a.Config.ReloadDenoDeps)
+	webhookSecret := types.StringNull()
+	if a.Config.WebhookSecret != "" {
+		webhookSecret = types.StringValue(a.Config.WebhookSecret)
+	}
+	if a.Config.WebhookEnabled || a.Config.WebhookSecret != "" {
+		data.Webhook = &WebhookModel{
+			Enabled: types.BoolValue(a.Config.WebhookEnabled),
+			Secret:  webhookSecret,
+		}
+	} else {
+		data.Webhook = nil
+	}
+	data.ReloadDependenciesEnabled = types.BoolValue(a.Config.ReloadDenoDeps)
 	data.FileContents = types.StringValue(strings.TrimRight(a.Config.FileContents, "\n"))
-	data.ArgumentsFormat = types.StringValue(a.Config.ArgumentsFormat)
-	data.Arguments = types.StringValue(a.Config.Arguments)
+	data.Arguments = parseActionArguments(a.Config.ArgumentsFormat, a.Config.Arguments)
+}
+
+// parseActionArguments converts a serialised arguments string back into a slice of ArgumentModel.
+func parseActionArguments(format, raw string) []ArgumentModel {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "{}" {
+		return nil
+	}
+	switch format {
+	case "json", "":
+		var m map[string]string
+		if err := json.Unmarshal([]byte(raw), &m); err != nil {
+			return nil
+		}
+		result := make([]ArgumentModel, 0, len(m))
+		for k, v := range m {
+			result = append(result, ArgumentModel{
+				Name:  types.StringValue(k),
+				Value: types.StringValue(v),
+			})
+		}
+		return result
+	default:
+		// key_value / toml / yaml: fall back to line-oriented KEY=VALUE parsing
+		var result []ArgumentModel
+		for _, line := range strings.Split(raw, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			idx := strings.Index(line, "=")
+			if idx < 0 {
+				continue
+			}
+			result = append(result, ArgumentModel{
+				Name:  types.StringValue(strings.TrimSpace(line[:idx])),
+				Value: types.StringValue(strings.Trim(strings.TrimSpace(line[idx+1:]), `"`)),
+			})
+		}
+		return result
+	}
 }

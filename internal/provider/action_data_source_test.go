@@ -34,8 +34,8 @@ func TestAccActionDataSource_fields(t *testing.T) {
 			{
 				Config: testAccActionDataSourceConfig_fields("tf-acc-action-ds-fields"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.komodo_action.test", "webhook_enabled", "true"),
-					resource.TestCheckResourceAttr("data.komodo_action.test", "failure_alert", "true"),
+					resource.TestCheckResourceAttr("data.komodo_action.test", "webhook.enabled", "true"),
+					resource.TestCheckResourceAttr("data.komodo_action.test", "failure_alert_enabled", "true"),
 					resource.TestCheckResourceAttr("data.komodo_action.test", "file_contents", "console.log('test');"),
 				),
 			},
@@ -59,8 +59,10 @@ func testAccActionDataSourceConfig_fields(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_action" "test" {
   name            = %q
-  webhook_enabled = true
-  failure_alert   = true
+  webhook {
+    enabled = true
+  }
+  failure_alert_enabled   = true
   file_contents   = "console.log('test');"
 }
 

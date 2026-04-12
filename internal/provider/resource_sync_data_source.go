@@ -45,8 +45,7 @@ type ResourceSyncDataSourceModel struct {
 	FileContents types.String `tfsdk:"file_contents"`
 
 	// Webhook
-	WebhookEnabled types.Bool   `tfsdk:"webhook_enabled"`
-	WebhookSecret  types.String `tfsdk:"webhook_secret"`
+	Webhook *WebhookModel `tfsdk:"webhook"`
 
 	// Sync behaviour
 	Managed           types.Bool `tfsdk:"managed"`
@@ -123,14 +122,20 @@ func (d *ResourceSyncDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 			},
 
 			// Webhook
-			"webhook_enabled": schema.BoolAttribute{
+			"webhook": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Whether incoming webhooks trigger the sync.",
-			},
-			"webhook_secret": schema.StringAttribute{
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "The webhook secret override for this sync.",
+				MarkdownDescription: "Webhook configuration for the sync.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether incoming webhooks trigger the sync.",
+					},
+					"secret": schema.StringAttribute{
+						Computed:            true,
+						Sensitive:           true,
+						MarkdownDescription: "The webhook secret override for this sync.",
+					},
+				},
 			},
 
 			// Sync behaviour
@@ -235,8 +240,18 @@ func (d *ResourceSyncDataSource) Read(ctx context.Context, req datasource.ReadRe
 	data.GitAccount = types.StringValue(cfg.GitAccount)
 	data.FilesOnHost = types.BoolValue(cfg.FilesOnHost)
 	data.FileContents = types.StringValue(cfg.FileContents)
-	data.WebhookEnabled = types.BoolValue(cfg.WebhookEnabled)
-	data.WebhookSecret = types.StringValue(cfg.WebhookSecret)
+	webhookSecret := types.StringNull()
+	if cfg.WebhookSecret != "" {
+		webhookSecret = types.StringValue(cfg.WebhookSecret)
+	}
+	if cfg.WebhookEnabled || cfg.WebhookSecret != "" {
+		data.Webhook = &WebhookModel{
+			Enabled: types.BoolValue(cfg.WebhookEnabled),
+			Secret:  webhookSecret,
+		}
+	} else {
+		data.Webhook = nil
+	}
 	data.Managed = types.BoolValue(cfg.Managed)
 	data.Delete = types.BoolValue(cfg.Delete)
 	data.IncludeResources = types.BoolValue(cfg.IncludeResources)

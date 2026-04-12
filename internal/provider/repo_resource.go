@@ -79,6 +79,7 @@ type BuildConfigModel struct {
 type RepoResourceModel struct {
 	ID          types.String             `tfsdk:"id"`
 	Name        types.String             `tfsdk:"name"`
+	Tags        types.List               `tfsdk:"tags"`
 	ServerID    types.String             `tfsdk:"server_id"`
 	BuilderID   types.String             `tfsdk:"builder_id"`
 	Source      *RepositoryProviderModel `tfsdk:"source"`
@@ -127,6 +128,15 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 			"name": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The unique name of the git repository.",
+			},
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"server_id": schema.StringAttribute{
 				Optional:            true,
@@ -298,7 +308,22 @@ func (r *RepoResource) Create(ctx context.Context, req resource.CreateRequest, r
 		)
 		return
 	}
+	plannedTags := data.Tags
 	repoToModel(ctx, r.client, repo, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Repo", ID: repo.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on repo, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	tflog.Trace(ctx, "Created git repository resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -353,7 +378,22 @@ func (r *RepoResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update git repository, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	repoToModel(ctx, r.client, repo, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Repo", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on repo, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -511,6 +551,12 @@ func repoConfigFromModel(ctx context.Context, c *client.Client, data *RepoResour
 func repoToModel(ctx context.Context, c *client.Client, repo *client.GitRepository, data *RepoResourceModel) {
 	data.ID = types.StringValue(repo.ID.OID)
 	data.Name = types.StringValue(repo.Name)
+	tagsSlice := repo.Tags
+	if tagsSlice == nil {
+		tagsSlice = []string{}
+	}
+	tags, _ := types.ListValueFrom(ctx, types.StringType, tagsSlice)
+	data.Tags = tags
 	// Store null when the API returns empty string so removing the attribute from
 	// config fully clears it without causing a perpetual diff.
 	if repo.Config.ServerID != "" {

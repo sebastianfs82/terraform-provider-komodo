@@ -197,3 +197,50 @@ data "komodo_resource_sync" "test" {
 }
 `, name, fileContents)
 }
+
+func TestAccResourceSyncResource_tags(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccResourceSyncWithTagConfig("tf-acc-rsync-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_resource_sync.test", "tags.#", "1"),
+					resource.TestCheckResourceAttrPair("komodo_resource_sync.test", "tags.0", "komodo_tag.test", "id"),
+				),
+			},
+			{
+				Config: testAccResourceSyncClearTagsConfig("tf-acc-rsync-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_resource_sync.test", "tags.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func testAccResourceSyncWithTagConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_tag" "test" {
+  name  = "tf-acc-tag-resource-sync"
+  color = "Green"
+}
+
+resource "komodo_resource_sync" "test" {
+  name          = %q
+  file_contents = ""
+  tags          = [komodo_tag.test.id]
+}
+`, name)
+}
+
+func testAccResourceSyncClearTagsConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_resource_sync" "test" {
+  name          = %q
+  file_contents = ""
+  tags          = []
+}
+`, name)
+}

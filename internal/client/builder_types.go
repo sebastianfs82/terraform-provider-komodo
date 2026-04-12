@@ -12,6 +12,7 @@ import (
 type Builder struct {
 	ID          OID           `json:"_id"`
 	Name        string        `json:"name"`
+	Tags        []string      `json:"tags"`
 	Description string        `json:"description"`
 	Config      BuilderConfig `json:"config"`
 }

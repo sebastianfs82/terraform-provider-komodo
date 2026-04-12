@@ -7,6 +7,7 @@ package client
 type GitRepository struct {
 	ID     OID                 `json:"_id"`
 	Name   string              `json:"name"`
+	Tags   []string            `json:"tags"`
 	Config GitRepositoryConfig `json:"config"`
 }
 

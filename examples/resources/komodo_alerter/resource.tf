@@ -1,18 +1,27 @@
 resource "komodo_alerter" "slack" {
-  name          = "slack-alerts"
-  endpoint_type = "Slack"
-  enabled       = true
+  name    = "slack-alerts"
+  enabled = true
 
-  slack_endpoint = {
-    url = var.slack_webhook_url
+  endpoint = {
+    type = "Slack"
+    url  = var.slack_webhook_url
+  }
+}
+
+resource "komodo_alerter" "discord" {
+  name = "discord-alerts"
+
+  endpoint = {
+    type = "Discord"
+    url  = "https://discord.com/api/webhooks/000000000000000000/xxxxxxxxxxxx"
   }
 }
 
 resource "komodo_alerter" "custom" {
-  name          = "custom-webhook"
-  endpoint_type = "Custom"
+  name = "custom-webhook"
 
-  custom_endpoint = {
-    url = "https://my-webhook.example.com/alert"
+  endpoint = {
+    type = "Custom"
+    url  = "https://my-webhook.example.com/alert"
   }
 }

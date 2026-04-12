@@ -83,7 +83,7 @@ func TestAccBuildResource_importState(t *testing.T) {
 				ImportStateIdFunc: func(s *terraform.State) (string, error) {
 					return buildID, nil
 				},
-				ImportStateVerifyIgnore: []string{"webhook_secret", "secret_args"},
+				ImportStateVerifyIgnore: []string{"webhook", "secret_args"},
 			},
 		},
 	})
@@ -172,4 +172,49 @@ resource "komodo_build" "test" {
   branch = %q
 }
 `, name, repo, branch)
+}
+
+func TestAccBuildResource_tags(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBuildWithTagConfig("tf-acc-build-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "tags.#", "1"),
+					resource.TestCheckResourceAttrPair("komodo_build.test", "tags.0", "komodo_tag.test", "id"),
+				),
+			},
+			{
+				Config: testAccBuildClearTagsConfig("tf-acc-build-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "tags.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func testAccBuildWithTagConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_tag" "test" {
+  name  = "tf-acc-tag-build"
+  color = "Green"
+}
+
+resource "komodo_build" "test" {
+  name = %q
+  tags = [komodo_tag.test.id]
+}
+`, name)
+}
+
+func testAccBuildClearTagsConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  tags = []
+}
+`, name)
 }

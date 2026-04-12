@@ -36,7 +36,8 @@ type BuilderResource struct {
 type BuilderResourceModel struct {
 	ID           types.String       `tfsdk:"id"`
 	Name         types.String       `tfsdk:"name"`
-	BuilderType  types.String       `tfsdk:"builder_type"`
+	Tags         types.List         `tfsdk:"tags"`
+	BuilderType  types.String       `tfsdk:"type"`
 	UrlConfig    *UrlConfigModel    `tfsdk:"url_config"`
 	ServerConfig *ServerConfigModel `tfsdk:"server_config"`
 	AwsConfig    *AwsConfigModel    `tfsdk:"aws_config"`
@@ -90,7 +91,16 @@ func (r *BuilderResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Required:            true,
 				MarkdownDescription: "The unique name of the builder.",
 			},
-			"builder_type": schema.StringAttribute{
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"type": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The builder type. One of `Url`, `Server`, `Aws`. Changing this forces a new resource.",
 				PlanModifiers: []planmodifier.String{
@@ -99,7 +109,7 @@ func (r *BuilderResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"url_config": schema.SingleNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "Configuration for a URL builder. Required when `builder_type` is `Url`.",
+				MarkdownDescription: "Configuration for a URL builder. Required when `type` is `Url`.",
 				Attributes: map[string]schema.Attribute{
 					"address": schema.StringAttribute{
 						Optional:            true,
@@ -137,7 +147,7 @@ func (r *BuilderResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"server_config": schema.SingleNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "Configuration for a server builder. Required when `builder_type` is `Server`.",
+				MarkdownDescription: "Configuration for a server builder. Required when `type` is `Server`.",
 				Attributes: map[string]schema.Attribute{
 					"server_id": schema.StringAttribute{
 						Optional:            true,
@@ -151,7 +161,7 @@ func (r *BuilderResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"aws_config": schema.SingleNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "Configuration for an AWS builder. Required when `builder_type` is `Aws`.",
+				MarkdownDescription: "Configuration for an AWS builder. Required when `type` is `Aws`.",
 				Attributes: map[string]schema.Attribute{
 					"region": schema.StringAttribute{
 						Optional:            true,
@@ -303,8 +313,8 @@ func (r *BuilderResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 	tflog.Debug(ctx, "Creating builder", map[string]interface{}{
-		"name":         data.Name.ValueString(),
-		"builder_type": data.BuilderType.ValueString(),
+		"name": data.Name.ValueString(),
+		"type": data.BuilderType.ValueString(),
 	})
 	configInput, err := builderConfigInputFromModel(ctx, &data)
 	if err != nil {
@@ -327,9 +337,24 @@ func (r *BuilderResource) Create(ctx context.Context, req resource.CreateRequest
 		)
 		return
 	}
+	plannedTags := data.Tags
 	resp.Diagnostics.Append(builderToModel(ctx, b, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Builder", ID: b.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on builder, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
 	}
 	tflog.Trace(ctx, "Created builder resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -393,9 +418,24 @@ func (r *BuilderResource) Update(ctx context.Context, req resource.UpdateRequest
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update builder, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	resp.Diagnostics.Append(builderToModel(ctx, b, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Builder", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update tags on builder, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -479,7 +519,7 @@ func builderConfigInputFromModel(ctx context.Context, data *BuilderResourceModel
 			},
 		}, nil
 	default:
-		return client.BuilderConfigInput{}, fmt.Errorf("unknown builder_type: %q; must be one of Url, Server, Aws", data.BuilderType.ValueString())
+		return client.BuilderConfigInput{}, fmt.Errorf("unknown type: %q; must be one of Url, Server, Aws", data.BuilderType.ValueString())
 	}
 }
 
@@ -489,6 +529,16 @@ func builderToModel(ctx context.Context, b *client.Builder, data *BuilderResourc
 
 	data.ID = types.StringValue(b.ID.OID)
 	data.Name = types.StringValue(b.Name)
+	tagsSlice := b.Tags
+	if tagsSlice == nil {
+		tagsSlice = []string{}
+	}
+	tags, tagsDiags := types.ListValueFrom(ctx, types.StringType, tagsSlice)
+	diags.Append(tagsDiags...)
+	if diags.HasError() {
+		return diags
+	}
+	data.Tags = tags
 	data.BuilderType = types.StringValue(b.Config.Type)
 
 	switch b.Config.Type {

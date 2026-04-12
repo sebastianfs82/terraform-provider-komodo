@@ -1,4 +1,44 @@
+## 0.6.0 (April 12, 2026)
+
+BREAKING CHANGES:
+
+* **`komodo_action` resource / data source:** Several attributes have been restructured:
+  * Flat schedule attributes (`schedule_format`, `schedule`, `schedule_enabled`, `schedule_timezone`, `schedule_alert`) have been replaced by a nested `schedule` block with sub-attributes `format`, `expression`, `enabled`, `timezone`, and `alert_enabled`.
+  * Flat webhook attributes (`webhook_enabled`, `webhook_secret`) have been replaced by a nested `webhook` block with `enabled` and `secret`.
+  * `failure_alert` → `failure_alert_enabled`
+  * `run_at_startup` → `run_on_startup_enabled`
+  * `reload_deno_deps` → `reload_dependencies_enabled`
+  * The `arguments` string attribute and `arguments_format` have been replaced by an `argument` list block with `name` and `value` sub-attributes.
+* **`komodo_procedure` resource / data source:** Flat schedule and webhook attributes have been replaced by nested `schedule` and `webhook` blocks (same structure as `komodo_action`).
+* **`komodo_build` resource / data source:** Flat webhook attributes (`webhook_enabled`, `webhook_secret`) have been replaced by a nested `webhook` block with `enabled` and `secret`.
+* **`komodo_resource_sync` resource / data source:** Flat webhook attributes (`webhook_enabled`, `webhook_secret`) have been replaced by a nested `webhook` block with `enabled` and `secret`.
+* **`komodo_builder` resource / data source:** The `builder_type` attribute has been renamed to `type`.
+* **`komodo_user` resource:** `create_servers` → `create_server_enabled` and `create_builds` → `create_build_enabled`, for consistency with the naming convention introduced for `komodo_service_user` in 0.4.0.
+
+FEATURES:
+
+* **Tags support across all major resources:** A `tags` attribute (list of tag IDs) has been added to `komodo_action`, `komodo_alerter`, `komodo_build`, `komodo_builder`, `komodo_deployment`, `komodo_procedure`, `komodo_repo`, `komodo_resource_sync`, `komodo_server`, and `komodo_stack`. Use `komodo_tag.<name>.id` to reference tags.
+
+---
+
 ## 0.5.0 (April 12, 2026)
+
+FEATURES:
+
+* **In-place rename for most resources:** The following resources no longer force replacement when `name` is changed. Instead, Terraform calls the Komodo `Rename*` API and updates in place: `komodo_action`, `komodo_alerter`, `komodo_build`, `komodo_builder`, `komodo_deployment`, `komodo_procedure`, `komodo_repo`, `komodo_resource_sync`, `komodo_server`, `komodo_stack`.
+
+BREAKING CHANGES:
+
+* **`komodo_alerter` resource / data source:** The endpoint configuration has been redesigned for simplicity:
+  * The `endpoint_type` attribute and the five separate endpoint blocks (`custom_endpoint`, `slack_endpoint`, `discord_endpoint`, `ntfy_endpoint`, `pushover_endpoint`) have been replaced by a single `endpoint` block with `type` (required), `url` (required), and `email` (optional) attributes.
+  * The `alert_types` attribute has been renamed to `types`.
+* **`komodo_tag` resource:** Changing the tag `name` no longer forces replacement. Rename is now handled by updating the tag in place via the `UpdateTag` API.
+
+ENHANCEMENTS:
+
+* **`komodo_alerter` resource:** Added `resource` list block to filter alerts to specific resources (include or exclude individual resources by type and id).
+* **`komodo_alerter` resource:** Added `maintenance` list block to configure scheduled maintenance windows during which alerts from the alerter are suppressed. Supports `Daily`, `Weekly`, and `OneTime` schedule types.
+* **`komodo_alerter` resource:** Added `ValidateConfig` to enforce that at most one `endpoint` block is present.
 
 DOCUMENTATION:
 
@@ -6,8 +46,8 @@ DOCUMENTATION:
 
 BUG FIXES:
 
-* **`komodo_user_group` acceptance tests:** Removed unused `testAccUserGroupHasMember` helper that was never called, reducing test surface noise.
-* **`komodo_repo` acceptance tests:** Simplified `testAccRepoResourceConfig_withConfig` by removing the redundant `domain` parameter (now hardcoded to `github.com` within the helper), aligning tests with the `0.2.0` schema change that dropped `source.url`.
+* **`komodo_user_group` acceptance tests:** Removed unused `testAccUserGroupHasMember` helper.
+* **`komodo_repo` acceptance tests:** Simplified `testAccRepoResourceConfig_withConfig` by removing the redundant `domain` parameter (now hardcoded inside the helper), aligning tests with the `0.2.0` schema change that dropped `source.url`.
 
 ---
 

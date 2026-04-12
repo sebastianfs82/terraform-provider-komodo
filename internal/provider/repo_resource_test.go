@@ -449,3 +449,48 @@ func TestAccRepoResource_gitAccountRemove(t *testing.T) {
 		},
 	})
 }
+
+func TestAccRepoResource_tags(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccRepoWithTagConfig("tf-acc-repo-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_repo.test", "tags.#", "1"),
+					resource.TestCheckResourceAttrPair("komodo_repo.test", "tags.0", "komodo_tag.test", "id"),
+				),
+			},
+			{
+				Config: testAccRepoClearTagsConfig("tf-acc-repo-tags"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_repo.test", "tags.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func testAccRepoWithTagConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_tag" "test" {
+  name  = "tf-acc-tag-repo"
+  color = "Green"
+}
+
+resource "komodo_repo" "test" {
+  name = %q
+  tags = [komodo_tag.test.id]
+}
+`, name)
+}
+
+func testAccRepoClearTagsConfig(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  tags = []
+}
+`, name)
+}

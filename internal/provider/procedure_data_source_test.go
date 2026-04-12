@@ -35,11 +35,11 @@ func TestAccProcedureDataSource_fields(t *testing.T) {
 				Config: testAccProcedureDataSourceConfig_withSchedule("tf-acc-procedure-ds-fields"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_procedure.test", "name", "tf-acc-procedure-ds-fields"),
-					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule_format", "Cron"),
-					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule", "0 * * * *"),
-					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule_enabled", "true"),
+					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule.format", "Cron"),
+					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule.expression", "0 * * * *"),
+					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule.enabled", "true"),
 					resource.TestCheckResourceAttrSet("data.komodo_procedure.test", "failure_alert"),
-					resource.TestCheckResourceAttrSet("data.komodo_procedure.test", "webhook_enabled"),
+					resource.TestCheckResourceAttrSet("data.komodo_procedure.test", "webhook.enabled"),
 				),
 			},
 		},
@@ -62,10 +62,12 @@ data "komodo_procedure" "test" {
 func testAccProcedureDataSourceConfig_withSchedule(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_procedure" "src" {
-  name             = %q
-  schedule_format  = "Cron"
-  schedule         = "0 * * * *"
-  schedule_enabled = true
+  name = %q
+  schedule {
+    format     = "Cron"
+    expression = "0 * * * *"
+    enabled    = true
+  }
 }
 
 data "komodo_procedure" "test" {

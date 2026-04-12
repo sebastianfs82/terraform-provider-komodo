@@ -21,6 +21,7 @@ type ImageRegistryConfig struct {
 type Build struct {
 	ID     OID         `json:"_id"`
 	Name   string      `json:"name"`
+	Tags   []string    `json:"tags"`
 	Config BuildConfig `json:"config"`
 }
 

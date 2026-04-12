@@ -704,6 +704,30 @@ func (c *Client) ListVariables(ctx context.Context) ([]Variable, error) {
 	return variables, nil
 }
 
+// UpdateResourceMetaRequest is the payload for the UpdateResourceMeta write API.
+type UpdateResourceMetaRequest struct {
+	Target ResourceTarget `json:"target"`
+	Tags   *[]string      `json:"tags,omitempty"`
+}
+
+// UpdateResourceMeta updates the meta fields (tags, description, template) of a resource.
+func (c *Client) UpdateResourceMeta(ctx context.Context, req UpdateResourceMetaRequest) error {
+	payload := map[string]interface{}{
+		"type":   "UpdateResourceMeta",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 // Tag represents a Komodo tag.
 type Tag struct {
 	ID    OID    `json:"_id"`

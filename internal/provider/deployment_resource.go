@@ -44,6 +44,7 @@ type DeploymentImageModel struct {
 type DeploymentResourceModel struct {
 	ID                   types.String          `tfsdk:"id"`
 	Name                 types.String          `tfsdk:"name"`
+	Tags                 types.List            `tfsdk:"tags"`
 	SwarmID              types.String          `tfsdk:"swarm_id"`
 	ServerID             types.String          `tfsdk:"server_id"`
 	Image                *DeploymentImageModel `tfsdk:"image"`
@@ -113,6 +114,15 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 			"name": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The unique name of the deployment.",
+			},
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"swarm_id": schema.StringAttribute{
 				Optional:            true,
@@ -350,7 +360,22 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 		)
 		return
 	}
+	plannedTags := data.Tags
 	deploymentToModel(ctx, d, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Deployment", ID: d.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on deployment, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	tflog.Trace(ctx, "Created deployment resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -406,7 +431,22 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update deployment, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	deploymentToModel(ctx, d, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Deployment", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on deployment, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -561,6 +601,12 @@ func imageModelToClient(m *DeploymentImageModel) client.DeploymentImage {
 func deploymentToModel(ctx context.Context, d *client.Deployment, data *DeploymentResourceModel) {
 	data.ID = types.StringValue(d.ID.OID)
 	data.Name = types.StringValue(d.Name)
+	tagsSlice := d.Tags
+	if tagsSlice == nil {
+		tagsSlice = []string{}
+	}
+	tags, _ := types.ListValueFrom(ctx, types.StringType, tagsSlice)
+	data.Tags = tags
 	data.SwarmID = types.StringValue(d.Config.SwarmID)
 	data.ServerID = types.StringValue(d.Config.ServerID)
 

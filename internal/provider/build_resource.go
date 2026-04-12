@@ -50,6 +50,7 @@ type ImageRegistryConfigModel struct {
 type BuildResourceModel struct {
 	ID                   types.String               `tfsdk:"id"`
 	Name                 types.String               `tfsdk:"name"`
+	Tags                 types.List                 `tfsdk:"tags"`
 	BuilderID            types.String               `tfsdk:"builder_id"`
 	Version              *BuildVersionModel         `tfsdk:"version"`
 	AutoIncrementVersion types.Bool                 `tfsdk:"auto_increment_version"`
@@ -66,8 +67,7 @@ type BuildResourceModel struct {
 	Repo                 types.String               `tfsdk:"repo"`
 	Branch               types.String               `tfsdk:"branch"`
 	Commit               types.String               `tfsdk:"commit"`
-	WebhookEnabled       types.Bool                 `tfsdk:"webhook_enabled"`
-	WebhookSecret        types.String               `tfsdk:"webhook_secret"`
+	Webhook              *WebhookModel              `tfsdk:"webhook"`
 	FilesOnHost          types.Bool                 `tfsdk:"files_on_host"`
 	BuildPath            types.String               `tfsdk:"build_path"`
 	DockerfilePath       types.String               `tfsdk:"dockerfile_path"`
@@ -119,6 +119,15 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"name": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The unique name of the build.",
+			},
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"builder_id": schema.StringAttribute{
 				Optional:            true,
@@ -271,21 +280,19 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"webhook_enabled": schema.BoolAttribute{
+			"webhook": schema.SingleNestedAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to allow triggering this build via webhook.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"webhook_secret": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Override the default webhook secret for this build.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+				MarkdownDescription: "Webhook configuration for the build.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether to allow triggering this build via webhook.",
+					},
+					"secret": schema.StringAttribute{
+						Optional:            true,
+						Sensitive:           true,
+						MarkdownDescription: "Override the default webhook secret for this build.",
+					},
 				},
 			},
 			"files_on_host": schema.BoolAttribute{
@@ -438,7 +445,22 @@ func (r *BuildResource) Create(ctx context.Context, req resource.CreateRequest, 
 		)
 		return
 	}
+	plannedTags := data.Tags
 	buildToModel(ctx, b, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Build", ID: b.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on build, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	tflog.Trace(ctx, "Created build resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -494,7 +516,22 @@ func (r *BuildResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update build, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	buildToModel(ctx, b, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Build", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on build, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -592,13 +629,19 @@ func partialBuildConfigFromModel(ctx context.Context, data *BuildResourceModel) 
 		v := data.Commit.ValueString()
 		cfg.Commit = &v
 	}
-	if !data.WebhookEnabled.IsNull() && !data.WebhookEnabled.IsUnknown() {
-		v := data.WebhookEnabled.ValueBool()
-		cfg.WebhookEnabled = &v
-	}
-	if !data.WebhookSecret.IsNull() && !data.WebhookSecret.IsUnknown() {
-		v := data.WebhookSecret.ValueString()
-		cfg.WebhookSecret = &v
+	if data.Webhook != nil {
+		if !data.Webhook.Enabled.IsNull() && !data.Webhook.Enabled.IsUnknown() {
+			v := data.Webhook.Enabled.ValueBool()
+			cfg.WebhookEnabled = &v
+		}
+		if !data.Webhook.Secret.IsNull() && !data.Webhook.Secret.IsUnknown() {
+			v := data.Webhook.Secret.ValueString()
+			cfg.WebhookSecret = &v
+		}
+	} else {
+		f, s := false, ""
+		cfg.WebhookEnabled = &f
+		cfg.WebhookSecret = &s
 	}
 	if !data.FilesOnHost.IsNull() && !data.FilesOnHost.IsUnknown() {
 		v := data.FilesOnHost.ValueBool()
@@ -669,6 +712,12 @@ func partialBuildConfigFromModel(ctx context.Context, data *BuildResourceModel) 
 func buildToModel(ctx context.Context, b *client.Build, data *BuildResourceModel) {
 	data.ID = types.StringValue(b.ID.OID)
 	data.Name = types.StringValue(b.Name)
+	tagsSlice := b.Tags
+	if tagsSlice == nil {
+		tagsSlice = []string{}
+	}
+	tags, _ := types.ListValueFrom(ctx, types.StringType, tagsSlice)
+	data.Tags = tags
 	data.BuilderID = types.StringValue(b.Config.BuilderID)
 
 	// Only populate version block when any component is non-zero, or when the user
@@ -698,8 +747,18 @@ func buildToModel(ctx context.Context, b *client.Build, data *BuildResourceModel
 	data.Repo = types.StringValue(b.Config.Repo)
 	data.Branch = types.StringValue(b.Config.Branch)
 	data.Commit = types.StringValue(b.Config.Commit)
-	data.WebhookEnabled = types.BoolValue(b.Config.WebhookEnabled)
-	data.WebhookSecret = types.StringValue(b.Config.WebhookSecret)
+	webhookSecret := types.StringNull()
+	if b.Config.WebhookSecret != "" {
+		webhookSecret = types.StringValue(b.Config.WebhookSecret)
+	}
+	if b.Config.WebhookEnabled || b.Config.WebhookSecret != "" {
+		data.Webhook = &WebhookModel{
+			Enabled: types.BoolValue(b.Config.WebhookEnabled),
+			Secret:  webhookSecret,
+		}
+	} else {
+		data.Webhook = nil
+	}
 	data.FilesOnHost = types.BoolValue(b.Config.FilesOnHost)
 	data.BuildPath = types.StringValue(b.Config.BuildPath)
 	data.DockerfilePath = types.StringValue(b.Config.DockerfilePath)

@@ -34,6 +34,7 @@ type ResourceSyncResource struct {
 type ResourceSyncResourceModel struct {
 	ID   types.String `tfsdk:"id"`
 	Name types.String `tfsdk:"name"`
+	Tags types.List   `tfsdk:"tags"`
 
 	// Git source
 	LinkedRepo  types.String `tfsdk:"linked_repo"`
@@ -50,8 +51,7 @@ type ResourceSyncResourceModel struct {
 	FileContents types.String `tfsdk:"file_contents"`
 
 	// Webhook
-	WebhookEnabled types.Bool   `tfsdk:"webhook_enabled"`
-	WebhookSecret  types.String `tfsdk:"webhook_secret"`
+	Webhook *WebhookModel `tfsdk:"webhook"`
 
 	// Sync behaviour
 	Managed           types.Bool `tfsdk:"managed"`
@@ -81,6 +81,15 @@ func (r *ResourceSyncResource) Schema(_ context.Context, _ resource.SchemaReques
 			"name": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The unique name of the resource sync.",
+			},
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 
 			// Git source
@@ -169,21 +178,19 @@ func (r *ResourceSyncResource) Schema(_ context.Context, _ resource.SchemaReques
 			},
 
 			// Webhook
-			"webhook_enabled": schema.BoolAttribute{
+			"webhook": schema.SingleNestedAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether incoming webhooks trigger the sync.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"webhook_secret": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Override the default webhook secret for this sync.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+				MarkdownDescription: "Webhook configuration for the sync.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether incoming webhooks trigger the sync.",
+					},
+					"secret": schema.StringAttribute{
+						Optional:            true,
+						Sensitive:           true,
+						MarkdownDescription: "Override the default webhook secret for this sync.",
+					},
 				},
 			},
 
@@ -287,7 +294,22 @@ func (r *ResourceSyncResource) Create(ctx context.Context, req resource.CreateRe
 		)
 		return
 	}
+	plannedTags := data.Tags
 	resourceSyncToModel(ctx, rs, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "ResourceSync", ID: rs.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on resource sync, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	tflog.Trace(ctx, "Created resource sync")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -342,7 +364,22 @@ func (r *ResourceSyncResource) Update(ctx context.Context, req resource.UpdateRe
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update resource sync, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	resourceSyncToModel(ctx, rs, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "ResourceSync", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on resource sync, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -370,6 +407,12 @@ func (r *ResourceSyncResource) ImportState(ctx context.Context, req resource.Imp
 func resourceSyncToModel(ctx context.Context, rs *client.ResourceSync, m *ResourceSyncResourceModel) {
 	m.ID = types.StringValue(rs.ID.OID)
 	m.Name = types.StringValue(rs.Name)
+	tagsSlice := rs.Tags
+	if tagsSlice == nil {
+		tagsSlice = []string{}
+	}
+	tags, _ := types.ListValueFrom(ctx, types.StringType, tagsSlice)
+	m.Tags = tags
 
 	cfg := rs.Config
 	m.LinkedRepo = types.StringValue(cfg.LinkedRepo)
@@ -381,8 +424,18 @@ func resourceSyncToModel(ctx context.Context, rs *client.ResourceSync, m *Resour
 	m.GitAccount = types.StringValue(cfg.GitAccount)
 	m.FilesOnHost = types.BoolValue(cfg.FilesOnHost)
 	m.FileContents = types.StringValue(cfg.FileContents)
-	m.WebhookEnabled = types.BoolValue(cfg.WebhookEnabled)
-	m.WebhookSecret = types.StringValue(cfg.WebhookSecret)
+	webhookSecret := types.StringNull()
+	if cfg.WebhookSecret != "" {
+		webhookSecret = types.StringValue(cfg.WebhookSecret)
+	}
+	if cfg.WebhookEnabled || cfg.WebhookSecret != "" {
+		m.Webhook = &WebhookModel{
+			Enabled: types.BoolValue(cfg.WebhookEnabled),
+			Secret:  webhookSecret,
+		}
+	} else {
+		m.Webhook = nil
+	}
 	m.Managed = types.BoolValue(cfg.Managed)
 	m.Delete = types.BoolValue(cfg.Delete)
 	m.IncludeResources = types.BoolValue(cfg.IncludeResources)
@@ -454,13 +507,19 @@ func partialResourceSyncConfigFromModel(ctx context.Context, m *ResourceSyncReso
 		v := m.FileContents.ValueString()
 		cfg.FileContents = &v
 	}
-	if !m.WebhookEnabled.IsNull() && !m.WebhookEnabled.IsUnknown() {
-		v := m.WebhookEnabled.ValueBool()
-		cfg.WebhookEnabled = &v
-	}
-	if !m.WebhookSecret.IsNull() && !m.WebhookSecret.IsUnknown() {
-		v := m.WebhookSecret.ValueString()
-		cfg.WebhookSecret = &v
+	if m.Webhook != nil {
+		if !m.Webhook.Enabled.IsNull() && !m.Webhook.Enabled.IsUnknown() {
+			v := m.Webhook.Enabled.ValueBool()
+			cfg.WebhookEnabled = &v
+		}
+		if !m.Webhook.Secret.IsNull() && !m.Webhook.Secret.IsUnknown() {
+			v := m.Webhook.Secret.ValueString()
+			cfg.WebhookSecret = &v
+		}
+	} else {
+		f, s := false, ""
+		cfg.WebhookEnabled = &f
+		cfg.WebhookSecret = &s
 	}
 	if !m.Managed.IsNull() && !m.Managed.IsUnknown() {
 		v := m.Managed.ValueBool()

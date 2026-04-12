@@ -8,12 +8,16 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -34,17 +38,13 @@ type ProcedureResource struct {
 
 // ProcedureResourceModel is the Terraform resource model for komodo_procedure.
 type ProcedureResourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	Stages           types.String `tfsdk:"stages"`
-	ScheduleFormat   types.String `tfsdk:"schedule_format"`
-	Schedule         types.String `tfsdk:"schedule"`
-	ScheduleEnabled  types.Bool   `tfsdk:"schedule_enabled"`
-	ScheduleTimezone types.String `tfsdk:"schedule_timezone"`
-	ScheduleAlert    types.Bool   `tfsdk:"schedule_alert"`
-	FailureAlert     types.Bool   `tfsdk:"failure_alert"`
-	WebhookEnabled   types.Bool   `tfsdk:"webhook_enabled"`
-	WebhookSecret    types.String `tfsdk:"webhook_secret"`
+	ID           types.String   `tfsdk:"id"`
+	Name         types.String   `tfsdk:"name"`
+	Tags         types.List     `tfsdk:"tags"`
+	Stages       types.String   `tfsdk:"stages"`
+	Schedule     *ScheduleModel `tfsdk:"schedule"`
+	FailureAlert types.Bool     `tfsdk:"failure_alert"`
+	Webhook      *WebhookModel  `tfsdk:"webhook"`
 }
 
 func (r *ProcedureResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -66,6 +66,15 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 				Required:            true,
 				MarkdownDescription: "The unique name of the procedure.",
 			},
+			"tags": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"stages": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -74,44 +83,53 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"schedule_format": schema.StringAttribute{
+			"schedule": schema.SingleNestedAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The schedule format. One of `Cron` or `English`.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"schedule": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "The schedule expression (cron string or English description).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"schedule_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether the schedule is enabled.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"schedule_timezone": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Timezone for the schedule (IANA TZ identifier, e.g. `America/New_York`).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"schedule_alert": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send an alert when the procedure runs on schedule.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
+				MarkdownDescription: "Schedule configuration for the procedure.",
+				Attributes: map[string]schema.Attribute{
+					"format": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "The schedule format. One of `Cron` or `English`.",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"expression": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "The schedule expression (cron string or English description).",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Whether the schedule is enabled.",
+						Default:             booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"timezone": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Timezone for the schedule (IANA TZ identifier, e.g. `America/New_York`). Defaults to `\"\"` (Core local timezone).",
+						Default:             stringdefault.StaticString(""),
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"alert_enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Whether to send an alert when the procedure runs on schedule.",
+						Default:             booldefault.StaticBool(true),
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
+						},
+					},
 				},
 			},
 			"failure_alert": schema.BoolAttribute{
@@ -122,21 +140,19 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"webhook_enabled": schema.BoolAttribute{
+			"webhook": schema.SingleNestedAttribute{
 				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to allow triggering the procedure via webhook.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"webhook_secret": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Override the default webhook secret for this procedure.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+				MarkdownDescription: "Webhook configuration for the procedure.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether to allow triggering the procedure via webhook.",
+					},
+					"secret": schema.StringAttribute{
+						Optional:            true,
+						Sensitive:           true,
+						MarkdownDescription: "Override the default webhook secret for this procedure.",
+					},
 				},
 			},
 		},
@@ -188,7 +204,22 @@ func (r *ProcedureResource) Create(ctx context.Context, req resource.CreateReque
 		)
 		return
 	}
+	plannedTags := data.Tags
 	procedureToModel(proc, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Procedure", ID: proc.ID.OID},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on procedure, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	tflog.Trace(ctx, "Created procedure resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -250,7 +281,22 @@ func (r *ProcedureResource) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update procedure, got error: %s", err))
 		return
 	}
+	plannedTags := data.Tags
 	procedureToModel(proc, &data)
+	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
+		var tags []string
+		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
+		if !resp.Diagnostics.HasError() {
+			if err := r.client.UpdateResourceMeta(ctx, client.UpdateResourceMetaRequest{
+				Target: client.ResourceTarget{Type: "Procedure", ID: data.ID.ValueString()},
+				Tags:   &tags,
+			}); err != nil {
+				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set tags on procedure, got error: %s", err))
+				return
+			}
+			data.Tags = plannedTags
+		}
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -291,37 +337,51 @@ func partialProcedureConfigFromModel(data *ProcedureResourceModel) (client.Parti
 		}
 		cfg.Stages = raw
 	}
-	if !data.ScheduleFormat.IsNull() && !data.ScheduleFormat.IsUnknown() {
-		v := data.ScheduleFormat.ValueString()
-		cfg.ScheduleFormat = &v
-	}
-	if !data.Schedule.IsNull() && !data.Schedule.IsUnknown() {
-		v := data.Schedule.ValueString()
-		cfg.Schedule = &v
-	}
-	if !data.ScheduleEnabled.IsNull() && !data.ScheduleEnabled.IsUnknown() {
-		v := data.ScheduleEnabled.ValueBool()
-		cfg.ScheduleEnabled = &v
-	}
-	if !data.ScheduleTimezone.IsNull() && !data.ScheduleTimezone.IsUnknown() {
-		v := data.ScheduleTimezone.ValueString()
-		cfg.ScheduleTimezone = &v
-	}
-	if !data.ScheduleAlert.IsNull() && !data.ScheduleAlert.IsUnknown() {
-		v := data.ScheduleAlert.ValueBool()
-		cfg.ScheduleAlert = &v
+	if data.Schedule != nil {
+		if !data.Schedule.Format.IsNull() && !data.Schedule.Format.IsUnknown() {
+			v := data.Schedule.Format.ValueString()
+			cfg.ScheduleFormat = &v
+		}
+		if !data.Schedule.Expression.IsNull() && !data.Schedule.Expression.IsUnknown() {
+			v := data.Schedule.Expression.ValueString()
+			cfg.Schedule = &v
+		}
+		if !data.Schedule.Enabled.IsNull() && !data.Schedule.Enabled.IsUnknown() {
+			v := data.Schedule.Enabled.ValueBool()
+			cfg.ScheduleEnabled = &v
+		}
+		if !data.Schedule.Timezone.IsNull() && !data.Schedule.Timezone.IsUnknown() {
+			v := data.Schedule.Timezone.ValueString()
+			cfg.ScheduleTimezone = &v
+		}
+		if !data.Schedule.AlertEnabled.IsNull() && !data.Schedule.AlertEnabled.IsUnknown() {
+			v := data.Schedule.AlertEnabled.ValueBool()
+			cfg.ScheduleAlert = &v
+		}
+	} else {
+		f, s := false, ""
+		cfg.ScheduleEnabled = &f
+		cfg.Schedule = &s
+		cfg.ScheduleTimezone = &s
+		cfg.ScheduleAlert = &f
 	}
 	if !data.FailureAlert.IsNull() && !data.FailureAlert.IsUnknown() {
 		v := data.FailureAlert.ValueBool()
 		cfg.FailureAlert = &v
 	}
-	if !data.WebhookEnabled.IsNull() && !data.WebhookEnabled.IsUnknown() {
-		v := data.WebhookEnabled.ValueBool()
-		cfg.WebhookEnabled = &v
-	}
-	if !data.WebhookSecret.IsNull() && !data.WebhookSecret.IsUnknown() {
-		v := data.WebhookSecret.ValueString()
-		cfg.WebhookSecret = &v
+	if data.Webhook != nil {
+		if !data.Webhook.Enabled.IsNull() && !data.Webhook.Enabled.IsUnknown() {
+			v := data.Webhook.Enabled.ValueBool()
+			cfg.WebhookEnabled = &v
+		}
+		if !data.Webhook.Secret.IsNull() && !data.Webhook.Secret.IsUnknown() {
+			v := data.Webhook.Secret.ValueString()
+			cfg.WebhookSecret = &v
+		}
+	} else {
+		f, s := false, ""
+		cfg.WebhookEnabled = &f
+		cfg.WebhookSecret = &s
 	}
 	return cfg, diags
 }
@@ -330,6 +390,11 @@ func partialProcedureConfigFromModel(data *ProcedureResourceModel) (client.Parti
 func procedureToModel(proc *client.Procedure, data *ProcedureResourceModel) {
 	data.ID = types.StringValue(proc.ID.OID)
 	data.Name = types.StringValue(proc.Name)
+	tagVals := make([]attr.Value, len(proc.Tags))
+	for i, t := range proc.Tags {
+		tagVals[i] = types.StringValue(t)
+	}
+	data.Tags = types.ListValueMust(types.StringType, tagVals)
 
 	// stages: set as JSON string if non-empty, otherwise null.
 	stagesStr := string(proc.Config.Stages)
@@ -339,12 +404,28 @@ func procedureToModel(proc *client.Procedure, data *ProcedureResourceModel) {
 		data.Stages = types.StringNull()
 	}
 
-	data.ScheduleFormat = types.StringValue(proc.Config.ScheduleFormat)
-	data.Schedule = types.StringValue(proc.Config.Schedule)
-	data.ScheduleEnabled = types.BoolValue(proc.Config.ScheduleEnabled)
-	data.ScheduleTimezone = types.StringValue(proc.Config.ScheduleTimezone)
-	data.ScheduleAlert = types.BoolValue(proc.Config.ScheduleAlert)
+	if proc.Config.ScheduleEnabled || proc.Config.Schedule != "" || proc.Config.ScheduleTimezone != "" || proc.Config.ScheduleAlert {
+		data.Schedule = &ScheduleModel{
+			Format:       types.StringValue(proc.Config.ScheduleFormat),
+			Expression:   types.StringValue(proc.Config.Schedule),
+			Enabled:      types.BoolValue(proc.Config.ScheduleEnabled),
+			Timezone:     types.StringValue(proc.Config.ScheduleTimezone),
+			AlertEnabled: types.BoolValue(proc.Config.ScheduleAlert),
+		}
+	} else {
+		data.Schedule = nil
+	}
 	data.FailureAlert = types.BoolValue(proc.Config.FailureAlert)
-	data.WebhookEnabled = types.BoolValue(proc.Config.WebhookEnabled)
-	data.WebhookSecret = types.StringValue(proc.Config.WebhookSecret)
+	webhookSecret := types.StringNull()
+	if proc.Config.WebhookSecret != "" {
+		webhookSecret = types.StringValue(proc.Config.WebhookSecret)
+	}
+	if proc.Config.WebhookEnabled || proc.Config.WebhookSecret != "" {
+		data.Webhook = &WebhookModel{
+			Enabled: types.BoolValue(proc.Config.WebhookEnabled),
+			Secret:  webhookSecret,
+		}
+	} else {
+		data.Webhook = nil
+	}
 }
