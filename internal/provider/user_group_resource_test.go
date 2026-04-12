@@ -295,30 +295,6 @@ func testAccUserGroupAddUser(resourceName, userID string) resource.TestCheckFunc
 	}
 }
 
-func testAccUserGroupHasMember(resourceName, userID string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource not found in state: %s", resourceName)
-		}
-		c := client.NewClient(
-			os.Getenv("KOMODO_ENDPOINT"),
-			os.Getenv("KOMODO_USERNAME"),
-			os.Getenv("KOMODO_PASSWORD"),
-		)
-		group, err := c.GetUserGroup(context.Background(), rs.Primary.ID)
-		if err != nil {
-			return fmt.Errorf("unable to fetch group: %s", err)
-		}
-		for _, u := range group.Users {
-			if u == userID {
-				return nil
-			}
-		}
-		return fmt.Errorf("expected user %s to be a member of group %s, but was not", userID, rs.Primary.ID)
-	}
-}
-
 func testAccUserGroupNotHasMember(resourceName, userID string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]

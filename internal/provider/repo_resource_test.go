@@ -39,7 +39,6 @@ func TestAccRepoResource_withConfig(t *testing.T) {
 			{
 				Config: testAccRepoResourceConfig_withConfig(
 					"tf-test-repo-full",
-					"github.com",
 					"owner/my-repo",
 					"main",
 				),
@@ -79,13 +78,13 @@ func TestAccRepoResource_update(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccRepoResourceConfig_withConfig("tf-update-repo", "github.com", "owner/repo", "main"),
+				Config: testAccRepoResourceConfig_withConfig("tf-update-repo", "owner/repo", "main"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_repo.test", "source.branch", "main"),
 				),
 			},
 			{
-				Config: testAccRepoResourceConfig_withConfig("tf-update-repo", "github.com", "owner/repo", "develop"),
+				Config: testAccRepoResourceConfig_withConfig("tf-update-repo", "owner/repo", "develop"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_repo.test", "source.branch", "develop"),
 				),
@@ -164,14 +163,14 @@ func TestAccRepoResource_sourceHttpsEnabledDefault(t *testing.T) {
 			},
 			// Step 2: remove https_enabled from config → default kicks in, must plan true.
 			{
-				Config: testAccRepoResourceConfig_withConfig("tf-test-repo-https-default", "github.com", "owner/repo", "main"),
+				Config: testAccRepoResourceConfig_withConfig("tf-test-repo-https-default", "owner/repo", "main"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_repo.test", "source.https_enabled", "true"),
 				),
 			},
 			// Step 3: re-plan with same config → no further changes.
 			{
-				Config:             testAccRepoResourceConfig_withConfig("tf-test-repo-https-default", "github.com", "owner/repo", "main"),
+				Config:             testAccRepoResourceConfig_withConfig("tf-test-repo-https-default", "owner/repo", "main"),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
@@ -203,18 +202,18 @@ resource "komodo_repo" "test" {
 `, name)
 }
 
-func testAccRepoResourceConfig_withConfig(name, domain, repo, branch string) string {
+func testAccRepoResourceConfig_withConfig(name, repo, branch string) string {
 	return fmt.Sprintf(`
 resource "komodo_repo" "test" {
   name = "%s"
   source = {
-    domain        = "%s"
+    domain        = "github.com"
     https_enabled = true
     path          = "%s"
     branch        = "%s"
   }
 }
-`, name, domain, repo, branch)
+`, name, repo, branch)
 }
 
 func testAccRepoResourceConfig_withOnClone(name string) string {
