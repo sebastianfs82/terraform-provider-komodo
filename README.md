@@ -217,6 +217,7 @@ resource "komodo_stack" "app" {
 | [`komodo_registry_account`](docs/resources/registry_account.md) | Docker registry credentials |
 | [`komodo_repo`](docs/resources/repo.md) | Git repository registered in Komodo |
 | [`komodo_resource_sync`](docs/resources/resource_sync.md) | Syncs Komodo resources from a git repo |
+| [`komodo_server`](docs/resources/server.md) | Server registered with Komodo |
 | [`komodo_service_user`](docs/resources/service_user.md) | Non-human service account |
 | [`komodo_stack`](docs/resources/stack.md) | Docker Compose stack |
 | [`komodo_tag`](docs/resources/tag.md) | Label for grouping resources |
@@ -236,6 +237,7 @@ Plural data sources return a filtered list.
 |-------------|-------------|
 | [`komodo_action`](docs/data-sources/action.md) | Look up an action |
 | [`komodo_alerter`](docs/data-sources/alerter.md) | Look up an alerter |
+| [`komodo_api_key`](docs/data-sources/api_key.md) | Look up an API key |
 | [`komodo_build`](docs/data-sources/build.md) | Look up a build |
 | [`komodo_builder`](docs/data-sources/builder.md) | Look up a builder |
 | [`komodo_deployment`](docs/data-sources/deployment.md) | Look up a deployment |
@@ -281,16 +283,68 @@ Plural data sources return a filtered list.
 
 Terraform actions let you trigger imperative Komodo operations as part of a plan/apply cycle.
 
+### Deployments
+
 | Action | Description |
 |--------|-------------|
-| `komodo_repo_clone` | Clone a registered repository |
-| `komodo_repo_pull` | Pull latest changes for a repository |
-| `komodo_repo_build` | Trigger a repository build |
-| `komodo_stack_deploy` | Deploy a stack |
-| `komodo_stack_destroy` | Destroy a running stack |
-| `komodo_stack_start` | Start a stopped stack |
-| `komodo_stack_stop` | Stop a running stack |
-| `komodo_stack_pause` | Pause a running stack |
+| [`komodo_deploy_deployment`](docs/actions/deploy_deployment.md) | Deploy a deployment |
+| [`komodo_destroy_deployment`](docs/actions/destroy_deployment.md) | Destroy a running deployment |
+| [`komodo_start_deployment`](docs/actions/start_deployment.md) | Start a stopped deployment |
+| [`komodo_stop_deployment`](docs/actions/stop_deployment.md) | Stop a running deployment |
+| [`komodo_pause_deployment`](docs/actions/pause_deployment.md) | Pause a running deployment |
+| [`komodo_unpause_deployment`](docs/actions/unpause_deployment.md) | Unpause a paused deployment |
+| [`komodo_pull_deployment`](docs/actions/pull_deployment.md) | Pull the latest image for a deployment |
+| [`komodo_restart_deployment`](docs/actions/restart_deployment.md) | Restart a deployment |
+
+### Stacks
+
+| Action | Description |
+|--------|-------------|
+| [`komodo_stack_deploy`](docs/actions/stack_deploy.md) | Deploy a stack |
+| [`komodo_stack_deploy_if_changed`](docs/actions/stack_deploy_if_changed.md) | Deploy a stack only when its compose definition has changed |
+| [`komodo_stack_destroy`](docs/actions/stack_destroy.md) | Destroy a running stack |
+| [`komodo_stack_start`](docs/actions/stack_start.md) | Start a stopped stack |
+| [`komodo_stack_stop`](docs/actions/stack_stop.md) | Stop a running stack |
+| [`komodo_stack_pause`](docs/actions/stack_pause.md) | Pause a running stack |
+| [`komodo_stack_unpause`](docs/actions/stack_unpause.md) | Unpause a paused stack |
+| [`komodo_stack_pull`](docs/actions/stack_pull.md) | Pull latest images for a stack |
+| [`komodo_stack_restart`](docs/actions/stack_restart.md) | Restart a stack |
+| [`komodo_stack_run_service`](docs/actions/stack_run_service.md) | Run a one-off service in a stack |
+
+### Repos
+
+| Action | Description |
+|--------|-------------|
+| [`komodo_repo_clone`](docs/actions/repo_clone.md) | Clone a registered repository |
+| [`komodo_repo_pull`](docs/actions/repo_pull.md) | Pull latest changes for a repository |
+| [`komodo_repo_build`](docs/actions/repo_build.md) | Trigger a repository build |
+
+### Builds & Procedures
+
+| Action | Description |
+|--------|-------------|
+| [`komodo_run_build`](docs/actions/run_build.md) | Trigger a build |
+| [`komodo_run_procedure`](docs/actions/run_procedure.md) | Run a procedure |
+| [`komodo_run_action`](docs/actions/run_action.md) | Run a custom action |
+| [`komodo_run_sync`](docs/actions/run_sync.md) | Trigger a resource sync |
+
+### Servers
+
+| Action | Description |
+|--------|-------------|
+| [`komodo_server_prune_containers`](docs/actions/server_prune_containers.md) | Prune stopped containers on a server |
+| [`komodo_server_prune_images`](docs/actions/server_prune_images.md) | Prune unused images on a server |
+| [`komodo_server_prune_networks`](docs/actions/server_prune_networks.md) | Prune unused networks on a server |
+| [`komodo_server_prune_volumes`](docs/actions/server_prune_volumes.md) | Prune unused volumes on a server |
+| [`komodo_server_prune_builders`](docs/actions/server_prune_builders.md) | Prune build cache on a server |
+| [`komodo_server_prune_buildx`](docs/actions/server_prune_buildx.md) | Prune buildx cache on a server |
+| [`komodo_server_prune_system`](docs/actions/server_prune_system.md) | Run full system prune on a server |
+
+### Alerters
+
+| Action | Description |
+|--------|-------------|
+| [`komodo_test_alerter`](docs/actions/test_alerter.md) | Send a test alert through an alerter |
 
 ## Developing the Provider
 
