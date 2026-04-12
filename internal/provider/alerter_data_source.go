@@ -16,6 +16,7 @@ import (
 )
 
 var _ datasource.DataSource = &AlerterDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &AlerterDataSource{}
 
 func NewAlerterDataSource() datasource.DataSource {
 	return &AlerterDataSource{}
@@ -26,16 +27,13 @@ type AlerterDataSource struct {
 }
 
 type AlerterDataSourceModel struct {
-	ID               types.String          `tfsdk:"id"`
-	Name             types.String          `tfsdk:"name"`
-	Enabled          types.Bool            `tfsdk:"enabled"`
-	EndpointType     types.String          `tfsdk:"endpoint_type"`
-	AlertTypes       types.List            `tfsdk:"alert_types"`
-	CustomEndpoint   *AlerterCustomModel   `tfsdk:"custom_endpoint"`
-	SlackEndpoint    *AlerterSlackModel    `tfsdk:"slack_endpoint"`
-	DiscordEndpoint  *AlerterDiscordModel  `tfsdk:"discord_endpoint"`
-	NtfyEndpoint     *AlerterNtfyModel     `tfsdk:"ntfy_endpoint"`
-	PushoverEndpoint *AlerterPushoverModel `tfsdk:"pushover_endpoint"`
+	ID          types.String             `tfsdk:"id"`
+	Name        types.String             `tfsdk:"name"`
+	Enabled     types.Bool               `tfsdk:"enabled"`
+	AlertTypes  types.List               `tfsdk:"types"`
+	Resources   []ResourceTargetModel    `tfsdk:"resource"`
+	Endpoint    *AlerterEndpointModel    `tfsdk:"endpoint"`
+	Maintenance []MaintenanceWindowModel `tfsdk:"maintenance"`
 }
 
 func (d *AlerterDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -47,77 +45,107 @@ func (d *AlerterDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 		MarkdownDescription: "Reads an existing Komodo alerter resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The alerter identifier (ObjectId or name).",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The alerter identifier (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The unique name of the alerter.",
+				MarkdownDescription: "The unique name of the alerter. One of `name` or `id` must be set.",
 			},
 			"enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether the alerter is enabled.",
 			},
-			"endpoint_type": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "The alerter endpoint type: `Custom`, `Slack`, `Discord`, `Ntfy`, or `Pushover`.",
-			},
-			"alert_types": schema.ListAttribute{
+			"types": schema.ListAttribute{
 				Computed:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "Alert types the alerter is configured to send. Empty means all types.",
 			},
-			"custom_endpoint": schema.SingleNestedAttribute{
+			"endpoint": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Configuration for a Custom HTTP endpoint alerter. Populated when `endpoint_type` is `Custom`.",
+				MarkdownDescription: "The alerter endpoint configuration.",
 				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
+					"type": schema.StringAttribute{
 						Computed:            true,
-						MarkdownDescription: "The HTTP/S endpoint URL.",
+						MarkdownDescription: "The endpoint type: `Custom`, `Slack`, `Discord`, `Ntfy`, or `Pushover`.",
 					},
-				},
-			},
-			"slack_endpoint": schema.SingleNestedAttribute{
-				Computed:            true,
-				MarkdownDescription: "Configuration for a Slack alerter. Populated when `endpoint_type` is `Slack`.",
-				Attributes: map[string]schema.Attribute{
 					"url": schema.StringAttribute{
 						Computed:            true,
-						MarkdownDescription: "The Slack app webhook URL.",
-					},
-				},
-			},
-			"discord_endpoint": schema.SingleNestedAttribute{
-				Computed:            true,
-				MarkdownDescription: "Configuration for a Discord alerter. Populated when `endpoint_type` is `Discord`.",
-				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
-						Computed:            true,
-						MarkdownDescription: "The Discord webhook URL.",
-					},
-				},
-			},
-			"ntfy_endpoint": schema.SingleNestedAttribute{
-				Computed:            true,
-				MarkdownDescription: "Configuration for a Ntfy alerter. Populated when `endpoint_type` is `Ntfy`.",
-				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
-						Computed:            true,
-						MarkdownDescription: "The Ntfy topic URL.",
+						MarkdownDescription: "The webhook or endpoint URL.",
 					},
 					"email": schema.StringAttribute{
 						Computed:            true,
-						MarkdownDescription: "Optional email address for Ntfy email notifications.",
+						MarkdownDescription: "Optional email address. Only populated when `type` is `Ntfy`.",
 					},
 				},
 			},
-			"pushover_endpoint": schema.SingleNestedAttribute{
-				Computed:            true,
-				MarkdownDescription: "Configuration for a Pushover alerter. Populated when `endpoint_type` is `Pushover`.",
-				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
-						Computed:            true,
-						MarkdownDescription: "The Pushover URL including application and user tokens.",
+		},
+		Blocks: map[string]schema.Block{
+			"resource": schema.ListNestedBlock{
+				MarkdownDescription: "Resources filtered by this alerter. `enabled = true` means included, `enabled = false` means excluded.",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"enabled": schema.BoolAttribute{
+							Computed:            true,
+							MarkdownDescription: "If `true`, alerts are sent only for this resource (include). If `false`, alerts are never sent for this resource (exclude).",
+						},
+						"type": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "The resource type.",
+						},
+						"id": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "The name or ID of the resource.",
+						},
+					},
+				},
+			},
+			"maintenance": schema.ListNestedBlock{
+				MarkdownDescription: "Scheduled maintenance windows during which alerts from this alerter will be suppressed.",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "Name for the maintenance window.",
+						},
+						"description": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "Description of what maintenance is performed.",
+						},
+						"schedule_type": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "Schedule type: `Daily`, `Weekly`, or `OneTime`.",
+						},
+						"day_of_week": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "For `Weekly` schedules: day of the week (e.g. `Monday`, `Tuesday`).",
+						},
+						"date": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "For `OneTime` windows: ISO 8601 date in `YYYY-MM-DD` format.",
+						},
+						"hour": schema.Int64Attribute{
+							Computed:            true,
+							MarkdownDescription: "Start hour in 24-hour format (0–23).",
+						},
+						"minute": schema.Int64Attribute{
+							Computed:            true,
+							MarkdownDescription: "Start minute (0–59).",
+						},
+						"duration_minutes": schema.Int64Attribute{
+							Computed:            true,
+							MarkdownDescription: "Duration of the maintenance window in minutes.",
+						},
+						"timezone": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "Timezone for the maintenance window. If empty, uses the Core timezone.",
+						},
+						"enabled": schema.BoolAttribute{
+							Computed:            true,
+							MarkdownDescription: "Whether this maintenance window is active.",
+						},
 					},
 				},
 			},
@@ -140,41 +168,60 @@ func (d *AlerterDataSource) Configure(ctx context.Context, req datasource.Config
 	d.client = c
 }
 
+func (d *AlerterDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data AlerterDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *AlerterDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data AlerterDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading alerter", map[string]interface{}{"id": data.ID.ValueString()})
-	a, err := d.client.GetAlerter(ctx, data.ID.ValueString())
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading alerter", map[string]interface{}{"lookup": lookup})
+	a, err := d.client.GetAlerter(ctx, lookup)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read alerter, got error: %s", err))
 		return
 	}
 	if a == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Alerter %q not found.", data.ID.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Alerter %q not found.", lookup))
 		return
 	}
 
-	rm := AlerterResourceModel{
-		ID:   data.ID,
-		Name: types.StringValue(a.Name),
-	}
+	rm := AlerterResourceModel{}
 	resp.Diagnostics.Append(alerterToModel(ctx, a, &rm)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
+	data.ID = rm.ID
 	data.Name = rm.Name
 	data.Enabled = rm.Enabled
-	data.EndpointType = rm.EndpointType
 	data.AlertTypes = rm.AlertTypes
-	data.CustomEndpoint = rm.CustomEndpoint
-	data.SlackEndpoint = rm.SlackEndpoint
-	data.DiscordEndpoint = rm.DiscordEndpoint
-	data.NtfyEndpoint = rm.NtfyEndpoint
-	data.PushoverEndpoint = rm.PushoverEndpoint
+	data.Resources = rm.Resources
+	data.Endpoint = rm.Endpoint
+	data.Maintenance = rm.Maintenance
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

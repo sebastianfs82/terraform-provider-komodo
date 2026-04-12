@@ -16,6 +16,7 @@ import (
 )
 
 var _ datasource.DataSource = &BuildDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &BuildDataSource{}
 
 func NewBuildDataSource() datasource.DataSource {
 	return &BuildDataSource{}
@@ -80,12 +81,14 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 		MarkdownDescription: "Reads an existing Komodo build resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The build identifier (ObjectId or name).",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The build identifier (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The unique name of the build.",
+				MarkdownDescription: "The unique name of the build. One of `name` or `id` must be set.",
 			},
 			"builder_id": schema.StringAttribute{
 				Computed:            true,
@@ -261,23 +264,48 @@ func (d *BuildDataSource) Configure(ctx context.Context, req datasource.Configur
 	d.client = c
 }
 
+func (d *BuildDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data BuildDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data BuildDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading build", map[string]interface{}{"id": data.ID.ValueString()})
-	b, err := d.client.GetBuild(ctx, data.ID.ValueString())
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading build", map[string]interface{}{"lookup": lookup})
+	b, err := d.client.GetBuild(ctx, lookup)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read build, got error: %s", err))
 		return
 	}
 	if b == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Build %q not found.", data.ID.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Build %q not found.", lookup))
 		return
 	}
 
+	data.ID = types.StringValue(b.ID.OID)
 	data.Name = types.StringValue(b.Name)
 	data.BuilderID = types.StringValue(b.Config.BuilderID)
 	data.Version = &BuildVersionModel{

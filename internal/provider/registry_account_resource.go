@@ -61,7 +61,7 @@ func (r *RegistryAccountResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The account username.",
 			},
 			"token": schema.StringAttribute{
-				Required:            true,
+				Optional:            true,
 				Sensitive:           true,
 				MarkdownDescription: "The plaintext access token (password) for the account.",
 			},
@@ -114,7 +114,9 @@ func (r *RegistryAccountResource) Create(ctx context.Context, req resource.Creat
 	data.ID = types.StringValue(account.ID.OID)
 	data.Domain = types.StringValue(account.Domain)
 	data.Username = types.StringValue(account.Username)
-	data.Token = types.StringValue(account.Token)
+	if account.Token != "" {
+		data.Token = types.StringValue(account.Token)
+	}
 	tflog.Trace(ctx, "Created docker registry account resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

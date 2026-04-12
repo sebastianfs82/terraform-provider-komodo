@@ -29,7 +29,7 @@ resource "komodo_repo" "example" {
 
 ### Required
 
-- `name` (String) The unique name of the git repository. Changing this forces a new resource.
+- `name` (String) The unique name of the git repository.
 
 ### Optional
 

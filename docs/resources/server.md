@@ -62,7 +62,7 @@ resource "komodo_server" "production" {
 
 ### Required
 
-- `name` (String) The unique name of the server. Changing this forces a new resource.
+- `name` (String) The unique name of the server.
 
 ### Optional
 

@@ -32,3 +32,4 @@ Read-Only:
 - `endpoint_type` (String) The alerter endpoint type (Slack, Discord, Custom, etc.).
 - `id` (String) The alerter identifier (ObjectId).
 - `name` (String) The name of the alerter.
+- `types` (List of String) Alert types the alerter is configured to send. Empty means all types.

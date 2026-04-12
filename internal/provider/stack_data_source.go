@@ -17,6 +17,7 @@ import (
 )
 
 var _ datasource.DataSource = &StackDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &StackDataSource{}
 
 func NewStackDataSource() datasource.DataSource {
 	return &StackDataSource{}
@@ -85,12 +86,14 @@ func (d *StackDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 		MarkdownDescription: "Reads an existing Komodo stack.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The stack identifier (ObjectId).",
+				MarkdownDescription: "The stack identifier (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The name of the stack to look up.",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The name of the stack to look up. One of `name` or `id` must be set.",
 			},
 			"server_id": schema.StringAttribute{
 				Computed:            true,
@@ -300,21 +303,45 @@ func (d *StackDataSource) Configure(ctx context.Context, req datasource.Configur
 	d.client = c
 }
 
+func (d *StackDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data StackDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *StackDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data StackDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading stack data source", map[string]interface{}{"name": data.Name.ValueString()})
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading stack data source", map[string]interface{}{"lookup": lookup})
 
-	stack, err := d.client.GetStack(ctx, data.Name.ValueString())
+	stack, err := d.client.GetStack(ctx, lookup)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read stack, got error: %s", err))
 		return
 	}
 	if stack == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Stack with name %q not found", data.Name.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Stack %q not found", lookup))
 		return
 	}
 

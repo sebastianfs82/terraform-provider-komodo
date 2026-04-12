@@ -123,6 +123,54 @@ func testAccRegistryAccountDisappears(resourceName string) resource.TestCheckFun
 	}
 }
 
+func TestAccRegistryAccountResource_noToken(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccRegistryAccountResourceConfig_noToken("registry.example.com", "notokenuser"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_registry_account.test", "domain", "registry.example.com"),
+					resource.TestCheckResourceAttr("komodo_registry_account.test", "username", "notokenuser"),
+					resource.TestCheckNoResourceAttr("komodo_registry_account.test", "token"),
+					resource.TestCheckResourceAttrSet("komodo_registry_account.test", "id"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccRegistryAccountResource_addToken(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccRegistryAccountResourceConfig_noToken("registry.example.com", "addtokenuser"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("komodo_registry_account.test", "token"),
+				),
+			},
+			{
+				Config: testAccRegistryAccountResourceConfig("registry.example.com", "addtokenuser", "newly-added-token"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_registry_account.test", "token", "newly-added-token"),
+				),
+			},
+		},
+	})
+}
+
+func testAccRegistryAccountResourceConfig_noToken(domain, username string) string {
+	return fmt.Sprintf(`
+resource "komodo_registry_account" "test" {
+  domain   = %q
+  username = %q
+}
+`, domain, username)
+}
+
 func testAccRegistryAccountResourceConfig(domain, username, token string) string {
 	return fmt.Sprintf(`
 resource "komodo_registry_account" "test" {

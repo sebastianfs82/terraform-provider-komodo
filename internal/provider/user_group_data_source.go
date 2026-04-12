@@ -15,6 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+var _ datasource.DataSource = &UserGroupDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &UserGroupDataSource{}
+
 type UserGroupDataSource struct {
 	client *client.Client
 }
@@ -38,15 +41,39 @@ func (d *UserGroupDataSource) Configure(ctx context.Context, req datasource.Conf
 	d.client = c
 }
 
+func (d *UserGroupDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data UserGroupDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *UserGroupDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data UserGroupDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	group, err := d.client.GetUserGroup(ctx, data.Name.ValueString())
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	group, err := d.client.GetUserGroup(ctx, lookup)
 	if err != nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("User group with name %s not found", data.Name.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("User group %q not found: %s", lookup, err))
 		return
 	}
 	data.ID = types.StringValue(group.ID.OID)
@@ -84,12 +111,14 @@ func (d *UserGroupDataSource) Schema(ctx context.Context, req datasource.SchemaR
 		MarkdownDescription: "Reads an existing Komodo user group by name.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The user group ID (Mongo OID).",
+				MarkdownDescription: "The user group ID (Mongo OID). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The user group name.",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The user group name. One of `name` or `id` must be set.",
 			},
 			"everyone_enabled": schema.BoolAttribute{
 				Computed:            true,

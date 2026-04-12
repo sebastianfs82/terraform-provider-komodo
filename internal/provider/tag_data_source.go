@@ -15,6 +15,7 @@ import (
 )
 
 var _ datasource.DataSource = &TagDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &TagDataSource{}
 
 func NewTagDataSource() datasource.DataSource {
 	return &TagDataSource{}
@@ -41,11 +42,13 @@ func (d *TagDataSource) Schema(ctx context.Context, req datasource.SchemaRequest
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "The tag id (ObjectId). If set, takes precedence over name.",
+				Computed:            true,
+				MarkdownDescription: "The tag id (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "The tag name.",
+				Computed:            true,
+				MarkdownDescription: "The tag name. One of `name` or `id` must be set.",
 			},
 			"color": schema.StringAttribute{
 				Computed:            true,
@@ -74,14 +77,30 @@ func (d *TagDataSource) Configure(ctx context.Context, req datasource.ConfigureR
 	d.client = c
 }
 
-func (d *TagDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+func (d *TagDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
 	var data TagDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.ID.ValueString() == "" && data.Name.ValueString() == "" {
-		resp.Diagnostics.AddError("Missing Query Attribute", "Either id or name must be set to query a tag.")
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
+func (d *TagDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data TagDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	var tag *client.Tag

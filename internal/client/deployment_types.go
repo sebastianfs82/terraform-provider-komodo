@@ -152,6 +152,12 @@ type UpdateDeploymentRequest struct {
 	Config PartialDeploymentConfig `json:"config"`
 }
 
+// RenameDeploymentRequest is the payload for the RenameDeployment write API.
+type RenameDeploymentRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // StartDeploymentRequest is the request body for the StartDeployment execute action.
 type StartDeploymentRequest struct {
 	Deployment string `json:"deployment"`

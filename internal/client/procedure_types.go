@@ -53,6 +53,12 @@ type UpdateProcedureRequest struct {
 	Config PartialProcedureConfig `json:"config"`
 }
 
+// RenameProcedureRequest is the payload for the RenameProcedure write API.
+type RenameProcedureRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // RunProcedureRequest is the request body for the RunProcedure execute action.
 type RunProcedureRequest struct {
 	Procedure string `json:"procedure"`

@@ -55,9 +55,6 @@ func (r *TagResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 			"name": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The tag name.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			"color": schema.StringAttribute{
 				Optional:            true,
@@ -191,11 +188,16 @@ func (r *TagResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	var state TagResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	updateReq := client.CreateTagRequest{
 		Name:  data.Name.ValueString(),
 		Color: data.Color.ValueString(),
 	}
-	tag, err := r.client.UpdateTag(ctx, data.Name.ValueString(), updateReq)
+	tag, err := r.client.UpdateTag(ctx, state.Name.ValueString(), updateReq)
 	if err != nil {
 		if strings.Contains(err.Error(), "multiple tags found") {
 			resp.Diagnostics.AddError(

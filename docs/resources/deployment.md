@@ -39,7 +39,7 @@ resource "komodo_deployment" "from_build" {
 
 ### Required
 
-- `name` (String) The unique name of the deployment. Changing this forces a new resource.
+- `name` (String) The unique name of the deployment.
 
 ### Optional
 

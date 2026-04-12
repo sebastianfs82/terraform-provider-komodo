@@ -1,3 +1,16 @@
+## 0.5.0 (April 12, 2026)
+
+DOCUMENTATION:
+
+* **README:** Expanded provider documentation with additional configuration examples and usage guidance.
+
+BUG FIXES:
+
+* **`komodo_user_group` acceptance tests:** Removed unused `testAccUserGroupHasMember` helper that was never called, reducing test surface noise.
+* **`komodo_repo` acceptance tests:** Simplified `testAccRepoResourceConfig_withConfig` by removing the redundant `domain` parameter (now hardcoded to `github.com` within the helper), aligning tests with the `0.2.0` schema change that dropped `source.url`.
+
+---
+
 ## 0.4.0 (April 12, 2026)
 
 FEATURES:

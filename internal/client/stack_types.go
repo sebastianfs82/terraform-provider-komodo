@@ -63,6 +63,12 @@ type UpdateStackRequest struct {
 	Config StackConfig `json:"config"`
 }
 
+// RenameStackRequest is the payload for the RenameStack write API.
+type RenameStackRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // DeleteStackRequest is the request body for DeleteStack.
 type DeleteStackRequest struct {
 	ID string `json:"id"`

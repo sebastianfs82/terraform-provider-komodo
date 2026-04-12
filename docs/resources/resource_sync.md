@@ -29,7 +29,7 @@ resource "komodo_resource_sync" "example" {
 
 ### Required
 
-- `name` (String) The unique name of the resource sync. Changing this forces a new resource.
+- `name` (String) The unique name of the resource sync.
 
 ### Optional
 

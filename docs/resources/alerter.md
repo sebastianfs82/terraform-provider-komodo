@@ -38,62 +38,61 @@ resource "komodo_alerter" "custom" {
 
 ### Required
 
-- `endpoint_type` (String) The alerter endpoint type. One of `Custom`, `Slack`, `Discord`, `Ntfy`, `Pushover`.
-- `name` (String) The unique name of the alerter. Changing this forces a new resource.
+- `name` (String) The unique name of the alerter.
 
 ### Optional
 
-- `alert_types` (List of String) Only send specific alert types. If empty, all alert types are sent.
-- `custom_endpoint` (Attributes) Configuration for a Custom HTTP endpoint alerter. Required when `endpoint_type` is `Custom`. (see [below for nested schema](#nestedatt--custom_endpoint))
-- `discord_endpoint` (Attributes) Configuration for a Discord alerter. Required when `endpoint_type` is `Discord`. (see [below for nested schema](#nestedatt--discord_endpoint))
 - `enabled` (Boolean) Whether the alerter is enabled.
-- `ntfy_endpoint` (Attributes) Configuration for a Ntfy alerter. Required when `endpoint_type` is `Ntfy`. (see [below for nested schema](#nestedatt--ntfy_endpoint))
-- `pushover_endpoint` (Attributes) Configuration for a Pushover alerter. Required when `endpoint_type` is `Pushover`. (see [below for nested schema](#nestedatt--pushover_endpoint))
-- `slack_endpoint` (Attributes) Configuration for a Slack alerter. Required when `endpoint_type` is `Slack`. (see [below for nested schema](#nestedatt--slack_endpoint))
+- `endpoint` (Attributes) The alerter endpoint configuration. (see [below for nested schema](#nestedatt--endpoint))
+- `maintenance` (Block List) Scheduled maintenance windows during which alerts from this alerter will be suppressed. (see [below for nested schema](#nestedblock--maintenance))
+- `resource` (Block List) Filter alerts to specific resources. Set `enabled = true` to include a resource, `enabled = false` to exclude it. (see [below for nested schema](#nestedblock--resource))
+- `types` (List of String) Only send specific alert types. If empty, all alert types are sent.
 
 ### Read-Only
 
 - `id` (String) The alerter identifier (ObjectId).
 
-<a id="nestedatt--custom_endpoint"></a>
-### Nested Schema for `custom_endpoint`
+<a id="nestedatt--endpoint"></a>
+### Nested Schema for `endpoint`
+
+Required:
+
+- `type` (String) The endpoint type. One of `Custom`, `Slack`, `Discord`, `Ntfy`, `Pushover`.
+- `url` (String) The webhook or endpoint URL.
 
 Optional:
 
-- `url` (String) The HTTP/S endpoint URL to send the POST to.
+- `email` (String) Email address. Only valid when `type` is `Ntfy`.
 
 
-<a id="nestedatt--discord_endpoint"></a>
-### Nested Schema for `discord_endpoint`
+<a id="nestedblock--maintenance"></a>
+### Nested Schema for `maintenance`
 
-Optional:
+Required:
 
-- `url` (String) The Discord webhook URL.
-
-
-<a id="nestedatt--ntfy_endpoint"></a>
-### Nested Schema for `ntfy_endpoint`
+- `duration_minutes` (Number) Duration of the maintenance window in minutes.
+- `name` (String) Name for the maintenance window.
+- `schedule_type` (String) Schedule type: `Daily`, `Weekly`, or `OneTime`.
 
 Optional:
 
-- `email` (String) Optional email address for Ntfy email notifications. Requires SMTP configured on the Ntfy server.
-- `url` (String) The Ntfy topic URL.
+- `date` (String) For `OneTime` windows: ISO 8601 date in `YYYY-MM-DD` format.
+- `day_of_week` (String) For `Weekly` schedules: day of the week (e.g. `Monday`, `Tuesday`).
+- `description` (String) Description of what maintenance is performed.
+- `enabled` (Boolean) Whether this maintenance window is active. Defaults to `true`.
+- `hour` (Number) Start hour in 24-hour format (0–23). Defaults to `0`.
+- `minute` (Number) Start minute (0–59). Defaults to `0`.
+- `timezone` (String) Timezone for the maintenance window. If empty, uses the Core timezone.
 
 
-<a id="nestedatt--pushover_endpoint"></a>
-### Nested Schema for `pushover_endpoint`
+<a id="nestedblock--resource"></a>
+### Nested Schema for `resource`
 
-Optional:
+Required:
 
-- `url` (String) The Pushover URL including application and user tokens in parameters.
-
-
-<a id="nestedatt--slack_endpoint"></a>
-### Nested Schema for `slack_endpoint`
-
-Optional:
-
-- `url` (String) The Slack app webhook URL.
+- `enabled` (Boolean) If `true`, only send alerts for this resource (include). If `false`, never send alerts for this resource (exclude).
+- `id` (String) The name or ID of the resource.
+- `type` (String) The resource type, e.g. `Server`, `Stack`, `Deployment`, `Build`, `Repo`, `Procedure`, `Action`, `Builder`, `Alerter`, `ResourceSync`.
 
 ## Import
 

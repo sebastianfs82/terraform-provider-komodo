@@ -115,3 +115,9 @@ type UpdateBuilderRequest struct {
 	ID     string             `json:"id"`
 	Config BuilderConfigInput `json:"config"`
 }
+
+// RenameBuilderRequest is the payload for the RenameBuilder write API.
+type RenameBuilderRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}

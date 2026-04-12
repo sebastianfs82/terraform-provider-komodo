@@ -106,6 +106,41 @@ func TestAccBuildResource_disappears(t *testing.T) {
 	})
 }
 
+func TestAccBuildResource_rename(t *testing.T) {
+	var savedID string
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBuildResourceConfig("tf-acc-build-rename-orig"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "name", "tf-acc-build-rename-orig"),
+					resource.TestCheckResourceAttrSet("komodo_build.test", "id"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_build.test"]
+						savedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: testAccBuildResourceConfig("tf-acc-build-rename-new"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "name", "tf-acc-build-rename-new"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_build.test"]
+						if rs.Primary.ID != savedID {
+							return fmt.Errorf("resource was recreated: ID changed from %q to %q", savedID, rs.Primary.ID)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func testAccBuildDisappears(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]

@@ -25,12 +25,12 @@ resource "komodo_registry_account" "example" {
 
 ### Required
 
-- `token` (String, Sensitive) The plaintext access token (password) for the account.
 - `username` (String) The account username.
 
 ### Optional
 
 - `domain` (String) The registry domain (e.g. `registry.example.com`). Leave empty or omit for Docker Hub (`docker.io`).
+- `token` (String, Sensitive) The plaintext access token (password) for the account.
 
 ### Read-Only
 

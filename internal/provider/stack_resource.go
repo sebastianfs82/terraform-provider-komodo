@@ -137,10 +137,7 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the stack. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the stack.",
 			},
 			"server_id": schema.StringAttribute{
 				Optional:            true,
@@ -623,6 +620,15 @@ func (r *StackResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 	data.ID = state.ID
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameStack(ctx, client.RenameStackRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename stack, got error: %s", err))
+			return
+		}
+	}
 	updateReq := client.UpdateStackRequest{
 		ID:     data.ID.ValueString(),
 		Config: stackConfigFromModel(ctx, r.client, &data),

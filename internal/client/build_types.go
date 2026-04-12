@@ -106,6 +106,12 @@ type UpdateBuildRequest struct {
 	Config PartialBuildConfig `json:"config"`
 }
 
+// RenameBuildRequest is the payload for the RenameBuild write API.
+type RenameBuildRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // RunBuildRequest is the request body for the RunBuild execute action.
 type RunBuildRequest struct {
 	Build string `json:"build"`

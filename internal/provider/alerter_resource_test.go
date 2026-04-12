@@ -24,8 +24,8 @@ func TestAccAlerterResource_basic(t *testing.T) {
 				Config: testAccAlerterResourceCustomConfig("tf-acc-alerter-basic", "http://localhost:7000"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_alerter.test", "name", "tf-acc-alerter-basic"),
-					resource.TestCheckResourceAttr("komodo_alerter.test", "endpoint_type", "Custom"),
-					resource.TestCheckResourceAttr("komodo_alerter.test", "custom_endpoint.url", "http://localhost:7000"),
+					resource.TestCheckResourceAttr("komodo_alerter.test", "endpoint.type", "Custom"),
+					resource.TestCheckResourceAttr("komodo_alerter.test", "endpoint.url", "http://localhost:7000"),
 					resource.TestCheckResourceAttrSet("komodo_alerter.test", "id"),
 				),
 			},
@@ -41,13 +41,13 @@ func TestAccAlerterResource_update(t *testing.T) {
 			{
 				Config: testAccAlerterResourceCustomConfig("tf-acc-alerter-update", "http://localhost:7000"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_alerter.test", "custom_endpoint.url", "http://localhost:7000"),
+					resource.TestCheckResourceAttr("komodo_alerter.test", "endpoint.url", "http://localhost:7000"),
 				),
 			},
 			{
 				Config: testAccAlerterResourceCustomConfig("tf-acc-alerter-update", "http://localhost:8000"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_alerter.test", "custom_endpoint.url", "http://localhost:8000"),
+					resource.TestCheckResourceAttr("komodo_alerter.test", "endpoint.url", "http://localhost:8000"),
 				),
 			},
 		},
@@ -118,13 +118,48 @@ func testAccAlerterDisappears(resourceName string) resource.TestCheckFunc {
 	}
 }
 
+func TestAccAlerterResource_rename(t *testing.T) {
+	var savedID string
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAlerterResourceCustomConfig("tf-acc-alerter-rename-orig", "http://localhost:7000"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_alerter.test", "name", "tf-acc-alerter-rename-orig"),
+					resource.TestCheckResourceAttrSet("komodo_alerter.test", "id"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_alerter.test"]
+						savedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: testAccAlerterResourceCustomConfig("tf-acc-alerter-rename-new", "http://localhost:7000"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_alerter.test", "name", "tf-acc-alerter-rename-new"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_alerter.test"]
+						if rs.Primary.ID != savedID {
+							return fmt.Errorf("resource was recreated: ID changed from %q to %q", savedID, rs.Primary.ID)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func testAccAlerterResourceCustomConfig(name, url string) string {
 	return fmt.Sprintf(`
 resource "komodo_alerter" "test" {
-  name          = %q
-  endpoint_type = "Custom"
-  custom_endpoint = {
-    url = %q
+  name = %q
+  endpoint = {
+    type = "Custom"
+    url  = %q
   }
 }
 `, name, url)

@@ -112,10 +112,7 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the deployment. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the deployment.",
 			},
 			"swarm_id": schema.StringAttribute{
 				Optional:            true,
@@ -390,6 +387,15 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	data.ID = state.ID
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameDeployment(ctx, client.RenameDeploymentRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename deployment, got error: %s", err))
+			return
+		}
+	}
 
 	updateReq := client.UpdateDeploymentRequest{
 		ID:     data.ID.ValueString(),

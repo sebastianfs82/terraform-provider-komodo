@@ -27,8 +27,8 @@ data "komodo_tag" "by_name" {
 
 ### Optional
 
-- `id` (String) The tag id (ObjectId). If set, takes precedence over name.
-- `name` (String) The tag name.
+- `id` (String) The tag id (ObjectId). One of `name` or `id` must be set.
+- `name` (String) The tag name. One of `name` or `id` must be set.
 
 ### Read-Only
 

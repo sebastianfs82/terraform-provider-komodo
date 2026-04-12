@@ -38,7 +38,7 @@ resource "komodo_builder" "url" {
 ### Required
 
 - `builder_type` (String) The builder type. One of `Url`, `Server`, `Aws`. Changing this forces a new resource.
-- `name` (String) The unique name of the builder. Changing this forces a new resource.
+- `name` (String) The unique name of the builder.
 
 ### Optional
 

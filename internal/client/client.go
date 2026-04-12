@@ -1484,6 +1484,23 @@ func (c *Client) UpdateGitRepository(ctx context.Context, req UpdateGitRepositor
 	return &repo, nil
 }
 
+func (c *Client) RenameGitRepository(ctx context.Context, req RenameGitRepositoryRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameRepo",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 func (c *Client) DeleteGitRepository(ctx context.Context, id string) error {
 	payload := map[string]interface{}{
 		"type":   "DeleteRepo",
@@ -1647,6 +1664,23 @@ func (c *Client) UpdateStack(ctx context.Context, req UpdateStackRequest) (*Stac
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &stack, nil
+}
+
+func (c *Client) RenameStack(ctx context.Context, req RenameStackRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameStack",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }
 
 func (c *Client) DeleteStack(ctx context.Context, id string) error {
@@ -1883,6 +1917,24 @@ func (c *Client) UpdateServerPublicKey(ctx context.Context, serverID, publicKey 
 			Server:    serverID,
 			PublicKey: publicKey,
 		},
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// RenameServer renames the server with the given ID.
+func (c *Client) RenameServer(ctx context.Context, req RenameServerRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameServer",
+		"params": req,
 	}
 	resp, err := c.doRequest(ctx, "/write", payload)
 	if err != nil {
@@ -2429,6 +2481,23 @@ func (c *Client) UpdateBuilder(ctx context.Context, req UpdateBuilderRequest) (*
 	return &builder, nil
 }
 
+func (c *Client) RenameBuilder(ctx context.Context, req RenameBuilderRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameBuilder",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 func (c *Client) DeleteBuilder(ctx context.Context, id string) error {
 	payload := map[string]interface{}{
 		"type":   "DeleteBuilder",
@@ -2536,6 +2605,23 @@ func (c *Client) UpdateAlerter(ctx context.Context, req UpdateAlerterRequest) (*
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &alerter, nil
+}
+
+func (c *Client) RenameAlerter(ctx context.Context, req RenameAlerterRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameAlerter",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }
 
 func (c *Client) DeleteAlerter(ctx context.Context, id string) error {
@@ -2647,6 +2733,23 @@ func (c *Client) UpdateAction(ctx context.Context, req UpdateActionRequest) (*Ac
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &action, nil
+}
+
+func (c *Client) RenameAction(ctx context.Context, req RenameActionRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameAction",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }
 
 func (c *Client) DeleteAction(ctx context.Context, id string) error {
@@ -2768,6 +2871,24 @@ func (c *Client) UpdateBuild(ctx context.Context, req UpdateBuildRequest) (*Buil
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &build, nil
+}
+
+// RenameBuild renames a build by id.
+func (c *Client) RenameBuild(ctx context.Context, req RenameBuildRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameBuild",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }
 
 // DeleteBuild deletes a build by id.
@@ -2895,6 +3016,24 @@ func (c *Client) UpdateDeployment(ctx context.Context, req UpdateDeploymentReque
 	return &deployment, nil
 }
 
+// RenameDeployment renames a deployment by id.
+func (c *Client) RenameDeployment(ctx context.Context, req RenameDeploymentRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameDeployment",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 // DeleteDeployment deletes a deployment by id.
 func (c *Client) DeleteDeployment(ctx context.Context, id string) error {
 	payload := map[string]interface{}{
@@ -3014,6 +3153,24 @@ func (c *Client) UpdateProcedure(ctx context.Context, req UpdateProcedureRequest
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &proc, nil
+}
+
+// RenameProcedure renames a procedure by ID.
+func (c *Client) RenameProcedure(ctx context.Context, req RenameProcedureRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameProcedure",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }
 
 // DeleteProcedure deletes a procedure by ID.
@@ -3154,6 +3311,24 @@ func (c *Client) UpdateResourceSync(ctx context.Context, req UpdateResourceSyncR
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &rs, nil
+}
+
+// RenameResourceSync renames a resource sync by id or name.
+func (c *Client) RenameResourceSync(ctx context.Context, req RenameResourceSyncRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameResourceSync",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }
 
 // DeleteResourceSync deletes a resource sync by id or name.

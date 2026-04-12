@@ -16,6 +16,7 @@ import (
 )
 
 var _ datasource.DataSource = &ProcedureDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &ProcedureDataSource{}
 
 func NewProcedureDataSource() datasource.DataSource {
 	return &ProcedureDataSource{}
@@ -48,12 +49,14 @@ func (d *ProcedureDataSource) Schema(ctx context.Context, req datasource.SchemaR
 		MarkdownDescription: "Reads an existing Komodo procedure resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The procedure identifier (ObjectId or name).",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The procedure identifier (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The unique name of the procedure.",
+				MarkdownDescription: "The unique name of the procedure. One of `name` or `id` must be set.",
 			},
 			"stages": schema.StringAttribute{
 				Computed:            true,
@@ -111,22 +114,47 @@ func (d *ProcedureDataSource) Configure(ctx context.Context, req datasource.Conf
 	d.client = c
 }
 
+func (d *ProcedureDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data ProcedureDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *ProcedureDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data ProcedureDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading procedure", map[string]interface{}{"id": data.ID.ValueString()})
-	proc, err := d.client.GetProcedure(ctx, data.ID.ValueString())
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading procedure", map[string]interface{}{"lookup": lookup})
+	proc, err := d.client.GetProcedure(ctx, lookup)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read procedure, got error: %s", err))
 		return
 	}
 	if proc == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Procedure %q not found.", data.ID.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Procedure %q not found.", lookup))
 		return
 	}
+	data.ID = types.StringValue(proc.ID.OID)
 	data.Name = types.StringValue(proc.Name)
 
 	stagesStr := string(proc.Config.Stages)

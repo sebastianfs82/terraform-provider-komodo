@@ -37,7 +37,7 @@ resource "komodo_action" "scheduled" {
 
 ### Required
 
-- `name` (String) The unique name of the action. Changing this forces a new resource.
+- `name` (String) The unique name of the action.
 
 ### Optional
 

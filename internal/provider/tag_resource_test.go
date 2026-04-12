@@ -145,6 +145,41 @@ resource "komodo_tag" "test" {
 `, name, color)
 }
 
+func TestAccTagResource_rename(t *testing.T) {
+	var savedID string
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccTagResourceConfigWithColor("tf-acc-tag-rename-orig", "Green"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_tag.test", "name", "tf-acc-tag-rename-orig"),
+					resource.TestCheckResourceAttrSet("komodo_tag.test", "id"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_tag.test"]
+						savedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: testAccTagResourceConfigWithColor("tf-acc-tag-rename-new", "Green"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_tag.test", "name", "tf-acc-tag-rename-new"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_tag.test"]
+						if rs.Primary.ID != savedID {
+							return fmt.Errorf("resource was recreated: ID changed from %q to %q", savedID, rs.Primary.ID)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func testAccTagDisappears(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]

@@ -75,6 +75,12 @@ type UpdateResourceSyncRequest struct {
 	Config PartialResourceSyncConfig `json:"config"`
 }
 
+// RenameResourceSyncRequest is the payload for the RenameResourceSync write API.
+type RenameResourceSyncRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // RunSyncRequest is the request body for the RunSync execute action.
 type RunSyncRequest struct {
 	Sync string `json:"sync"`

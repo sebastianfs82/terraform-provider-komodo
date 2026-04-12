@@ -68,7 +68,7 @@ func (r *ProviderAccountResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The account username.",
 			},
 			"token": schema.StringAttribute{
-				Required:            true,
+				Optional:            true,
 				Sensitive:           true,
 				MarkdownDescription: "The plaintext access token for the account.",
 			},
@@ -124,7 +124,9 @@ func (r *ProviderAccountResource) Create(ctx context.Context, req resource.Creat
 	data.Domain = types.StringValue(account.Domain)
 	data.HttpsEnabled = types.BoolValue(account.HttpsEnabled)
 	data.Username = types.StringValue(account.Username)
-	data.Token = types.StringValue(account.Token)
+	if account.Token != "" {
+		data.Token = types.StringValue(account.Token)
+	}
 	tflog.Trace(ctx, "Created git provider account resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

@@ -16,6 +16,7 @@ import (
 )
 
 var _ datasource.DataSource = &DeploymentDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &DeploymentDataSource{}
 
 func NewDeploymentDataSource() datasource.DataSource {
 	return &DeploymentDataSource{}
@@ -62,12 +63,14 @@ func (d *DeploymentDataSource) Schema(ctx context.Context, req datasource.Schema
 		MarkdownDescription: "Reads a Komodo deployment resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The deployment identifier (ObjectId).",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The deployment identifier (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The name of the deployment.",
+				MarkdownDescription: "The name of the deployment. One of `name` or `id` must be set.",
 			},
 			"swarm_id": schema.StringAttribute{
 				Computed:            true,
@@ -210,21 +213,45 @@ func (d *DeploymentDataSource) Configure(ctx context.Context, req datasource.Con
 	d.client = c
 }
 
+func (d *DeploymentDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data DeploymentDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *DeploymentDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data DeploymentDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading deployment", map[string]interface{}{"id": data.ID.ValueString()})
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading deployment", map[string]interface{}{"lookup": lookup})
 
-	dep, err := d.client.GetDeployment(ctx, data.ID.ValueString())
+	dep, err := d.client.GetDeployment(ctx, lookup)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read deployment, got error: %s", err))
 		return
 	}
 	if dep == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Deployment %q not found.", data.ID.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Deployment %q not found.", lookup))
 		return
 	}
 

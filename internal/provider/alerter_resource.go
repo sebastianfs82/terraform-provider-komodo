@@ -7,12 +7,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -23,6 +26,7 @@ import (
 
 var _ resource.Resource = &AlerterResource{}
 var _ resource.ResourceWithImportState = &AlerterResource{}
+var _ resource.ResourceWithValidateConfig = &AlerterResource{}
 
 func NewAlerterResource() resource.Resource {
 	return &AlerterResource{}
@@ -33,37 +37,25 @@ type AlerterResource struct {
 }
 
 type AlerterResourceModel struct {
-	ID               types.String          `tfsdk:"id"`
-	Name             types.String          `tfsdk:"name"`
-	Enabled          types.Bool            `tfsdk:"enabled"`
-	EndpointType     types.String          `tfsdk:"endpoint_type"`
-	AlertTypes       types.List            `tfsdk:"alert_types"`
-	CustomEndpoint   *AlerterCustomModel   `tfsdk:"custom_endpoint"`
-	SlackEndpoint    *AlerterSlackModel    `tfsdk:"slack_endpoint"`
-	DiscordEndpoint  *AlerterDiscordModel  `tfsdk:"discord_endpoint"`
-	NtfyEndpoint     *AlerterNtfyModel     `tfsdk:"ntfy_endpoint"`
-	PushoverEndpoint *AlerterPushoverModel `tfsdk:"pushover_endpoint"`
+	ID          types.String             `tfsdk:"id"`
+	Name        types.String             `tfsdk:"name"`
+	Enabled     types.Bool               `tfsdk:"enabled"`
+	AlertTypes  types.List               `tfsdk:"types"`
+	Resources   []ResourceTargetModel    `tfsdk:"resource"`
+	Endpoint    *AlerterEndpointModel    `tfsdk:"endpoint"`
+	Maintenance []MaintenanceWindowModel `tfsdk:"maintenance"`
 }
 
-type AlerterCustomModel struct {
-	URL types.String `tfsdk:"url"`
+type ResourceTargetModel struct {
+	Enabled types.Bool   `tfsdk:"enabled"`
+	Type    types.String `tfsdk:"type"`
+	ID      types.String `tfsdk:"id"`
 }
 
-type AlerterSlackModel struct {
-	URL types.String `tfsdk:"url"`
-}
-
-type AlerterDiscordModel struct {
-	URL types.String `tfsdk:"url"`
-}
-
-type AlerterNtfyModel struct {
+type AlerterEndpointModel struct {
+	Type  types.String `tfsdk:"type"`
 	URL   types.String `tfsdk:"url"`
 	Email types.String `tfsdk:"email"`
-}
-
-type AlerterPushoverModel struct {
-	URL types.String `tfsdk:"url"`
 }
 
 func (r *AlerterResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -83,10 +75,7 @@ func (r *AlerterResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the alerter. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the alerter.",
 			},
 			"enabled": schema.BoolAttribute{
 				Optional:            true,
@@ -96,98 +85,123 @@ func (r *AlerterResource) Schema(ctx context.Context, req resource.SchemaRequest
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"endpoint_type": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The alerter endpoint type. One of `Custom`, `Slack`, `Discord`, `Ntfy`, `Pushover`.",
-			},
-			"alert_types": schema.ListAttribute{
+			"types": schema.ListAttribute{
 				Optional:            true,
 				Computed:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "Only send specific alert types. If empty, all alert types are sent.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-				},
+				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
 			},
-			"custom_endpoint": schema.SingleNestedAttribute{
+			"endpoint": schema.SingleNestedAttribute{
 				Optional:            true,
-				MarkdownDescription: "Configuration for a Custom HTTP endpoint alerter. Required when `endpoint_type` is `Custom`.",
+				MarkdownDescription: "The alerter endpoint configuration.",
 				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						MarkdownDescription: "The HTTP/S endpoint URL to send the POST to.",
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
-						},
+					"type": schema.StringAttribute{
+						Required:            true,
+						MarkdownDescription: "The endpoint type. One of `Custom`, `Slack`, `Discord`, `Ntfy`, `Pushover`.",
 					},
-				},
-			},
-			"slack_endpoint": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Configuration for a Slack alerter. Required when `endpoint_type` is `Slack`.",
-				Attributes: map[string]schema.Attribute{
 					"url": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						MarkdownDescription: "The Slack app webhook URL.",
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
-						},
-					},
-				},
-			},
-			"discord_endpoint": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Configuration for a Discord alerter. Required when `endpoint_type` is `Discord`.",
-				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						MarkdownDescription: "The Discord webhook URL.",
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
-						},
-					},
-				},
-			},
-			"ntfy_endpoint": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Configuration for a Ntfy alerter. Required when `endpoint_type` is `Ntfy`.",
-				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						MarkdownDescription: "The Ntfy topic URL.",
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
-						},
+						Required:            true,
+						MarkdownDescription: "The webhook or endpoint URL.",
 					},
 					"email": schema.StringAttribute{
 						Optional:            true,
-						Computed:            true,
-						MarkdownDescription: "Optional email address for Ntfy email notifications. Requires SMTP configured on the Ntfy server.",
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
+						MarkdownDescription: "Email address. Only valid when `type` is `Ntfy`.",
+					},
+				},
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"resource": schema.ListNestedBlock{
+				MarkdownDescription: "Filter alerts to specific resources. Set `enabled = true` to include a resource, `enabled = false` to exclude it.",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"enabled": schema.BoolAttribute{
+							Required:            true,
+							MarkdownDescription: "If `true`, only send alerts for this resource (include). If `false`, never send alerts for this resource (exclude).",
+						},
+						"type": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The resource type, e.g. `Server`, `Stack`, `Deployment`, `Build`, `Repo`, `Procedure`, `Action`, `Builder`, `Alerter`, `ResourceSync`.",
+						},
+						"id": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name or ID of the resource.",
 						},
 					},
 				},
 			},
-			"pushover_endpoint": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Configuration for a Pushover alerter. Required when `endpoint_type` is `Pushover`.",
-				Attributes: map[string]schema.Attribute{
-					"url": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						MarkdownDescription: "The Pushover URL including application and user tokens in parameters.",
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
+			"maintenance": schema.ListNestedBlock{
+				MarkdownDescription: "Scheduled maintenance windows during which alerts from this alerter will be suppressed.",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Name for the maintenance window.",
+						},
+						"description": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "Description of what maintenance is performed.",
+						},
+						"schedule_type": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "Schedule type: `Daily`, `Weekly`, or `OneTime`.",
+						},
+						"day_of_week": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "For `Weekly` schedules: day of the week (e.g. `Monday`, `Tuesday`).",
+						},
+						"date": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "For `OneTime` windows: ISO 8601 date in `YYYY-MM-DD` format.",
+						},
+						"hour": schema.Int64Attribute{
+							Optional:            true,
+							Computed:            true,
+							Default:             int64default.StaticInt64(0),
+							MarkdownDescription: "Start hour in 24-hour format (0–23). Defaults to `0`.",
+						},
+						"minute": schema.Int64Attribute{
+							Optional:            true,
+							Computed:            true,
+							Default:             int64default.StaticInt64(0),
+							MarkdownDescription: "Start minute (0–59). Defaults to `0`.",
+						},
+						"duration_minutes": schema.Int64Attribute{
+							Required:            true,
+							MarkdownDescription: "Duration of the maintenance window in minutes.",
+						},
+						"timezone": schema.StringAttribute{
+							Optional:            true,
+							MarkdownDescription: "Timezone for the maintenance window. If empty, uses the Core timezone.",
+						},
+						"enabled": schema.BoolAttribute{
+							Optional:            true,
+							Computed:            true,
+							Default:             booldefault.StaticBool(true),
+							MarkdownDescription: "Whether this maintenance window is active. Defaults to `true`.",
 						},
 					},
 				},
 			},
 		},
+	}
+}
+
+func (r *AlerterResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data AlerterResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Endpoint != nil && !data.Endpoint.Email.IsNull() && !data.Endpoint.Email.IsUnknown() {
+		if data.Endpoint.Type.ValueString() != "Ntfy" {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("endpoint").AtName("email"),
+				"Invalid Configuration",
+				"`email` can only be set when `type` is `Ntfy`.",
+			)
+		}
 	}
 }
 
@@ -213,8 +227,7 @@ func (r *AlerterResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 	tflog.Debug(ctx, "Creating alerter", map[string]interface{}{
-		"name":          data.Name.ValueString(),
-		"endpoint_type": data.EndpointType.ValueString(),
+		"name": data.Name.ValueString(),
 	})
 	configInput, diags := alerterConfigInputFromModel(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -280,6 +293,16 @@ func (r *AlerterResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 	data.ID = state.ID
+	// rename if name changed
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameAlerter(ctx, client.RenameAlerterRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename alerter, got error: %s", err))
+			return
+		}
+	}
 	configInput, diags := alerterConfigInputFromModel(ctx, &data)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -330,54 +353,78 @@ func alerterConfigInputFromModel(ctx context.Context, data *AlerterResourceModel
 		Enabled: &enabled,
 	}
 
-	// alert_types
+	// types
 	if !data.AlertTypes.IsNull() && !data.AlertTypes.IsUnknown() {
 		var alertTypes []string
 		diags.Append(data.AlertTypes.ElementsAs(ctx, &alertTypes, false)...)
 		if diags.HasError() {
 			return cfg, diags
 		}
-		cfg.AlertTypes = alertTypes
+		cfg.AlertTypes = &alertTypes
+	}
+
+	// resource blocks — split by enabled flag
+	var include, exclude []client.ResourceTarget
+	for _, m := range data.Resources {
+		rt := client.ResourceTarget{Type: m.Type.ValueString(), ID: m.ID.ValueString()}
+		if m.Enabled.ValueBool() {
+			include = append(include, rt)
+		} else {
+			exclude = append(exclude, rt)
+		}
+	}
+	if include == nil {
+		include = []client.ResourceTarget{}
+	}
+	if exclude == nil {
+		exclude = []client.ResourceTarget{}
+	}
+	cfg.Resources = &include
+	cfg.ExceptResources = &exclude
+
+	// maintenance windows
+	if data.Maintenance != nil {
+		windows := make([]client.MaintenanceWindow, len(data.Maintenance))
+		for i, w := range data.Maintenance {
+			windows[i] = client.MaintenanceWindow{
+				Name:            w.Name.ValueString(),
+				Description:     w.Description.ValueString(),
+				ScheduleType:    w.ScheduleType.ValueString(),
+				DayOfWeek:       w.DayOfWeek.ValueString(),
+				Date:            w.Date.ValueString(),
+				Hour:            w.Hour.ValueInt64(),
+				Minute:          w.Minute.ValueInt64(),
+				DurationMinutes: w.DurationMinutes.ValueInt64(),
+				Timezone:        w.Timezone.ValueString(),
+				Enabled:         w.Enabled.ValueBool(),
+			}
+		}
+		cfg.MaintenanceWindows = &windows
 	}
 
 	// endpoint
-	switch data.EndpointType.ValueString() {
+	if data.Endpoint == nil {
+		diags.AddError("Config Error", "An endpoint block is required.")
+		return cfg, diags
+	}
+	switch data.Endpoint.Type.ValueString() {
 	case "Custom":
-		params := client.CustomAlerterEndpoint{URL: "http://localhost:7000"}
-		if data.CustomEndpoint != nil {
-			params.URL = data.CustomEndpoint.URL.ValueString()
-		}
-		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Custom", Params: params}
+		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Custom", Params: client.CustomAlerterEndpoint{URL: data.Endpoint.URL.ValueString()}}
 	case "Slack":
-		params := client.SlackAlerterEndpoint{}
-		if data.SlackEndpoint != nil {
-			params.URL = data.SlackEndpoint.URL.ValueString()
-		}
-		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Slack", Params: params}
+		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Slack", Params: client.SlackAlerterEndpoint{URL: data.Endpoint.URL.ValueString()}}
 	case "Discord":
-		params := client.DiscordAlerterEndpoint{}
-		if data.DiscordEndpoint != nil {
-			params.URL = data.DiscordEndpoint.URL.ValueString()
-		}
-		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Discord", Params: params}
+		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Discord", Params: client.DiscordAlerterEndpoint{URL: data.Endpoint.URL.ValueString()}}
 	case "Ntfy":
-		params := client.NtfyAlerterEndpoint{}
-		if data.NtfyEndpoint != nil {
-			params.URL = data.NtfyEndpoint.URL.ValueString()
-			if !data.NtfyEndpoint.Email.IsNull() && !data.NtfyEndpoint.Email.IsUnknown() {
-				email := data.NtfyEndpoint.Email.ValueString()
-				params.Email = &email
-			}
+		params := client.NtfyAlerterEndpoint{URL: data.Endpoint.URL.ValueString()}
+		if !data.Endpoint.Email.IsNull() && !data.Endpoint.Email.IsUnknown() {
+			email := data.Endpoint.Email.ValueString()
+			params.Email = &email
 		}
 		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Ntfy", Params: params}
 	case "Pushover":
-		params := client.PushoverAlerterEndpoint{}
-		if data.PushoverEndpoint != nil {
-			params.URL = data.PushoverEndpoint.URL.ValueString()
-		}
-		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Pushover", Params: params}
+		cfg.Endpoint = &client.AlerterEndpointInput{Type: "Pushover", Params: client.PushoverAlerterEndpoint{URL: data.Endpoint.URL.ValueString()}}
 	default:
-		diags.AddError("Config Error", fmt.Sprintf("Unknown endpoint_type: %q; must be one of Custom, Slack, Discord, Ntfy, Pushover", data.EndpointType.ValueString()))
+		diags.AddError("Config Error", fmt.Sprintf("Unknown endpoint type: %q; must be one of Custom, Slack, Discord, Ntfy, Pushover", data.Endpoint.Type.ValueString()))
 	}
 
 	return cfg, diags
@@ -390,9 +437,8 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 	data.ID = types.StringValue(a.ID.OID)
 	data.Name = types.StringValue(a.Name)
 	data.Enabled = types.BoolValue(a.Config.Enabled)
-	data.EndpointType = types.StringValue(a.Config.Endpoint.Type)
 
-	// alert_types
+	// types
 	alertTypes, atDiags := types.ListValueFrom(ctx, types.StringType, a.Config.AlertTypes)
 	diags.Append(atDiags...)
 	if diags.HasError() {
@@ -400,7 +446,22 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 	}
 	data.AlertTypes = alertTypes
 
-	// endpoint nested blocks
+	// resource blocks — merge include (enabled=true) and exclude (enabled=false)
+	resources := make([]ResourceTargetModel, 0, len(a.Config.Resources)+len(a.Config.ExceptResources))
+	for _, rt := range a.Config.Resources {
+		resources = append(resources, ResourceTargetModel{Enabled: types.BoolValue(true), Type: types.StringValue(rt.Type), ID: types.StringValue(rt.ID)})
+	}
+	for _, rt := range a.Config.ExceptResources {
+		resources = append(resources, ResourceTargetModel{Enabled: types.BoolValue(false), Type: types.StringValue(rt.Type), ID: types.StringValue(rt.ID)})
+	}
+	data.Resources = resources
+
+	// endpoint block
+	ep := &AlerterEndpointModel{
+		Type:  types.StringValue(a.Config.Endpoint.Type),
+		URL:   types.StringValue(""),
+		Email: types.StringNull(),
+	}
 	switch a.Config.Endpoint.Type {
 	case "Custom":
 		p, err := a.Config.Endpoint.GetCustomParams()
@@ -409,12 +470,8 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 			return diags
 		}
 		if p != nil {
-			data.CustomEndpoint = &AlerterCustomModel{URL: types.StringValue(p.URL)}
+			ep.URL = types.StringValue(p.URL)
 		}
-		data.SlackEndpoint = nil
-		data.DiscordEndpoint = nil
-		data.NtfyEndpoint = nil
-		data.PushoverEndpoint = nil
 	case "Slack":
 		p, err := a.Config.Endpoint.GetSlackParams()
 		if err != nil {
@@ -422,12 +479,8 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 			return diags
 		}
 		if p != nil {
-			data.SlackEndpoint = &AlerterSlackModel{URL: types.StringValue(p.URL)}
+			ep.URL = types.StringValue(p.URL)
 		}
-		data.CustomEndpoint = nil
-		data.DiscordEndpoint = nil
-		data.NtfyEndpoint = nil
-		data.PushoverEndpoint = nil
 	case "Discord":
 		p, err := a.Config.Endpoint.GetDiscordParams()
 		if err != nil {
@@ -435,12 +488,8 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 			return diags
 		}
 		if p != nil {
-			data.DiscordEndpoint = &AlerterDiscordModel{URL: types.StringValue(p.URL)}
+			ep.URL = types.StringValue(p.URL)
 		}
-		data.CustomEndpoint = nil
-		data.SlackEndpoint = nil
-		data.NtfyEndpoint = nil
-		data.PushoverEndpoint = nil
 	case "Ntfy":
 		p, err := a.Config.Endpoint.GetNtfyParams()
 		if err != nil {
@@ -448,18 +497,11 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 			return diags
 		}
 		if p != nil {
-			ntfy := &AlerterNtfyModel{URL: types.StringValue(p.URL)}
+			ep.URL = types.StringValue(p.URL)
 			if p.Email != nil {
-				ntfy.Email = types.StringValue(*p.Email)
-			} else {
-				ntfy.Email = types.StringNull()
+				ep.Email = types.StringValue(*p.Email)
 			}
-			data.NtfyEndpoint = ntfy
 		}
-		data.CustomEndpoint = nil
-		data.SlackEndpoint = nil
-		data.DiscordEndpoint = nil
-		data.PushoverEndpoint = nil
 	case "Pushover":
 		p, err := a.Config.Endpoint.GetPushoverParams()
 		if err != nil {
@@ -467,14 +509,45 @@ func alerterToModel(ctx context.Context, a *client.Alerter, data *AlerterResourc
 			return diags
 		}
 		if p != nil {
-			data.PushoverEndpoint = &AlerterPushoverModel{URL: types.StringValue(p.URL)}
+			ep.URL = types.StringValue(p.URL)
 		}
-		data.CustomEndpoint = nil
-		data.SlackEndpoint = nil
-		data.DiscordEndpoint = nil
-		data.NtfyEndpoint = nil
 	default:
 		diags.AddError("Unknown Endpoint Type", fmt.Sprintf("Unknown alerter endpoint type from API: %q", a.Config.Endpoint.Type))
+		return diags
+	}
+	data.Endpoint = ep
+
+	// Maintenance windows
+	if len(a.Config.MaintenanceWindows) > 0 {
+		windows := make([]MaintenanceWindowModel, len(a.Config.MaintenanceWindows))
+		for i, w := range a.Config.MaintenanceWindows {
+			windows[i] = MaintenanceWindowModel{
+				Name:            types.StringValue(w.Name),
+				Description:     types.StringValue(w.Description),
+				ScheduleType:    types.StringValue(w.ScheduleType),
+				DayOfWeek:       types.StringValue(w.DayOfWeek),
+				Date:            types.StringValue(w.Date),
+				Hour:            types.Int64Value(w.Hour),
+				Minute:          types.Int64Value(w.Minute),
+				DurationMinutes: types.Int64Value(w.DurationMinutes),
+				Timezone:        types.StringValue(w.Timezone),
+				Enabled:         types.BoolValue(w.Enabled),
+			}
+			if w.Description == "" {
+				windows[i].Description = types.StringNull()
+			}
+			if w.Date == "" {
+				windows[i].Date = types.StringNull()
+			}
+			if w.Timezone == "" {
+				windows[i].Timezone = types.StringNull()
+			}
+		}
+		data.Maintenance = windows
+	} else if data.Maintenance != nil && len(data.Maintenance) == 0 {
+		data.Maintenance = []MaintenanceWindowModel{}
+	} else {
+		data.Maintenance = nil
 	}
 
 	return diags

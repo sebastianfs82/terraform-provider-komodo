@@ -134,10 +134,7 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the server. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the server.",
 			},
 			"address": schema.StringAttribute{
 				Optional:            true,
@@ -430,6 +427,20 @@ func (r *ServerResource) Update(ctx context.Context, req resource.UpdateRequest,
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	var state ServerResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameServer(ctx, client.RenameServerRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename server, got error: %s", err))
+			return
+		}
 	}
 
 	cfg, diags := serverConfigFromModel(ctx, &data)

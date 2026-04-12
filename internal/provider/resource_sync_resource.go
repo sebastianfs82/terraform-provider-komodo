@@ -80,10 +80,7 @@ func (r *ResourceSyncResource) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the resource sync. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the resource sync.",
 			},
 
 			// Git source
@@ -327,6 +324,15 @@ func (r *ResourceSyncResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 	data.ID = state.ID
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameResourceSync(ctx, client.RenameResourceSyncRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename resource sync, got error: %s", err))
+			return
+		}
+	}
 	updateReq := client.UpdateResourceSyncRequest{
 		ID:     data.ID.ValueString(),
 		Config: partialResourceSyncConfigFromModel(ctx, &data),

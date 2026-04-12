@@ -106,6 +106,41 @@ func TestAccDeploymentResource_disappears(t *testing.T) {
 	})
 }
 
+func TestAccDeploymentResource_rename(t *testing.T) {
+	var savedID string
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccDeploymentResourceConfig("tf-acc-deployment-rename-orig"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_deployment.test", "name", "tf-acc-deployment-rename-orig"),
+					resource.TestCheckResourceAttrSet("komodo_deployment.test", "id"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_deployment.test"]
+						savedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: testAccDeploymentResourceConfig("tf-acc-deployment-rename-new"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_deployment.test", "name", "tf-acc-deployment-rename-new"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_deployment.test"]
+						if rs.Primary.ID != savedID {
+							return fmt.Errorf("resource was recreated: ID changed from %q to %q", savedID, rs.Primary.ID)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func testAccDeploymentDisappears(resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]

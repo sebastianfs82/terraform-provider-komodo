@@ -17,6 +17,7 @@ import (
 )
 
 var _ datasource.DataSource = &RepoDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &RepoDataSource{}
 
 func NewRepoDataSource() datasource.DataSource {
 	return &RepoDataSource{}
@@ -60,12 +61,14 @@ func (d *RepoDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 		MarkdownDescription: "Reads an existing Komodo git repository.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The git repository identifier (ObjectId).",
+				MarkdownDescription: "The git repository identifier (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The name of the git repository.",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The name of the git repository. One of `name` or `id` must be set.",
 			},
 			"server_id": schema.StringAttribute{
 				Computed:            true,
@@ -184,21 +187,45 @@ func (d *RepoDataSource) Configure(ctx context.Context, req datasource.Configure
 	d.client = c
 }
 
+func (d *RepoDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data RepoDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *RepoDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data RepoDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading git repository data source", map[string]interface{}{"name": data.Name.ValueString()})
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading git repository data source", map[string]interface{}{"lookup": lookup})
 
-	repo, err := d.client.GetGitRepository(ctx, data.Name.ValueString())
+	repo, err := d.client.GetGitRepository(ctx, lookup)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read git repository, got error: %s", err))
 		return
 	}
 	if repo == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Git repository with name %q not found", data.Name.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Git repository %q not found", lookup))
 		return
 	}
 

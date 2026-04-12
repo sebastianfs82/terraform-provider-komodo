@@ -16,6 +16,7 @@ import (
 )
 
 var _ datasource.DataSource = &ResourceSyncDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &ResourceSyncDataSource{}
 
 func NewResourceSyncDataSource() datasource.DataSource {
 	return &ResourceSyncDataSource{}
@@ -66,12 +67,14 @@ func (d *ResourceSyncDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 		MarkdownDescription: "Reads an existing Komodo resource sync.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The resource sync identifier (ObjectId or name).",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The resource sync identifier (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The unique name of the resource sync.",
+				MarkdownDescription: "The unique name of the resource sync. One of `name` or `id` must be set.",
 			},
 
 			// Git source
@@ -179,23 +182,48 @@ func (d *ResourceSyncDataSource) Configure(_ context.Context, req datasource.Con
 	d.client = c
 }
 
+func (d *ResourceSyncDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data ResourceSyncDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *ResourceSyncDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data ResourceSyncDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading resource sync", map[string]interface{}{"id": data.ID.ValueString()})
-	rs, err := d.client.GetResourceSync(ctx, data.ID.ValueString())
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading resource sync", map[string]interface{}{"lookup": lookup})
+	rs, err := d.client.GetResourceSync(ctx, lookup)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read resource sync, got error: %s", err))
 		return
 	}
 	if rs == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Resource sync %q not found.", data.ID.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Resource sync %q not found.", lookup))
 		return
 	}
 
+	data.ID = types.StringValue(rs.ID.OID)
 	data.Name = types.StringValue(rs.Name)
 	cfg := rs.Config
 	data.LinkedRepo = types.StringValue(cfg.LinkedRepo)

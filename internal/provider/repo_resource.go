@@ -126,10 +126,7 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the git repository. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the git repository.",
 			},
 			"server_id": schema.StringAttribute{
 				Optional:            true,
@@ -338,6 +335,15 @@ func (r *RepoResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 	data.ID = state.ID
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameGitRepository(ctx, client.RenameGitRepositoryRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename repo, got error: %s", err))
+			return
+		}
+	}
 	updateReq := client.UpdateGitRepositoryRequest{
 		ID:     data.ID.ValueString(),
 		Config: repoConfigFromModel(ctx, r.client, &data),

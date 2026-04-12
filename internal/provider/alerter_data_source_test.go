@@ -35,8 +35,8 @@ func TestAccAlerterDataSource_fields(t *testing.T) {
 				Config: testAccAlerterDataSourceConfig_basic("tf-acc-alerter-ds-fields", "http://localhost:7002"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_alerter.test", "name", "tf-acc-alerter-ds-fields"),
-					resource.TestCheckResourceAttr("data.komodo_alerter.test", "endpoint_type", "Custom"),
-					resource.TestCheckResourceAttr("data.komodo_alerter.test", "custom_endpoint.url", "http://localhost:7002"),
+					resource.TestCheckResourceAttr("data.komodo_alerter.test", "endpoint.type", "Custom"),
+					resource.TestCheckResourceAttr("data.komodo_alerter.test", "endpoint.url", "http://localhost:7002"),
 				),
 			},
 		},
@@ -46,10 +46,10 @@ func TestAccAlerterDataSource_fields(t *testing.T) {
 func testAccAlerterDataSourceConfig_basic(name, url string) string {
 	return fmt.Sprintf(`
 resource "komodo_alerter" "src" {
-  name          = %q
-  endpoint_type = "Custom"
-  custom_endpoint = {
-    url = %q
+  name = %q
+  endpoint = {
+    type = "Custom"
+    url  = %q
   }
 }
 

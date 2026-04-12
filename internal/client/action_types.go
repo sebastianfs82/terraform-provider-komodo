@@ -39,6 +39,12 @@ type UpdateActionRequest struct {
 	Config PartialActionConfig `json:"config"`
 }
 
+// RenameActionRequest is the payload for the RenameAction write API.
+type RenameActionRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // PartialActionConfig holds optional config fields for Create/Update.
 type PartialActionConfig struct {
 	RunAtStartup     *bool   `json:"run_at_startup,omitempty"`

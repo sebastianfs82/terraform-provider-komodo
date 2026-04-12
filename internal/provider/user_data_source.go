@@ -15,6 +15,7 @@ import (
 )
 
 var _ datasource.DataSource = &UserDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &UserDataSource{}
 
 func NewUserDataSource() datasource.DataSource {
 	return &UserDataSource{}
@@ -86,6 +87,26 @@ func (d *UserDataSource) Configure(ctx context.Context, req datasource.Configure
 	d.client = c
 }
 
+func (d *UserDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data UserDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Username.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	usernameSet := !data.Username.IsNull()
+	idSet := !data.ID.IsNull()
+	if usernameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `username` or `id` may be set, not both.")
+		return
+	}
+	if !usernameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `username` or `id` must be set.")
+	}
+}
+
 func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data UserDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
@@ -96,10 +117,6 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	lookup := data.ID.ValueString()
 	if lookup == "" {
 		lookup = data.Username.ValueString()
-	}
-	if lookup == "" {
-		resp.Diagnostics.AddError("Missing Query Attribute", "Either id or username must be set to query a user.")
-		return
 	}
 
 	user, err := d.client.FindUser(ctx, lookup)

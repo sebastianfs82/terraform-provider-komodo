@@ -49,10 +49,10 @@ func TestAccAlertersDataSource_containsCreated(t *testing.T) {
 func testAccAlertersDataSourceConfig(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_alerter" "test" {
-  name          = %q
-  endpoint_type = "Custom"
-  custom_endpoint = {
-    url = "https://example.com/hook"
+  name = %q
+  endpoint = {
+    type = "Custom"
+    url  = "https://example.com/hook"
   }
 }
 

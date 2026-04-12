@@ -27,12 +27,12 @@ resource "komodo_provider_account" "example" {
 ### Required
 
 - `domain` (String) The git provider domain without protocol prefix (e.g. `github.com`).
-- `token` (String, Sensitive) The plaintext access token for the account.
 - `username` (String) The account username.
 
 ### Optional
 
 - `https_enabled` (Boolean) Whether to use HTTPS (true) or HTTP (false) for cloning.
+- `token` (String, Sensitive) The plaintext access token for the account.
 
 ### Read-Only
 

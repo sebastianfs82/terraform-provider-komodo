@@ -66,10 +66,7 @@ func (r *ActionResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the action. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the action.",
 			},
 			"run_at_startup": schema.BoolAttribute{
 				Optional:            true,
@@ -256,6 +253,15 @@ func (r *ActionResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 	data.ID = state.ID
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameAction(ctx, client.RenameActionRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename action, got error: %s", err))
+			return
+		}
+	}
 
 	updateReq := client.UpdateActionRequest{
 		ID:     data.ID.ValueString(),

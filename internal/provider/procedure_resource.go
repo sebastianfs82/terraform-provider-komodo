@@ -64,10 +64,7 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the procedure. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the procedure.",
 			},
 			"stages": schema.StringAttribute{
 				Optional:            true,
@@ -228,6 +225,15 @@ func (r *ProcedureResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 	data.ID = state.ID
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameProcedure(ctx, client.RenameProcedureRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename procedure, got error: %s", err))
+			return
+		}
+	}
 
 	cfg, d := partialProcedureConfigFromModel(&data)
 	resp.Diagnostics.Append(d...)

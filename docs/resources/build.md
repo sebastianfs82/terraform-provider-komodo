@@ -27,7 +27,7 @@ resource "komodo_build" "example" {
 
 ### Required
 
-- `name` (String) The unique name of the build. Changing this forces a new resource.
+- `name` (String) The unique name of the build.
 
 ### Optional
 

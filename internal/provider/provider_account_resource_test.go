@@ -145,6 +145,56 @@ func TestAccProviderAccountResource_httpsEnabledDefault(t *testing.T) {
 	})
 }
 
+func TestAccProviderAccountResource_noToken(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProviderAccountResourceConfig_noToken("github.com", true, "notokenuser"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_provider_account.test", "domain", "github.com"),
+					resource.TestCheckResourceAttr("komodo_provider_account.test", "https_enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_provider_account.test", "username", "notokenuser"),
+					resource.TestCheckNoResourceAttr("komodo_provider_account.test", "token"),
+					resource.TestCheckResourceAttrSet("komodo_provider_account.test", "id"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccProviderAccountResource_addToken(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProviderAccountResourceConfig_noToken("github.com", true, "addtokenuser"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("komodo_provider_account.test", "token"),
+				),
+			},
+			{
+				Config: testAccProviderAccountResourceConfig_basic("github.com", true, "addtokenuser", "newly-added-token"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_provider_account.test", "token", "newly-added-token"),
+				),
+			},
+		},
+	})
+}
+
+func testAccProviderAccountResourceConfig_noToken(domain string, https bool, username string) string {
+	return fmt.Sprintf(`
+resource "komodo_provider_account" "test" {
+  domain        = %q
+  https_enabled = %t
+  username      = %q
+}
+`, domain, https, username)
+}
+
 func testAccProviderAccountResourceConfig_noHttps(domain, username, token string) string {
 	return fmt.Sprintf(`
 resource "komodo_provider_account" "test" {

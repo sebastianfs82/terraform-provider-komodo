@@ -34,6 +34,7 @@ type AlerterListItemModel struct {
 	Name         types.String `tfsdk:"name"`
 	Enabled      types.Bool   `tfsdk:"enabled"`
 	EndpointType types.String `tfsdk:"endpoint_type"`
+	Types        types.List   `tfsdk:"types"`
 }
 
 func (d *AlertersDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -64,8 +65,11 @@ func (d *AlertersDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 						"endpoint_type": schema.StringAttribute{
 							Computed:            true,
 							MarkdownDescription: "The alerter endpoint type (Slack, Discord, Custom, etc.).",
-						},
-					},
+						}, "types": schema.ListAttribute{
+							Computed:            true,
+							ElementType:         types.StringType,
+							MarkdownDescription: "Alert types the alerter is configured to send. Empty means all types.",
+						}},
 				},
 			},
 		},
@@ -104,11 +108,17 @@ func (d *AlertersDataSource) Read(ctx context.Context, req datasource.ReadReques
 
 	items := make([]AlerterListItemModel, 0, len(alerters))
 	for _, a := range alerters {
+		alertTypes, atDiags := types.ListValueFrom(ctx, types.StringType, a.Config.AlertTypes)
+		resp.Diagnostics.Append(atDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		items = append(items, AlerterListItemModel{
 			ID:           types.StringValue(a.ID.OID),
 			Name:         types.StringValue(a.Name),
 			Enabled:      types.BoolValue(a.Config.Enabled),
 			EndpointType: types.StringValue(a.Config.Endpoint.Type),
+			Types:        alertTypes,
 		})
 	}
 	data.Alerters = items

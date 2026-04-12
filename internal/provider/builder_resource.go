@@ -88,10 +88,7 @@ func (r *BuilderResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "The unique name of the builder. Changing this forces a new resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				MarkdownDescription: "The unique name of the builder.",
 			},
 			"builder_type": schema.StringAttribute{
 				Required:            true,
@@ -373,6 +370,15 @@ func (r *BuilderResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 	data.ID = state.ID
+	if data.Name.ValueString() != state.Name.ValueString() {
+		if err := r.client.RenameBuilder(ctx, client.RenameBuilderRequest{
+			ID:   state.ID.ValueString(),
+			Name: data.Name.ValueString(),
+		}); err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to rename builder, got error: %s", err))
+			return
+		}
+	}
 	configInput, err := builderConfigInputFromModel(ctx, &data)
 	if err != nil {
 		resp.Diagnostics.AddError("Config Error", fmt.Sprintf("Unable to build builder config: %s", err))

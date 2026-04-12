@@ -41,7 +41,7 @@ resource "komodo_procedure" "example" {
 
 ### Required
 
-- `name` (String) The unique name of the procedure. Changing this forces a new resource.
+- `name` (String) The unique name of the procedure.
 
 ### Optional
 

@@ -49,6 +49,12 @@ type UpdateGitRepositoryRequest struct {
 	Config GitRepositoryConfig `json:"config"`
 }
 
+// RenameGitRepositoryRequest is the payload for the RenameRepo write API.
+type RenameGitRepositoryRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // DeleteGitRepositoryRequest is the request body for DeleteRepo.
 type DeleteGitRepositoryRequest struct {
 	ID string `json:"id"`

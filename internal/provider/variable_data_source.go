@@ -17,6 +17,7 @@ import (
 )
 
 var _ datasource.DataSource = &VariableDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &VariableDataSource{}
 
 func NewVariableDataSource() datasource.DataSource {
 	return &VariableDataSource{}
@@ -27,6 +28,7 @@ type VariableDataSource struct {
 }
 
 type VariableDataSourceModel struct {
+	ID            types.String `tfsdk:"id"`
 	Name          types.String `tfsdk:"name"`
 	Value         types.String `tfsdk:"value"`
 	Description   types.String `tfsdk:"description"`
@@ -41,9 +43,15 @@ func (d *VariableDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Reads an existing Komodo variable.",
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The variable identifier (same as name). One of `name` or `id` must be set.",
+			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The variable name.",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The variable name. One of `name` or `id` must be set.",
 			},
 			"value": schema.StringAttribute{
 				Computed:            true,
@@ -76,13 +84,37 @@ func (d *VariableDataSource) Configure(ctx context.Context, req datasource.Confi
 	d.client = c
 }
 
+func (d *VariableDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data VariableDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *VariableDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data VariableDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading variable data source", map[string]interface{}{"name": data.Name.ValueString()})
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading variable data source", map[string]interface{}{"lookup": lookup})
 
 	// Find variable by name (case-insensitive)
 	variables, err := d.client.ListVariables(ctx)
@@ -92,15 +124,16 @@ func (d *VariableDataSource) Read(ctx context.Context, req datasource.ReadReques
 	}
 	var variable *client.Variable
 	for _, v := range variables {
-		if strings.EqualFold(v.Name, data.Name.ValueString()) {
+		if strings.EqualFold(v.Name, lookup) {
 			variable = &v
 			break
 		}
 	}
 	if variable == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Variable with name %s not found", data.Name.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Variable %q not found", lookup))
 		return
 	}
+	data.ID = types.StringValue(variable.Name)
 	data.Name = types.StringValue(variable.Name)
 	data.Value = types.StringValue(variable.Value)
 	data.Description = types.StringValue(variable.Description)

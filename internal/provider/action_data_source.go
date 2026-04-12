@@ -17,6 +17,7 @@ import (
 )
 
 var _ datasource.DataSource = &ActionDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &ActionDataSource{}
 
 func NewActionDataSource() datasource.DataSource {
 	return &ActionDataSource{}
@@ -53,12 +54,14 @@ func (d *ActionDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 		MarkdownDescription: "Reads an existing Komodo action resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The action identifier (ObjectId or name).",
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "The action identifier (ObjectId). One of `name` or `id` must be set.",
 			},
 			"name": schema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "The unique name of the action.",
+				MarkdownDescription: "The unique name of the action. One of `name` or `id` must be set.",
 			},
 			"run_at_startup": schema.BoolAttribute{
 				Computed:            true,
@@ -132,22 +135,47 @@ func (d *ActionDataSource) Configure(ctx context.Context, req datasource.Configu
 	d.client = c
 }
 
+func (d *ActionDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var data ActionDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Name.IsUnknown() || data.ID.IsUnknown() {
+		return
+	}
+	nameSet := !data.Name.IsNull()
+	idSet := !data.ID.IsNull()
+	if nameSet && idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "Only one of `name` or `id` may be set, not both.")
+		return
+	}
+	if !nameSet && !idSet {
+		resp.Diagnostics.AddError("Invalid Configuration", "One of `name` or `id` must be set.")
+	}
+}
+
 func (d *ActionDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data ActionDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "Reading action", map[string]interface{}{"id": data.ID.ValueString()})
-	a, err := d.client.GetAction(ctx, data.ID.ValueString())
+	lookup := data.Name.ValueString()
+	if lookup == "" {
+		lookup = data.ID.ValueString()
+	}
+	tflog.Debug(ctx, "Reading action", map[string]interface{}{"lookup": lookup})
+	a, err := d.client.GetAction(ctx, lookup)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read action, got error: %s", err))
 		return
 	}
 	if a == nil {
-		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Action %q not found.", data.ID.ValueString()))
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("Action %q not found.", lookup))
 		return
 	}
+	data.ID = types.StringValue(a.ID.OID)
 	data.Name = types.StringValue(a.Name)
 	data.RunAtStartup = types.BoolValue(a.Config.RunAtStartup)
 	data.ScheduleFormat = types.StringValue(a.Config.ScheduleFormat)

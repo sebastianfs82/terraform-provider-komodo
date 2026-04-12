@@ -129,6 +129,12 @@ type UpdateServerRequest struct {
 	Config PartialServerConfig `json:"config"`
 }
 
+// RenameServerRequest is the payload for the RenameServer write API.
+type RenameServerRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // DeleteServerRequest is the request body for DeleteServer.
 type DeleteServerRequest struct {
 	ID string `json:"id"`
