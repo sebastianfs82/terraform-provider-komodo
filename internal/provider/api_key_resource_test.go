@@ -24,7 +24,7 @@ func TestAccApiKeyResource_basic(t *testing.T) {
 				Config: testAccApiKeyResourceConfig("tf-acc-api-key-basic"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_api_key.test", "name", "tf-acc-api-key-basic"),
-					resource.TestCheckResourceAttr("komodo_api_key.test", "expires", "0"),
+					resource.TestCheckResourceAttr("komodo_api_key.test", "expires_at", ""),
 					resource.TestCheckResourceAttrSet("komodo_api_key.test", "key"),
 					resource.TestCheckResourceAttrSet("komodo_api_key.test", "secret"),
 					resource.TestCheckResourceAttrSet("komodo_api_key.test", "user_id"),
@@ -41,10 +41,10 @@ func TestAccApiKeyResource_withExpiration(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccApiKeyResourceConfigWithExpiration("tf-acc-api-key-expiring", 1893456000000),
+				Config: testAccApiKeyResourceConfigWithExpiration("tf-acc-api-key-expiring", "2030-01-01T00:00:00Z"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_api_key.test", "name", "tf-acc-api-key-expiring"),
-					resource.TestCheckResourceAttr("komodo_api_key.test", "expires", "1893456000000"),
+					resource.TestCheckResourceAttr("komodo_api_key.test", "expires_at", "2030-01-01T00:00:00Z"),
 					resource.TestCheckResourceAttrSet("komodo_api_key.test", "key"),
 					resource.TestCheckResourceAttrSet("komodo_api_key.test", "secret"),
 				),
@@ -62,7 +62,7 @@ func TestAccApiKeyResource_serviceUser(t *testing.T) {
 				Config: testAccApiKeyResourceConfigServiceUser("tf-acc-svc-apikey", "tf-acc-svc-apikey-key"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_api_key.test", "name", "tf-acc-svc-apikey-key"),
-					resource.TestCheckResourceAttr("komodo_api_key.test", "expires", "0"),
+					resource.TestCheckResourceAttr("komodo_api_key.test", "expires_at", ""),
 					resource.TestCheckResourceAttrSet("komodo_api_key.test", "key"),
 					resource.TestCheckResourceAttrSet("komodo_api_key.test", "secret"),
 					resource.TestCheckResourceAttrPair(
@@ -151,11 +151,11 @@ resource "komodo_api_key" "test" {
 `, name)
 }
 
-func testAccApiKeyResourceConfigWithExpiration(name string, expires int64) string {
+func testAccApiKeyResourceConfigWithExpiration(name string, expires string) string {
 	return fmt.Sprintf(`
 resource "komodo_api_key" "test" {
   name    = %q
-  expires = %d
+  expires_at = %q
 }
 `, name, expires)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -148,6 +149,8 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 					},
 					"https_enabled": schema.BoolAttribute{
 						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(true),
 						MarkdownDescription: "Whether to use HTTPS (true) or HTTP (false) for cloning. Defaults to true.",
 					},
 					"account_id": schema.StringAttribute{
@@ -538,17 +541,16 @@ func repoToModel(ctx context.Context, c *client.Client, repo *client.GitReposito
 		if repo.Config.Commit != "" {
 			gitCommit = types.StringValue(repo.Config.Commit)
 		}
-		// When account_id is set, domain/https_enabled are derived from the linked
-		// account and should not be persisted to state (they were never in config).
-		// Only store them when the user explicitly configured them (account_id absent).
+		// domain is only stored when no account_id is linked (it is derived from the
+		// linked account otherwise). https_enabled is always persisted so that the
+		// Computed default does not produce a post-apply inconsistency.
 		domainVal := types.StringNull()
-		httpsVal := types.BoolNull()
 		if gitAccount.IsNull() {
 			if repo.Config.GitProvider != "" {
 				domainVal = types.StringValue(repo.Config.GitProvider)
 			}
-			httpsVal = types.BoolValue(repo.Config.GitHttps)
 		}
+		httpsVal := types.BoolValue(repo.Config.GitHttps)
 		data.Source = &RepositoryProviderModel{
 			Domain:       domainVal,
 			HttpsEnabled: httpsVal,

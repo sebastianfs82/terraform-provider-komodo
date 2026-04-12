@@ -21,6 +21,7 @@ import (
 
 var _ resource.Resource = &ServiceUserResource{}
 var _ resource.ResourceWithImportState = &ServiceUserResource{}
+var _ resource.ResourceWithValidateConfig = &ServiceUserResource{}
 
 func NewServiceUserResource() resource.Resource {
 	return &ServiceUserResource{}
@@ -31,13 +32,13 @@ type ServiceUserResource struct {
 }
 
 type ServiceUserResourceModel struct {
-	ID            types.String `tfsdk:"id"`
-	Username      types.String `tfsdk:"username"`
-	Description   types.String `tfsdk:"description"`
-	Enabled       types.Bool   `tfsdk:"enabled"`
-	Admin         types.Bool   `tfsdk:"admin"`
-	CreateServers types.Bool   `tfsdk:"create_servers"`
-	CreateBuilds  types.Bool   `tfsdk:"create_builds"`
+	ID                  types.String `tfsdk:"id"`
+	Username            types.String `tfsdk:"username"`
+	Description         types.String `tfsdk:"description"`
+	Enabled             types.Bool   `tfsdk:"enabled"`
+	AdminEnabled        types.Bool   `tfsdk:"admin_enabled"`
+	CreateServerEnabled types.Bool   `tfsdk:"create_server_enabled"`
+	CreateBuildEnabled  types.Bool   `tfsdk:"create_build_enabled"`
 }
 
 func (r *ServiceUserResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -73,26 +74,52 @@ func (r *ServiceUserResource) Schema(ctx context.Context, req resource.SchemaReq
 			"enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
+				Default:             booldefault.StaticBool(true),
 				MarkdownDescription: "Whether the service user is enabled and able to access the API.",
 			},
-			"admin": schema.BoolAttribute{
+			"admin_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
+				Default:             booldefault.StaticBool(false),
 				MarkdownDescription: "Whether the service user has global admin permissions.",
 			},
-			"create_servers": schema.BoolAttribute{
+			"create_server_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Whether the service user can create servers.",
+				MarkdownDescription: "Whether the service user can create servers. Cannot be set when admin_enabled is true.",
 			},
-			"create_builds": schema.BoolAttribute{
+			"create_build_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Whether the service user can create builds.",
+				MarkdownDescription: "Whether the service user can create builds. Cannot be set when admin_enabled is true.",
 			},
 		},
+	}
+}
+
+func (r *ServiceUserResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data ServiceUserResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.AdminEnabled.ValueBool() {
+		if data.CreateServerEnabled.ValueBool() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("create_server_enabled"),
+				"Invalid Configuration",
+				"create_server_enabled cannot be set to true alongside admin_enabled = true. Admins implicitly have all permissions.",
+			)
+		}
+		if data.CreateBuildEnabled.ValueBool() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("create_build_enabled"),
+				"Invalid Configuration",
+				"create_build_enabled cannot be set to true alongside admin_enabled = true. Admins implicitly have all permissions.",
+			)
+		}
 	}
 }
 
@@ -138,7 +165,7 @@ func (r *ServiceUserResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	if !data.Admin.IsNull() && !data.Admin.IsUnknown() && data.Admin.ValueBool() {
+	if !data.AdminEnabled.IsNull() && !data.AdminEnabled.IsUnknown() && data.AdminEnabled.ValueBool() {
 		if err := r.client.UpdateUserAdmin(ctx, client.UpdateUserAdminRequest{
 			UserID: user.ID.OID,
 			Admin:  true,
@@ -155,13 +182,13 @@ func (r *ServiceUserResource) Create(ctx context.Context, req resource.CreateReq
 		permReq.Enabled = &v
 		needsPerms = true
 	}
-	if !data.CreateServers.IsNull() && !data.CreateServers.IsUnknown() {
-		v := data.CreateServers.ValueBool()
+	if !data.CreateServerEnabled.IsNull() && !data.CreateServerEnabled.IsUnknown() {
+		v := data.CreateServerEnabled.ValueBool()
 		permReq.CreateServers = &v
 		needsPerms = true
 	}
-	if !data.CreateBuilds.IsNull() && !data.CreateBuilds.IsUnknown() {
-		v := data.CreateBuilds.ValueBool()
+	if !data.CreateBuildEnabled.IsNull() && !data.CreateBuildEnabled.IsUnknown() {
+		v := data.CreateBuildEnabled.ValueBool()
 		permReq.CreateBuilds = &v
 		needsPerms = true
 	}
@@ -185,9 +212,9 @@ func (r *ServiceUserResource) Create(ctx context.Context, req resource.CreateReq
 	data.ID = types.StringValue(user.ID.OID)
 	data.Username = types.StringValue(user.Username)
 	data.Enabled = types.BoolValue(user.Enabled)
-	data.Admin = types.BoolValue(user.Admin)
-	data.CreateServers = types.BoolValue(user.CreateServers)
-	data.CreateBuilds = types.BoolValue(user.CreateBuilds)
+	data.AdminEnabled = types.BoolValue(user.Admin)
+	data.CreateServerEnabled = types.BoolValue(user.CreateServers)
+	data.CreateBuildEnabled = types.BoolValue(user.CreateBuilds)
 	// description is not returned by the API; ensure it is always a known value
 	if data.Description.IsNull() || data.Description.IsUnknown() {
 		data.Description = types.StringValue("")
@@ -219,9 +246,9 @@ func (r *ServiceUserResource) Read(ctx context.Context, req resource.ReadRequest
 	data.ID = types.StringValue(user.ID.OID)
 	data.Username = types.StringValue(user.Username)
 	data.Enabled = types.BoolValue(user.Enabled)
-	data.Admin = types.BoolValue(user.Admin)
-	data.CreateServers = types.BoolValue(user.CreateServers)
-	data.CreateBuilds = types.BoolValue(user.CreateBuilds)
+	data.AdminEnabled = types.BoolValue(user.Admin)
+	data.CreateServerEnabled = types.BoolValue(user.CreateServers)
+	data.CreateBuildEnabled = types.BoolValue(user.CreateBuilds)
 	// description is not returned by the API; preserve whatever is in state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -244,10 +271,10 @@ func (r *ServiceUserResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 
-	if !plan.Admin.Equal(state.Admin) {
+	if !plan.AdminEnabled.Equal(state.AdminEnabled) {
 		err := r.client.UpdateUserAdmin(ctx, client.UpdateUserAdminRequest{
 			UserID: state.ID.ValueString(),
-			Admin:  plan.Admin.ValueBool(),
+			Admin:  plan.AdminEnabled.ValueBool(),
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update service user admin status, got error: %s", err))
@@ -255,10 +282,10 @@ func (r *ServiceUserResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 
-	if !plan.Enabled.Equal(state.Enabled) || !plan.CreateServers.Equal(state.CreateServers) || !plan.CreateBuilds.Equal(state.CreateBuilds) {
+	if !plan.Enabled.Equal(state.Enabled) || !plan.CreateServerEnabled.Equal(state.CreateServerEnabled) || !plan.CreateBuildEnabled.Equal(state.CreateBuildEnabled) {
 		enabledVal := plan.Enabled.ValueBool()
-		createServersVal := plan.CreateServers.ValueBool()
-		createBuildsVal := plan.CreateBuilds.ValueBool()
+		createServersVal := plan.CreateServerEnabled.ValueBool()
+		createBuildsVal := plan.CreateBuildEnabled.ValueBool()
 		err := r.client.UpdateUserBasePermissions(ctx, client.UpdateUserBasePermissionsRequest{
 			UserID:        state.ID.ValueString(),
 			Enabled:       &enabledVal,
@@ -284,9 +311,9 @@ func (r *ServiceUserResource) Update(ctx context.Context, req resource.UpdateReq
 	plan.ID = types.StringValue(user.ID.OID)
 	plan.Username = types.StringValue(user.Username)
 	plan.Enabled = types.BoolValue(user.Enabled)
-	plan.Admin = types.BoolValue(user.Admin)
-	plan.CreateServers = types.BoolValue(user.CreateServers)
-	plan.CreateBuilds = types.BoolValue(user.CreateBuilds)
+	plan.AdminEnabled = types.BoolValue(user.Admin)
+	plan.CreateServerEnabled = types.BoolValue(user.CreateServers)
+	plan.CreateBuildEnabled = types.BoolValue(user.CreateBuilds)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

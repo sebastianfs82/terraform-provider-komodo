@@ -33,9 +33,9 @@ type UserGroupMembershipResource struct {
 
 // UserGroupMembershipResourceModel describes the resource data model.
 type UserGroupMembershipResourceModel struct {
-	ID        types.String `tfsdk:"id"`
-	UserGroup types.String `tfsdk:"user_group"`
-	User      types.String `tfsdk:"user"`
+	ID          types.String `tfsdk:"id"`
+	UserGroupID types.String `tfsdk:"user_group_id"`
+	UserID      types.String `tfsdk:"user_id"`
 }
 
 func (r *UserGroupMembershipResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -51,19 +51,19 @@ func (r *UserGroupMembershipResource) Schema(ctx context.Context, req resource.S
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The resource ID, formatted as `{user_group}/{user}`.",
+				MarkdownDescription: "The resource ID, formatted as `{user_group_id}/{user_id}`.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"user_group": schema.StringAttribute{
+			"user_group_id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The name or ID of the user group.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"user": schema.StringAttribute{
+			"user_id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The username or ID of the user to add to the group.",
 				PlanModifiers: []planmodifier.String{
@@ -99,15 +99,32 @@ func (r *UserGroupMembershipResource) Create(ctx context.Context, req resource.C
 		return
 	}
 
-	userGroup := data.UserGroup.ValueString()
-	user := data.User.ValueString()
+	userGroup := data.UserGroupID.ValueString()
+	user := data.UserID.ValueString()
+
+	group, err := r.client.GetUserGroup(ctx, userGroup)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read user group %q, got error: %s", userGroup, err))
+		return
+	}
+	if group == nil {
+		resp.Diagnostics.AddError("Not Found", fmt.Sprintf("User group %q does not exist.", userGroup))
+		return
+	}
+	if group.Everyone {
+		resp.Diagnostics.AddError(
+			"Invalid Configuration",
+			fmt.Sprintf("Cannot add user %q to user group %q: \"everyone_enabled\" is true on that group, which already grants access to all users.", user, userGroup),
+		)
+		return
+	}
 
 	tflog.Debug(ctx, "Adding user to user group", map[string]interface{}{
-		"user_group": userGroup,
-		"user":       user,
+		"user_group_id": userGroup,
+		"user_id":       user,
 	})
 
-	_, err := r.client.AddUserToUserGroup(ctx, client.AddUserToUserGroupRequest{
+	_, err = r.client.AddUserToUserGroup(ctx, client.AddUserToUserGroupRequest{
 		UserGroup: userGroup,
 		User:      user,
 	})
@@ -131,8 +148,8 @@ func (r *UserGroupMembershipResource) Read(ctx context.Context, req resource.Rea
 		return
 	}
 
-	userGroup := data.UserGroup.ValueString()
-	user := data.User.ValueString()
+	userGroup := data.UserGroupID.ValueString()
+	user := data.UserID.ValueString()
 
 	group, err := r.client.GetUserGroup(ctx, userGroup)
 	if err != nil {
@@ -150,8 +167,8 @@ func (r *UserGroupMembershipResource) Read(ctx context.Context, req resource.Rea
 
 	if !found {
 		tflog.Debug(ctx, "User no longer in group, removing from state", map[string]interface{}{
-			"user_group": userGroup,
-			"user":       user,
+			"user_group_id": userGroup,
+			"user_id":       user,
 		})
 		resp.State.RemoveResource(ctx)
 		return
@@ -172,12 +189,12 @@ func (r *UserGroupMembershipResource) Delete(ctx context.Context, req resource.D
 		return
 	}
 
-	userGroup := data.UserGroup.ValueString()
-	user := data.User.ValueString()
+	userGroup := data.UserGroupID.ValueString()
+	user := data.UserID.ValueString()
 
 	tflog.Debug(ctx, "Removing user from user group", map[string]interface{}{
-		"user_group": userGroup,
-		"user":       user,
+		"user_group_id": userGroup,
+		"user_id":       user,
 	})
 
 	_, err := r.client.RemoveUserFromUserGroup(ctx, client.RemoveUserFromUserGroupRequest{
@@ -203,9 +220,9 @@ func (r *UserGroupMembershipResource) ImportState(ctx context.Context, req resou
 	}
 
 	data := UserGroupMembershipResourceModel{
-		ID:        types.StringValue(req.ID),
-		UserGroup: types.StringValue(parts[0]),
-		User:      types.StringValue(parts[1]),
+		ID:          types.StringValue(req.ID),
+		UserGroupID: types.StringValue(parts[0]),
+		UserID:      types.StringValue(parts[1]),
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

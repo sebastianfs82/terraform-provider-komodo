@@ -17,7 +17,7 @@ Komodo is a self-hosted tool for building and deploying Docker containers at sca
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0
-- A running [Komodo](https://komo.do/) instance
+- A running [Komodo](https://komo.do/) instance **v2.0.0 or above**
 
 ## Authentication
 

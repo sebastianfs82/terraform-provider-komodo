@@ -27,10 +27,10 @@ type VariableDataSource struct {
 }
 
 type VariableDataSourceModel struct {
-	Name        types.String `tfsdk:"name"`
-	Value       types.String `tfsdk:"value"`
-	Description types.String `tfsdk:"description"`
-	IsSecret    types.Bool   `tfsdk:"is_secret"`
+	Name          types.String `tfsdk:"name"`
+	Value         types.String `tfsdk:"value"`
+	Description   types.String `tfsdk:"description"`
+	SecretEnabled types.Bool   `tfsdk:"secret_enabled"`
 }
 
 func (d *VariableDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -53,7 +53,7 @@ func (d *VariableDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Computed:            true,
 				MarkdownDescription: "The variable description.",
 			},
-			"is_secret": schema.BoolAttribute{
+			"secret_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether the variable is secret.",
 			},
@@ -104,6 +104,6 @@ func (d *VariableDataSource) Read(ctx context.Context, req datasource.ReadReques
 	data.Name = types.StringValue(variable.Name)
 	data.Value = types.StringValue(variable.Value)
 	data.Description = types.StringValue(variable.Description)
-	data.IsSecret = types.BoolValue(variable.IsSecret)
+	data.SecretEnabled = types.BoolValue(variable.IsSecret)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

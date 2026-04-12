@@ -35,5 +35,5 @@ data "komodo_onboarding_key" "by_public_key" {
 - `copy_server` (String) ID or name of a server to copy configuration from.
 - `create_builder` (Boolean) Whether to create a builder for the onboarded server.
 - `enabled` (Boolean) Whether the onboarding key is enabled.
-- `expires` (Number) The expiry timestamp (Unix ms). 0 means no expiry.
+- `expires` (String) Expiration time in RFC3339 format. Empty string means no expiration.
 - `privileged` (Boolean) Whether the onboarding key grants privileged access.

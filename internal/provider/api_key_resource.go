@@ -6,13 +6,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -23,6 +23,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &ApiKeyResource{}
 var _ resource.ResourceWithImportState = &ApiKeyResource{}
+var _ resource.ResourceWithValidateConfig = &ApiKeyResource{}
 
 func NewApiKeyResource() resource.Resource {
 	return &ApiKeyResource{}
@@ -40,8 +41,8 @@ type ApiKeyResourceModel struct {
 	Name          types.String `tfsdk:"name"`
 	UserID        types.String `tfsdk:"user_id"`
 	ServiceUserID types.String `tfsdk:"service_user_id"`
-	CreatedAt     types.Int64  `tfsdk:"created_at"`
-	Expires       types.Int64  `tfsdk:"expires"`
+	CreatedAt     types.String `tfsdk:"created_at"`
+	ExpiresAt     types.String `tfsdk:"expires_at"`
 }
 
 func (r *ApiKeyResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -89,20 +90,50 @@ func (r *ApiKeyResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"created_at": schema.Int64Attribute{
+			"created_at": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Creation timestamp in milliseconds since epoch.",
+				MarkdownDescription: "Creation timestamp in RFC3339 format.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
-			"expires": schema.Int64Attribute{
+			"expires_at": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				Default:             int64default.StaticInt64(0),
-				MarkdownDescription: "Expiration timestamp in milliseconds since epoch. Use 0 for no expiration.",
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.RequiresReplace(),
+				Default:             stringdefault.StaticString(""),
+				MarkdownDescription: "Expiration time in RFC3339 format (e.g. `2030-01-01T00:00:00Z`). Use `\"\"` (empty string) for no expiration.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 		},
+	}
+}
+
+func (r *ApiKeyResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data ApiKeyResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.ExpiresAt.IsNull() || data.ExpiresAt.IsUnknown() || data.ExpiresAt.ValueString() == "" {
+		return
+	}
+	t, err := time.Parse(time.RFC3339, data.ExpiresAt.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("expires_at"),
+			"Invalid RFC3339 Timestamp",
+			fmt.Sprintf(`"expires_at" must be a valid RFC3339 timestamp (e.g. "2030-01-01T00:00:00Z") or "" for no expiration. Got: %q.`, data.ExpiresAt.ValueString()),
+		)
+		return
+	}
+	if !t.After(time.Now()) {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("expires_at"),
+			"Invalid Expiration Timestamp",
+			fmt.Sprintf(`"expires_at" must be a future timestamp or "" for no expiration. Got %q, which is already in the past.`, data.ExpiresAt.ValueString()),
+		)
 	}
 }
 
@@ -135,16 +166,22 @@ func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 	var key *client.ApiKey
 	var err error
 
+	expiresMs, err := rfc3339ToMs(data.ExpiresAt.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid expires_at value", err.Error())
+		return
+	}
+
 	if !data.ServiceUserID.IsNull() && !data.ServiceUserID.IsUnknown() && data.ServiceUserID.ValueString() != "" {
 		key, err = r.client.CreateApiKeyForServiceUser(ctx, client.CreateApiKeyForServiceUserRequest{
 			UserID:  data.ServiceUserID.ValueString(),
 			Name:    data.Name.ValueString(),
-			Expires: data.Expires.ValueInt64(),
+			Expires: expiresMs,
 		})
 	} else {
 		key, err = r.client.CreateApiKey(ctx, client.CreateApiKeyRequest{
 			Name:    data.Name.ValueString(),
-			Expires: data.Expires.ValueInt64(),
+			Expires: expiresMs,
 		})
 	}
 	if err != nil {
@@ -156,8 +193,8 @@ func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 	data.Secret = types.StringValue(key.Secret)
 	data.UserID = types.StringValue(key.UserID)
 	data.Name = types.StringValue(key.Name)
-	data.CreatedAt = types.Int64Value(key.CreatedAt)
-	data.Expires = types.Int64Value(key.Expires)
+	data.CreatedAt = types.StringValue(msToRFC3339(key.CreatedAt))
+	data.ExpiresAt = types.StringValue(msToRFC3339(key.Expires))
 
 	tflog.Trace(ctx, "Created API key resource")
 
@@ -195,8 +232,8 @@ func (r *ApiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	data.Key = types.StringValue(key.Key)
 	data.UserID = types.StringValue(key.UserID)
 	data.Name = types.StringValue(key.Name)
-	data.CreatedAt = types.Int64Value(key.CreatedAt)
-	data.Expires = types.Int64Value(key.Expires)
+	data.CreatedAt = types.StringValue(msToRFC3339(key.CreatedAt))
+	data.ExpiresAt = types.StringValue(msToRFC3339(key.Expires))
 	// Secret is only returned on creation; preserve the existing state value.
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

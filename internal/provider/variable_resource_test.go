@@ -26,7 +26,7 @@ func TestAccVariableResource_basic(t *testing.T) {
 					resource.TestCheckResourceAttr("komodo_variable.test", "name", "MY_VAR"),
 					resource.TestCheckResourceAttr("komodo_variable.test", "value", "my-value"),
 					resource.TestCheckResourceAttr("komodo_variable.test", "description", "desc"),
-					resource.TestCheckResourceAttr("komodo_variable.test", "is_secret", "false"),
+					resource.TestCheckResourceAttr("komodo_variable.test", "secret_enabled", "false"),
 					resource.TestCheckResourceAttrSet("komodo_variable.test", "id"),
 				),
 			},
@@ -42,7 +42,7 @@ func TestAccVariableResource_secret(t *testing.T) {
 			{
 				Config: testAccVariableResourceConfig_basic("SECRET_VAR", "supersecret", "desc", true),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_variable.test", "is_secret", "true"),
+					resource.TestCheckResourceAttr("komodo_variable.test", "secret_enabled", "true"),
 				),
 			},
 		},
@@ -95,7 +95,7 @@ resource "komodo_variable" "test" {
   name        = "%s"
   value       = "%s"
   description = "%s"
-  is_secret   = %t
+  secret_enabled = %t
 }
 `, name, value, description, isSecret)
 }
@@ -111,6 +111,78 @@ resource "komodo_variable" "test2" {
 }
 `, name1, name2)
 }
+
+// TestAccVariableResource_update verifies that updating value does not mark
+// secret_enabled as unknown — it must remain at its known state value.
+func TestAccVariableResource_update(t *testing.T) {
+	const name = "tf-acc-variable-update"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccVariableResourceConfig_basic(name, "value-one", "desc", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_variable.test", "value", "value-one"),
+					resource.TestCheckResourceAttr("komodo_variable.test", "secret_enabled", "false"),
+				),
+			},
+			{
+				Config: testAccVariableResourceConfig_basic(name, "value-two", "desc", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_variable.test", "value", "value-two"),
+					// secret_enabled must stay known (false) after updating an unrelated field
+					resource.TestCheckResourceAttr("komodo_variable.test", "secret_enabled", "false"),
+				),
+			},
+		},
+	})
+}
+
+// TestAccVariableResource_descriptionDefault verifies that omitting description
+// from config results in an empty string (not unknown after apply).
+func TestAccVariableResource_descriptionDefault(t *testing.T) {
+	const name = "tf-acc-variable-desc-default"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccVariableResourceConfig_noDescription(name, "hello"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_variable.test", "name", name),
+					// description must be "" when omitted, not unknown
+					resource.TestCheckResourceAttr("komodo_variable.test", "description", ""),
+				),
+			},
+		},
+	})
+}
+
+// TestAccVariableResource_descriptionUpdate verifies that changing the description
+// value is applied and reflected in state correctly.
+func TestAccVariableResource_descriptionUpdate(t *testing.T) {
+	const name = "tf-acc-variable-desc-update"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccVariableResourceConfig_basic(name, "val", "initial description", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_variable.test", "description", "initial description"),
+				),
+			},
+			{
+				Config: testAccVariableResourceConfig_basic(name, "val", "updated description", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_variable.test", "description", "updated description"),
+				),
+			},
+		},
+	})
+}
+
 func TestAccVariableResource_disappears(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -126,6 +198,15 @@ func TestAccVariableResource_disappears(t *testing.T) {
 			},
 		},
 	})
+}
+
+func testAccVariableResourceConfig_noDescription(name, value string) string {
+	return fmt.Sprintf(`
+resource "komodo_variable" "test" {
+  name  = %q
+  value = %q
+}
+`, name, value)
 }
 
 func testAccVariableDisappears(resourceName string) resource.TestCheckFunc {

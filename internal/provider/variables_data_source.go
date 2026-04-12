@@ -54,7 +54,7 @@ func (d *VariablesDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 							Computed:            true,
 							MarkdownDescription: "An optional description of the variable.",
 						},
-						"is_secret": schema.BoolAttribute{
+						"secret_enabled": schema.BoolAttribute{
 							Computed:            true,
 							MarkdownDescription: "Whether the variable is treated as a secret.",
 						},
@@ -98,10 +98,10 @@ func (d *VariablesDataSource) Read(ctx context.Context, req datasource.ReadReque
 	items := make([]VariableDataSourceModel, 0, len(variables))
 	for _, v := range variables {
 		items = append(items, VariableDataSourceModel{
-			Name:        types.StringValue(v.Name),
-			Value:       types.StringValue(v.Value),
-			Description: types.StringValue(v.Description),
-			IsSecret:    types.BoolValue(v.IsSecret),
+			Name:          types.StringValue(v.Name),
+			Value:         types.StringValue(v.Value),
+			Description:   types.StringValue(v.Description),
+			SecretEnabled: types.BoolValue(v.IsSecret),
 		})
 	}
 	data.Variables = items

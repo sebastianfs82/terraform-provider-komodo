@@ -28,9 +28,9 @@ data "komodo_users" "all" {}
 
 Read-Only:
 
-- `admin` (Boolean) Whether the user has global admin permissions.
-- `create_builds` (Boolean) Whether the user can create builds.
-- `create_servers` (Boolean) Whether the user can create servers.
+- `admin_enabled` (Boolean) Whether the user has global admin permissions.
+- `create_build_enabled` (Boolean) Whether the user can create builds.
+- `create_server_enabled` (Boolean) Whether the user can create servers.
 - `enabled` (Boolean) Whether the user is enabled and able to access the API.
 - `id` (String) The user identifier (ObjectId).
 - `username` (String) The globally unique username.

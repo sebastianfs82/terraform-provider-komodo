@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -30,12 +31,12 @@ type UserGroupsDataSourceModel struct {
 }
 
 type UserGroupItem struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	Everyone  types.Bool   `tfsdk:"everyone"`
-	Users     types.List   `tfsdk:"users"`
-	All       types.Map    `tfsdk:"all"`
-	UpdatedAt types.Int64  `tfsdk:"updated_at"`
+	ID              types.String `tfsdk:"id"`
+	Name            types.String `tfsdk:"name"`
+	EveryoneEnabled types.Bool   `tfsdk:"everyone_enabled"`
+	Users           types.List   `tfsdk:"users"`
+	All             types.Map    `tfsdk:"all"`
+	UpdatedAt       types.String `tfsdk:"updated_at"`
 }
 
 func (d *UserGroupsDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -59,7 +60,7 @@ func (d *UserGroupsDataSource) Schema(ctx context.Context, req datasource.Schema
 							Computed:            true,
 							MarkdownDescription: "The user group name.",
 						},
-						"everyone": schema.BoolAttribute{
+						"everyone_enabled": schema.BoolAttribute{
 							Computed:            true,
 							MarkdownDescription: "Whether this is the 'everyone' group.",
 						},
@@ -73,9 +74,9 @@ func (d *UserGroupsDataSource) Schema(ctx context.Context, req datasource.Schema
 							Computed:            true,
 							MarkdownDescription: "All permissions or metadata associated with the group.",
 						},
-						"updated_at": schema.Int64Attribute{
+						"updated_at": schema.StringAttribute{
 							Computed:            true,
-							MarkdownDescription: "Last update timestamp.",
+							MarkdownDescription: "Last update timestamp in RFC3339 format.",
 						},
 					},
 				},
@@ -133,12 +134,12 @@ func (d *UserGroupsDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		all := types.MapValueMust(types.StringType, allMap)
 
 		items = append(items, UserGroupItem{
-			ID:        types.StringValue(g.ID.OID),
-			Name:      types.StringValue(g.Name),
-			Everyone:  types.BoolValue(g.Everyone),
-			Users:     users,
-			All:       all,
-			UpdatedAt: types.Int64Value(g.UpdatedAt),
+			ID:              types.StringValue(g.ID.OID),
+			Name:            types.StringValue(g.Name),
+			EveryoneEnabled: types.BoolValue(g.Everyone),
+			Users:           users,
+			All:             all,
+			UpdatedAt:       types.StringValue(msToRFC3339(g.UpdatedAt)),
 		})
 	}
 

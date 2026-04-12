@@ -17,8 +17,8 @@ Manages a single user's membership in a Komodo user group.
 
 ```terraform
 resource "komodo_user_group_membership" "example" {
-  user_group = komodo_user_group.example.id
-  user       = komodo_user.alice.id
+  user_group_id = komodo_user_group.example.id
+  user_id       = komodo_user.alice.id
 }
 ```
 
@@ -27,12 +27,12 @@ resource "komodo_user_group_membership" "example" {
 
 ### Required
 
-- `user` (String) The username or ID of the user to add to the group.
-- `user_group` (String) The name or ID of the user group.
+- `user_group_id` (String) The name or ID of the user group.
+- `user_id` (String) The username or ID of the user to add to the group.
 
 ### Read-Only
 
-- `id` (String) The resource ID, formatted as `{user_group}/{user}`.
+- `id` (String) The resource ID, formatted as `{user_group_id}/{user_id}`.
 
 ## Import
 

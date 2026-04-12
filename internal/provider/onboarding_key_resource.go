@@ -13,8 +13,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -42,13 +42,13 @@ type OnboardingKeyResourceModel struct {
 	PrivateKey    types.String `tfsdk:"private_key"`
 	Name          types.String `tfsdk:"name"`
 	Enabled       types.Bool   `tfsdk:"enabled"`
-	Expires       types.Int64  `tfsdk:"expires"`
+	Expires       types.String `tfsdk:"expires"`
 	Tags          types.List   `tfsdk:"tags"`
 	Privileged    types.Bool   `tfsdk:"privileged"`
 	CopyServer    types.String `tfsdk:"copy_server"`
 	CreateBuilder types.Bool   `tfsdk:"create_builder"`
 	Onboarded     types.List   `tfsdk:"onboarded"`
-	CreatedAt     types.Int64  `tfsdk:"created_at"`
+	CreatedAt     types.String `tfsdk:"created_at"`
 }
 
 func (r *OnboardingKeyResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -85,11 +85,11 @@ func (r *OnboardingKeyResource) Schema(ctx context.Context, req resource.SchemaR
 				Default:             booldefault.StaticBool(true),
 				MarkdownDescription: "Whether the onboarding key is enabled.",
 			},
-			"expires": schema.Int64Attribute{
+			"expires": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				Default:             int64default.StaticInt64(0),
-				MarkdownDescription: "Expiration timestamp in milliseconds since epoch. Use 0 for no expiration.",
+				Default:             stringdefault.StaticString(""),
+				MarkdownDescription: "Expiration time in RFC3339 format (e.g. `2030-01-01T00:00:00Z`). Use `\"\"` (empty string) for no expiration.",
 			},
 			"tags": schema.ListAttribute{
 				ElementType:         types.StringType,
@@ -119,9 +119,12 @@ func (r *OnboardingKeyResource) Schema(ctx context.Context, req resource.SchemaR
 				Computed:            true,
 				MarkdownDescription: "IDs of servers that have been onboarded using this key.",
 			},
-			"created_at": schema.Int64Attribute{
+			"created_at": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Creation timestamp in milliseconds since epoch.",
+				MarkdownDescription: "Creation timestamp in RFC3339 format.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -162,12 +165,18 @@ func (r *OnboardingKeyResource) Create(ctx context.Context, req resource.CreateR
 
 	tflog.Debug(ctx, "Creating onboarding key", map[string]interface{}{
 		"name":    data.Name.ValueString(),
-		"expires": data.Expires.ValueInt64(),
+		"expires": data.Expires.ValueString(),
 	})
+
+	expiresMs, err := rfc3339ToMs(data.Expires.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid expires value", err.Error())
+		return
+	}
 
 	createResp, err := r.client.CreateOnboardingKey(ctx, client.CreateOnboardingKeyRequest{
 		Name:          data.Name.ValueString(),
-		Expires:       data.Expires.ValueInt64(),
+		Expires:       expiresMs,
 		Tags:          tags,
 		Privileged:    data.Privileged.ValueBool(),
 		CopyServer:    data.CopyServer.ValueString(),
@@ -184,11 +193,11 @@ func (r *OnboardingKeyResource) Create(ctx context.Context, req resource.CreateR
 	data.PrivateKey = types.StringValue(createResp.PrivateKey)
 	data.Name = types.StringValue(k.Name)
 	data.Enabled = types.BoolValue(k.Enabled)
-	data.Expires = types.Int64Value(k.Expires)
+	data.Expires = types.StringValue(msToRFC3339(k.Expires))
 	data.Privileged = types.BoolValue(k.Privileged)
 	data.CopyServer = types.StringValue(k.CopyServer)
 	data.CreateBuilder = types.BoolValue(k.CreateBuilder)
-	data.CreatedAt = types.Int64Value(k.CreatedAt)
+	data.CreatedAt = types.StringValue(msToRFC3339(k.CreatedAt))
 
 	tagList, diags := types.ListValueFrom(ctx, types.StringType, k.Tags)
 	resp.Diagnostics.Append(diags...)
@@ -244,11 +253,11 @@ func (r *OnboardingKeyResource) Read(ctx context.Context, req resource.ReadReque
 	data.PublicKey = types.StringValue(key.PublicKey)
 	data.Name = types.StringValue(key.Name)
 	data.Enabled = types.BoolValue(key.Enabled)
-	data.Expires = types.Int64Value(key.Expires)
+	data.Expires = types.StringValue(msToRFC3339(key.Expires))
 	data.Privileged = types.BoolValue(key.Privileged)
 	data.CopyServer = types.StringValue(key.CopyServer)
 	data.CreateBuilder = types.BoolValue(key.CreateBuilder)
-	data.CreatedAt = types.Int64Value(key.CreatedAt)
+	data.CreatedAt = types.StringValue(msToRFC3339(key.CreatedAt))
 	// Note: private_key is not returned by List/Get — keep existing state value via UseStateForUnknown
 
 	tagList, diags := types.ListValueFrom(ctx, types.StringType, key.Tags)
@@ -285,7 +294,11 @@ func (r *OnboardingKeyResource) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	name := data.Name.ValueString()
-	expires := data.Expires.ValueInt64()
+	expiresMs, err := rfc3339ToMs(data.Expires.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid expires value", err.Error())
+		return
+	}
 	enabled := data.Enabled.ValueBool()
 	privileged := data.Privileged.ValueBool()
 	copyServer := data.CopyServer.ValueString()
@@ -299,7 +312,7 @@ func (r *OnboardingKeyResource) Update(ctx context.Context, req resource.UpdateR
 	key, err := r.client.UpdateOnboardingKey(ctx, client.UpdateOnboardingKeyRequest{
 		PublicKey:     data.PublicKey.ValueString(),
 		Name:          &name,
-		Expires:       &expires,
+		Expires:       &expiresMs,
 		Enabled:       &enabled,
 		Tags:          &tags,
 		Privileged:    &privileged,
@@ -314,11 +327,11 @@ func (r *OnboardingKeyResource) Update(ctx context.Context, req resource.UpdateR
 	data.PublicKey = types.StringValue(key.PublicKey)
 	data.Name = types.StringValue(key.Name)
 	data.Enabled = types.BoolValue(key.Enabled)
-	data.Expires = types.Int64Value(key.Expires)
+	data.Expires = types.StringValue(msToRFC3339(key.Expires))
 	data.Privileged = types.BoolValue(key.Privileged)
 	data.CopyServer = types.StringValue(key.CopyServer)
 	data.CreateBuilder = types.BoolValue(key.CreateBuilder)
-	data.CreatedAt = types.Int64Value(key.CreatedAt)
+	data.CreatedAt = types.StringValue(msToRFC3339(key.CreatedAt))
 
 	tagList, diags := types.ListValueFrom(ctx, types.StringType, key.Tags)
 	resp.Diagnostics.Append(diags...)

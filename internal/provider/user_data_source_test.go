@@ -21,9 +21,9 @@ func TestAccUserDataSource_byUsername(t *testing.T) {
 					resource.TestCheckResourceAttr("data.komodo_user.test", "username", "tf-user-ds-name"),
 					resource.TestCheckResourceAttrSet("data.komodo_user.test", "id"),
 					resource.TestCheckResourceAttr("data.komodo_user.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("data.komodo_user.test", "admin", "false"),
-					resource.TestCheckResourceAttr("data.komodo_user.test", "create_servers", "false"),
-					resource.TestCheckResourceAttr("data.komodo_user.test", "create_builds", "false"),
+					resource.TestCheckResourceAttr("data.komodo_user.test", "admin_enabled", "false"),
+					resource.TestCheckResourceAttr("data.komodo_user.test", "create_server_enabled", "false"),
+					resource.TestCheckResourceAttr("data.komodo_user.test", "create_build_enabled", "false"),
 				),
 			},
 		},
@@ -59,8 +59,8 @@ func TestAccUserDataSource_withPermissions(t *testing.T) {
 				Config: testAccUserDataSourceConfig_withPermissions("tf-user-ds-perms", "Password1!"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_user.test", "username", "tf-user-ds-perms"),
-					resource.TestCheckResourceAttr("data.komodo_user.test", "create_servers", "true"),
-					resource.TestCheckResourceAttr("data.komodo_user.test", "create_builds", "true"),
+					resource.TestCheckResourceAttr("data.komodo_user.test", "create_server_enabled", "true"),
+					resource.TestCheckResourceAttr("data.komodo_user.test", "create_build_enabled", "true"),
 				),
 			},
 		},
@@ -100,8 +100,8 @@ func testAccUserDataSourceConfig_withPermissions(username, password string) stri
 resource "komodo_user" "test" {
   username       = %[1]q
   password       = %[2]q
-  create_servers = true
-  create_builds  = true
+  create_server_enabled = true
+  create_build_enabled  = true
 }
 
 data "komodo_user" "test" {

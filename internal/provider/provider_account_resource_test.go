@@ -113,6 +113,48 @@ func TestAccProviderAccountResource_import(t *testing.T) {
 	})
 }
 
+// TestAccProviderAccountResource_httpsEnabledDefault verifies that omitting
+// https_enabled after it was explicitly set to false causes Terraform to plan a
+// change back to the default value of true.
+func TestAccProviderAccountResource_httpsEnabledDefault(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create with https_enabled explicitly false.
+			{
+				Config: testAccProviderAccountResourceConfig_basic("github.com", false, "defaultuser", "defaulttoken"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_provider_account.test", "https_enabled", "false"),
+				),
+			},
+			// Step 2: remove https_enabled from config → default kicks in, must plan true.
+			{
+				Config: testAccProviderAccountResourceConfig_noHttps("github.com", "defaultuser", "defaulttoken"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_provider_account.test", "https_enabled", "true"),
+				),
+			},
+			// Step 3: re-plan with same config → no further changes.
+			{
+				Config:             testAccProviderAccountResourceConfig_noHttps("github.com", "defaultuser", "defaulttoken"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+func testAccProviderAccountResourceConfig_noHttps(domain, username, token string) string {
+	return fmt.Sprintf(`
+resource "komodo_provider_account" "test" {
+  domain   = %q
+  username = %q
+  token    = %q
+}
+`, domain, username, token)
+}
+
 func testAccProviderAccountResourceConfig_basic(domain string, https bool, username, token string) string {
 	return fmt.Sprintf(`
 resource "komodo_provider_account" "test" {

@@ -54,15 +54,15 @@ func (d *UsersDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, 
 							Computed:            true,
 							MarkdownDescription: "Whether the user is enabled and able to access the API.",
 						},
-						"admin": schema.BoolAttribute{
+						"admin_enabled": schema.BoolAttribute{
 							Computed:            true,
 							MarkdownDescription: "Whether the user has global admin permissions.",
 						},
-						"create_servers": schema.BoolAttribute{
+						"create_server_enabled": schema.BoolAttribute{
 							Computed:            true,
 							MarkdownDescription: "Whether the user can create servers.",
 						},
-						"create_builds": schema.BoolAttribute{
+						"create_build_enabled": schema.BoolAttribute{
 							Computed:            true,
 							MarkdownDescription: "Whether the user can create builds.",
 						},
@@ -106,12 +106,12 @@ func (d *UsersDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	items := make([]UserDataSourceModel, 0, len(users))
 	for _, u := range users {
 		items = append(items, UserDataSourceModel{
-			ID:            types.StringValue(u.ID.OID),
-			Username:      types.StringValue(u.Username),
-			Enabled:       types.BoolValue(u.Enabled),
-			Admin:         types.BoolValue(u.Admin),
-			CreateServers: types.BoolValue(u.CreateServers),
-			CreateBuilds:  types.BoolValue(u.CreateBuilds),
+			ID:                  types.StringValue(u.ID.OID),
+			Username:            types.StringValue(u.Username),
+			Enabled:             types.BoolValue(u.Enabled),
+			AdminEnabled:        types.BoolValue(u.Admin),
+			CreateServerEnabled: types.BoolValue(u.CreateServers),
+			CreateBuildEnabled:  types.BoolValue(u.CreateBuilds),
 		})
 	}
 	data.Users = items

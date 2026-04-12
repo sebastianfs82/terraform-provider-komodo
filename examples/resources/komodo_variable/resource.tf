@@ -4,7 +4,7 @@ resource "komodo_variable" "example" {
 }
 
 resource "komodo_variable" "secret" {
-  name      = "MY_SECRET"
-  value     = var.my_secret
-  is_secret = true
+  name           = "MY_SECRET"
+  value          = var.my_secret
+  secret_enabled = true
 }

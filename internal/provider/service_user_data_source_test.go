@@ -21,9 +21,9 @@ func TestAccServiceUserDataSource_byUsername(t *testing.T) {
 					resource.TestCheckResourceAttr("data.komodo_service_user.test", "username", "tf-svc-ds-name"),
 					resource.TestCheckResourceAttrSet("data.komodo_service_user.test", "id"),
 					resource.TestCheckResourceAttr("data.komodo_service_user.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("data.komodo_service_user.test", "admin", "false"),
-					resource.TestCheckResourceAttr("data.komodo_service_user.test", "create_servers", "false"),
-					resource.TestCheckResourceAttr("data.komodo_service_user.test", "create_builds", "false"),
+					resource.TestCheckResourceAttr("data.komodo_service_user.test", "admin_enabled", "false"),
+					resource.TestCheckResourceAttr("data.komodo_service_user.test", "create_server_enabled", "false"),
+					resource.TestCheckResourceAttr("data.komodo_service_user.test", "create_build_enabled", "false"),
 				),
 			},
 		},
@@ -58,8 +58,8 @@ func TestAccServiceUserDataSource_withPermissions(t *testing.T) {
 				Config: testAccServiceUserDataSourceConfig_withPermissions("tf-svc-ds-perms", true, true),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_service_user.test", "username", "tf-svc-ds-perms"),
-					resource.TestCheckResourceAttr("data.komodo_service_user.test", "create_servers", "true"),
-					resource.TestCheckResourceAttr("data.komodo_service_user.test", "create_builds", "true"),
+					resource.TestCheckResourceAttr("data.komodo_service_user.test", "create_server_enabled", "true"),
+					resource.TestCheckResourceAttr("data.komodo_service_user.test", "create_build_enabled", "true"),
 				),
 			},
 		},
@@ -95,9 +95,9 @@ data "komodo_service_user" "test" {
 func testAccServiceUserDataSourceConfig_withPermissions(username string, createServers, createBuilds bool) string {
 	return fmt.Sprintf(`
 resource "komodo_service_user" "test" {
-  username       = %[1]q
-  create_servers = %[2]t
-  create_builds  = %[3]t
+  username               = %[1]q
+  create_server_enabled  = %[2]t
+  create_build_enabled   = %[3]t
 }
 
 data "komodo_service_user" "test" {

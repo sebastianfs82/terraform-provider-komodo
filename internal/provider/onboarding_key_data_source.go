@@ -29,7 +29,7 @@ type OnboardingKeyDataSourceModel struct {
 	PublicKey     types.String `tfsdk:"public_key"`
 	Name          types.String `tfsdk:"name"`
 	Enabled       types.Bool   `tfsdk:"enabled"`
-	Expires       types.Int64  `tfsdk:"expires"`
+	Expires       types.String `tfsdk:"expires"`
 	Privileged    types.Bool   `tfsdk:"privileged"`
 	CopyServer    types.String `tfsdk:"copy_server"`
 	CreateBuilder types.Bool   `tfsdk:"create_builder"`
@@ -57,9 +57,9 @@ func (d *OnboardingKeyDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				Computed:            true,
 				MarkdownDescription: "Whether the onboarding key is enabled.",
 			},
-			"expires": schema.Int64Attribute{
+			"expires": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The expiry timestamp (Unix ms). 0 means no expiry.",
+				MarkdownDescription: "Expiration time in RFC3339 format. Empty string means no expiration.",
 			},
 			"privileged": schema.BoolAttribute{
 				Computed:            true,
@@ -139,7 +139,7 @@ func (d *OnboardingKeyDataSource) Read(ctx context.Context, req datasource.ReadR
 	data.PublicKey = types.StringValue(key.PublicKey)
 	data.Name = types.StringValue(key.Name)
 	data.Enabled = types.BoolValue(key.Enabled)
-	data.Expires = types.Int64Value(key.Expires)
+	data.Expires = types.StringValue(msToRFC3339(key.Expires))
 	data.Privileged = types.BoolValue(key.Privileged)
 	data.CopyServer = types.StringValue(key.CopyServer)
 	data.CreateBuilder = types.BoolValue(key.CreateBuilder)

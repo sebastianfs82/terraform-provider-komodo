@@ -19,9 +19,9 @@ resource "komodo_variable" "example" {
 }
 
 resource "komodo_variable" "secret" {
-  name      = "MY_SECRET"
-  value     = var.my_secret
-  is_secret = true
+  name           = "MY_SECRET"
+  value          = var.my_secret
+  secret_enabled = true
 }
 ```
 
@@ -35,7 +35,7 @@ resource "komodo_variable" "secret" {
 ### Optional
 
 - `description` (String) The variable description.
-- `is_secret` (Boolean) Whether the variable is secret.
+- `secret_enabled` (Boolean) Whether the variable is secret.
 - `value` (String) The variable value.
 
 ### Read-Only

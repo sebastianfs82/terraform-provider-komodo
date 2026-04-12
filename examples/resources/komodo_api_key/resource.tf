@@ -1,11 +1,10 @@
 resource "komodo_api_key" "example" {
-  name    = "my-api-key"
-  expires = 0
+  name = "my-api-key"
 }
 
 resource "komodo_api_key" "expiring" {
-  name    = "expiring-key"
-  expires = 1735689600000
+  name       = "expiring-key"
+  expires_at = "2030-01-01T00:00:00Z"
 }
 
 # API key for a service user

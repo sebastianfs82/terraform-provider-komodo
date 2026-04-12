@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
@@ -26,9 +27,9 @@ func TestAccServiceUserResource_basic(t *testing.T) {
 					resource.TestCheckResourceAttr("komodo_service_user.test", "username", "tf-svc-basic"),
 					resource.TestCheckResourceAttrSet("komodo_service_user.test", "id"),
 					resource.TestCheckResourceAttr("komodo_service_user.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("komodo_service_user.test", "admin", "false"),
-					resource.TestCheckResourceAttr("komodo_service_user.test", "create_servers", "false"),
-					resource.TestCheckResourceAttr("komodo_service_user.test", "create_builds", "false"),
+					resource.TestCheckResourceAttr("komodo_service_user.test", "admin_enabled", "false"),
+					resource.TestCheckResourceAttr("komodo_service_user.test", "create_server_enabled", "false"),
+					resource.TestCheckResourceAttr("komodo_service_user.test", "create_build_enabled", "false"),
 				),
 			},
 		},
@@ -67,16 +68,16 @@ func TestAccServiceUserResource_withPermissions(t *testing.T) {
 				Config: testAccServiceUserResourceConfig_withPermissions("tf-svc-perms", true, true),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_service_user.test", "username", "tf-svc-perms"),
-					resource.TestCheckResourceAttr("komodo_service_user.test", "create_servers", "true"),
-					resource.TestCheckResourceAttr("komodo_service_user.test", "create_builds", "true"),
+					resource.TestCheckResourceAttr("komodo_service_user.test", "create_server_enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_service_user.test", "create_build_enabled", "true"),
 				),
 			},
 			// Update permissions
 			{
 				Config: testAccServiceUserResourceConfig_withPermissions("tf-svc-perms", false, false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_service_user.test", "create_servers", "false"),
-					resource.TestCheckResourceAttr("komodo_service_user.test", "create_builds", "false"),
+					resource.TestCheckResourceAttr("komodo_service_user.test", "create_server_enabled", "false"),
+					resource.TestCheckResourceAttr("komodo_service_user.test", "create_build_enabled", "false"),
 				),
 			},
 		},
@@ -164,9 +165,9 @@ resource "komodo_service_user" "test" {
 func testAccServiceUserResourceConfig_withPermissions(username string, createServers, createBuilds bool) string {
 	return fmt.Sprintf(`
 resource "komodo_service_user" "test" {
-  username       = %[1]q
-  create_servers = %[2]t
-  create_builds  = %[3]t
+  username               = %[1]q
+  create_server_enabled  = %[2]t
+  create_build_enabled   = %[3]t
 }
 `, username, createServers, createBuilds)
 }
@@ -214,4 +215,121 @@ func testAccServiceUserDisappears(resourceName string) resource.TestCheckFunc {
 		)
 		return c.DeleteUser(context.Background(), rs.Primary.ID)
 	}
+}
+
+func TestAccServiceUserResource_adminEnabled(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccServiceUserResourceConfig_withAdmin("tf-svc-admin", true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_service_user.test", "admin_enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_service_user.test", "enabled", "true"),
+				),
+			},
+			// Revoke admin
+			{
+				Config: testAccServiceUserResourceConfig_withAdmin("tf-svc-admin", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_service_user.test", "admin_enabled", "false"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccServiceUserResource_enabledDefault(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// enabled not set explicitly — should default to true
+			{
+				Config: testAccServiceUserResourceConfig_basic("tf-svc-enabled-default"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_service_user.test", "enabled", "true"),
+				),
+			},
+			// Explicitly disable
+			{
+				Config: testAccServiceUserResourceConfig_withEnabled("tf-svc-enabled-default", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_service_user.test", "enabled", "false"),
+				),
+			},
+			// Remove enabled from config — default re-enables
+			{
+				Config: testAccServiceUserResourceConfig_basic("tf-svc-enabled-default"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_service_user.test", "enabled", "true"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccServiceUserResource_adminConflictWithCreateServer(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccServiceUserResourceConfig_adminWithCreateServer("tf-svc-conflict-srv"),
+				ExpectError: regexp.MustCompile(`create_server_enabled cannot be set to true alongside admin_enabled = true`),
+			},
+		},
+	})
+}
+
+func TestAccServiceUserResource_adminConflictWithCreateBuild(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccServiceUserResourceConfig_adminWithCreateBuild("tf-svc-conflict-bld"),
+				ExpectError: regexp.MustCompile(`create_build_enabled cannot be set to true alongside admin_enabled = true`),
+			},
+		},
+	})
+}
+
+func testAccServiceUserResourceConfig_withAdmin(username string, admin bool) string {
+	return fmt.Sprintf(`
+resource "komodo_service_user" "test" {
+  username      = %[1]q
+  admin_enabled = %[2]t
+}
+`, username, admin)
+}
+
+func testAccServiceUserResourceConfig_withEnabled(username string, enabled bool) string {
+	return fmt.Sprintf(`
+resource "komodo_service_user" "test" {
+  username = %[1]q
+  enabled  = %[2]t
+}
+`, username, enabled)
+}
+
+func testAccServiceUserResourceConfig_adminWithCreateServer(username string) string {
+	return fmt.Sprintf(`
+resource "komodo_service_user" "test" {
+  username               = %[1]q
+  admin_enabled          = true
+  create_server_enabled  = true
+}
+`, username)
+}
+
+func testAccServiceUserResourceConfig_adminWithCreateBuild(username string) string {
+	return fmt.Sprintf(`
+resource "komodo_service_user" "test" {
+  username              = %[1]q
+  admin_enabled         = true
+  create_build_enabled  = true
+}
+`, username)
 }

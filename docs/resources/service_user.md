@@ -33,9 +33,9 @@ resource "komodo_api_key" "example" {
 
 ### Optional
 
-- `admin` (Boolean) Whether the service user has global admin permissions.
-- `create_builds` (Boolean) Whether the service user can create builds.
-- `create_servers` (Boolean) Whether the service user can create servers.
+- `admin_enabled` (Boolean) Whether the service user has global admin permissions.
+- `create_build_enabled` (Boolean) Whether the service user can create builds. Cannot be set when admin_enabled is true.
+- `create_server_enabled` (Boolean) Whether the service user can create servers. Cannot be set when admin_enabled is true.
 - `description` (String) A description for the service user.
 - `enabled` (Boolean) Whether the service user is enabled and able to access the API.
 

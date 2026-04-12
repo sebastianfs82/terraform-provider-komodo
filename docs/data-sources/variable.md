@@ -28,5 +28,5 @@ data "komodo_variable" "example" {
 ### Read-Only
 
 - `description` (String) The variable description.
-- `is_secret` (Boolean) Whether the variable is secret.
+- `secret_enabled` (Boolean) Whether the variable is secret.
 - `value` (String) The variable value.

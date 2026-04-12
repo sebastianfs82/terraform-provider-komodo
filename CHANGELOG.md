@@ -1,3 +1,26 @@
+## 0.4.0 (April 12, 2026)
+
+FEATURES:
+
+* **`komodo_api_key` data source:** Reads an existing Komodo API key by key ID or name. Supports looking up keys belonging to service users via `service_user_id`.
+
+BREAKING CHANGES:
+
+* **`komodo_api_key` resource / data source:** The `expires` attribute has been renamed to `expires_at` for consistency with other timestamp fields across the provider. Update all configuration references accordingly.
+* **`komodo_api_key` resource / data source:** The `expires_at` attribute (formerly `expires`) now accepts an RFC3339 string (e.g. `"2030-01-01T00:00:00Z"`) instead of a Unix millisecond integer. Use `""` (empty string) for no expiration.
+* **`komodo_onboarding_key` resource / data source:** The `expires` and `created_at` attributes now return RFC3339 strings instead of Unix millisecond integers.
+* **`komodo_user_group` resource / data sources:** The `updated_at` attribute now returns an RFC3339 string instead of a Unix millisecond integer.
+
+ENHANCEMENTS:
+
+* **`komodo_api_key` resource:** Plan-time validation now rejects `expires_at` values that are not valid RFC3339 timestamps, or that represent a date already in the past.
+* **`komodo_user_group_membership` resource:** Creating a membership now fails at apply time with a clear error if the target user group has `everyone_enabled = true`.
+* **`komodo_user_group` resource:** Config validation blocks setting `everyone_enabled = true` together with a non-empty `users` list.
+* **`komodo_service_user` resource:** The `admin`, `create_servers`, and `create_builds` attributes have been renamed to `admin_enabled`, `create_server_enabled`, and `create_build_enabled` respectively, matching the naming convention used by `komodo_user`. Both `enabled` (default `true`) and `admin_enabled` (default `false`) now have static defaults, eliminating "(known after apply)" noise on first plan.
+* **`komodo_service_user` resource:** Config validation blocks setting `admin_enabled = true` together with `create_server_enabled = true` or `create_build_enabled = true`.
+
+---
+
 ## 0.3.0 (April 11, 2026)
 
 FEATURES:

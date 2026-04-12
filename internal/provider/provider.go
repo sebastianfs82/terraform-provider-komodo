@@ -179,6 +179,25 @@ func (p *KomodoProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	resp.ResourceData = komodoClient
 	resp.EphemeralResourceData = komodoClient
 	resp.ActionData = komodoClient
+
+	// Enforce minimum Komodo Core server version.
+	versionResp, err := komodoClient.GetVersion(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Komodo Version Check Failed",
+			"Unable to retrieve the Komodo Core server version: "+err.Error()+
+				". Verify the endpoint is reachable and the credentials are correct.",
+		)
+		return
+	}
+	if !versionAtLeast(versionResp.Version, 2, 0, 0) {
+		resp.Diagnostics.AddError(
+			"Unsupported Komodo Server Version",
+			"This provider requires Komodo Core v2.0.0 or later, but the connected server is running v"+
+				versionResp.Version+". Please upgrade your Komodo Core installation.",
+		)
+		return
+	}
 }
 
 func (p *KomodoProvider) Resources(ctx context.Context) []func() resource.Resource {
@@ -288,6 +307,7 @@ func (p *KomodoProvider) DataSources(ctx context.Context) []func() datasource.Da
 		NewResourceSyncDataSource,
 		NewResourceSyncsDataSource,
 		NewOnboardingKeyDataSource,
+		NewApiKeyDataSource,
 		NewVersionDataSource,
 	}
 }

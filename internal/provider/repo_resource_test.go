@@ -147,6 +147,52 @@ func testAccRepoDisappears(resourceName string) resource.TestCheckFunc {
 	}
 }
 
+// TestAccRepoResource_sourceHttpsEnabledDefault verifies that omitting
+// source.https_enabled after it was explicitly set to false causes Terraform to
+// plan a change back to the default value of true.
+func TestAccRepoResource_sourceHttpsEnabledDefault(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create with https_enabled explicitly false.
+			{
+				Config: testAccRepoResourceConfig_withHttps("tf-test-repo-https-default", "github.com", "owner/repo", "main", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_repo.test", "source.https_enabled", "false"),
+				),
+			},
+			// Step 2: remove https_enabled from config → default kicks in, must plan true.
+			{
+				Config: testAccRepoResourceConfig_withConfig("tf-test-repo-https-default", "github.com", "owner/repo", "main"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_repo.test", "source.https_enabled", "true"),
+				),
+			},
+			// Step 3: re-plan with same config → no further changes.
+			{
+				Config:             testAccRepoResourceConfig_withConfig("tf-test-repo-https-default", "github.com", "owner/repo", "main"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+func testAccRepoResourceConfig_withHttps(name, domain, repo, branch string, https bool) string {
+	return fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = "%s"
+  source = {
+    domain        = "%s"
+    https_enabled = %t
+    path          = "%s"
+    branch        = "%s"
+  }
+}
+`, name, domain, https, repo, branch)
+}
+
 // Test configuration functions
 
 func testAccRepoResourceConfig_basic(name string) string {

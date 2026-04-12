@@ -76,6 +76,46 @@ func TestAccTagResource_updateColor(t *testing.T) {
 	})
 }
 
+func TestAccTagResource_ownerStableOnUpdate(t *testing.T) {
+	var savedOwner string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccTagResourceConfigWithColor("tf-acc-tag-owner-stable", "Green"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("komodo_tag.test", "owner"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["komodo_tag.test"]
+						if !ok {
+							return fmt.Errorf("resource not found")
+						}
+						savedOwner = rs.Primary.Attributes["owner"]
+						return nil
+					},
+				),
+			},
+			{
+				Config: testAccTagResourceConfigWithColor("tf-acc-tag-owner-stable", "Blue"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["komodo_tag.test"]
+						if !ok {
+							return fmt.Errorf("resource not found")
+						}
+						if rs.Primary.Attributes["owner"] != savedOwner {
+							return fmt.Errorf("owner changed after color update: was %q, got %q", savedOwner, rs.Primary.Attributes["owner"])
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func TestAccTagResource_importState(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },

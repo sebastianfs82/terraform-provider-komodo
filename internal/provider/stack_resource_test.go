@@ -191,6 +191,47 @@ func testAccStackDisappears(resourceName string) resource.TestCheckFunc {
 	}
 }
 
+// TestAccStackResource_alertsEnabledDefault verifies that omitting alerts_enabled
+// after it was explicitly set to false causes Terraform to plan a change back to
+// the default value of true.
+func TestAccStackResource_alertsEnabledDefault(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create with alerts_enabled explicitly false.
+			{
+				Config: testAccStackResourceConfig_withAlertsEnabled("tf-test-stack-alerts-default", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_stack.test", "alerts_enabled", "false"),
+				),
+			},
+			// Step 2: remove alerts_enabled from config → default kicks in, must plan true.
+			{
+				Config: testAccStackResourceConfig_basic("tf-test-stack-alerts-default"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_stack.test", "alerts_enabled", "true"),
+				),
+			},
+			// Step 3: re-plan with same config → no further changes.
+			{
+				Config:             testAccStackResourceConfig_basic("tf-test-stack-alerts-default"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+func testAccStackResourceConfig_withAlertsEnabled(name string, alertsEnabled bool) string {
+	return fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name           = "%s"
+  alerts_enabled = %t
+}
+`, name, alertsEnabled)
+}
+
 // Test configuration functions
 
 func testAccStackResourceConfig_basic(name string) string {

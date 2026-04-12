@@ -11,7 +11,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -31,11 +33,11 @@ type VariableResource struct {
 }
 
 type VariableResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	Value       types.String `tfsdk:"value"`
-	Description types.String `tfsdk:"description"`
-	IsSecret    types.Bool   `tfsdk:"is_secret"`
+	ID            types.String `tfsdk:"id"`
+	Name          types.String `tfsdk:"name"`
+	Value         types.String `tfsdk:"value"`
+	Description   types.String `tfsdk:"description"`
+	SecretEnabled types.Bool   `tfsdk:"secret_enabled"`
 }
 
 func (r *VariableResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -69,11 +71,15 @@ func (r *VariableResource) Schema(ctx context.Context, req resource.SchemaReques
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "The variable description.",
+				Default:             stringdefault.StaticString(""),
 			},
-			"is_secret": schema.BoolAttribute{
+			"secret_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Whether the variable is secret.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -101,16 +107,16 @@ func (r *VariableResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 	tflog.Debug(ctx, "Creating variable", map[string]interface{}{
-		"name":        data.Name.ValueString(),
-		"is_secret":   data.IsSecret.ValueBool(),
-		"description": data.Description.ValueString(),
-		"value":       data.Value.ValueString(),
+		"name":           data.Name.ValueString(),
+		"secret_enabled": data.SecretEnabled.ValueBool(),
+		"description":    data.Description.ValueString(),
+		"value":          data.Value.ValueString(),
 	})
 	createReq := client.CreateVariableRequest{
 		Name:        data.Name.ValueString(),
 		Value:       data.Value.ValueString(),
 		Description: data.Description.ValueString(),
-		IsSecret:    data.IsSecret.ValueBool(),
+		IsSecret:    data.SecretEnabled.ValueBool(),
 	}
 	variable, err := r.client.CreateVariable(ctx, createReq)
 	if err != nil {
@@ -121,7 +127,7 @@ func (r *VariableResource) Create(ctx context.Context, req resource.CreateReques
 	data.Name = types.StringValue(variable.Name)
 	data.Value = types.StringValue(variable.Value)
 	data.Description = types.StringValue(variable.Description)
-	data.IsSecret = types.BoolValue(variable.IsSecret)
+	data.SecretEnabled = types.BoolValue(variable.IsSecret)
 	tflog.Trace(ctx, "Created variable resource")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -147,7 +153,7 @@ func (r *VariableResource) Read(ctx context.Context, req resource.ReadRequest, r
 	data.Name = types.StringValue(variable.Name)
 	data.Value = types.StringValue(variable.Value)
 	data.Description = types.StringValue(variable.Description)
-	data.IsSecret = types.BoolValue(variable.IsSecret)
+	data.SecretEnabled = types.BoolValue(variable.IsSecret)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -161,7 +167,7 @@ func (r *VariableResource) Update(ctx context.Context, req resource.UpdateReques
 		Name:        data.Name.ValueString(),
 		Value:       data.Value.ValueString(),
 		Description: data.Description.ValueString(),
-		IsSecret:    data.IsSecret.ValueBool(),
+		IsSecret:    data.SecretEnabled.ValueBool(),
 	}
 	variable, err := r.client.UpdateVariable(ctx, data.Name.ValueString(), updateReq)
 	if err != nil {
@@ -172,7 +178,7 @@ func (r *VariableResource) Update(ctx context.Context, req resource.UpdateReques
 	data.Name = types.StringValue(variable.Name)
 	data.Value = types.StringValue(variable.Value)
 	data.Description = types.StringValue(variable.Description)
-	data.IsSecret = types.BoolValue(variable.IsSecret)
+	data.SecretEnabled = types.BoolValue(variable.IsSecret)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

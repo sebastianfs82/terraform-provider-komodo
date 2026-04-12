@@ -30,7 +30,7 @@ resource "komodo_variable" "example" {
   name        = "tf_var_ds"
   value       = "ds-value"
   description = "Data source test variable"
-  is_secret   = false
+  secret_enabled = false
 }
 
 data "komodo_variable" "example" {
@@ -49,7 +49,7 @@ func TestAccVariableDataSource_fields(t *testing.T) {
 					resource.TestCheckResourceAttr("data.komodo_variable.example", "name", "tf_var_ds"),
 					resource.TestCheckResourceAttr("data.komodo_variable.example", "value", "ds-value"),
 					resource.TestCheckResourceAttr("data.komodo_variable.example", "description", "Data source test variable"),
-					resource.TestCheckResourceAttr("data.komodo_variable.example", "is_secret", "false"),
+					resource.TestCheckResourceAttr("data.komodo_variable.example", "secret_enabled", "false"),
 				),
 			},
 		},
@@ -66,7 +66,7 @@ func TestAccVariableDataSource_secret(t *testing.T) {
 resource "komodo_variable" "secret" {
   name      = "tf_var_ds_secret"
   value     = "topsecret"
-  is_secret = true
+  secret_enabled = true
 }
 
 data "komodo_variable" "secret" {
@@ -75,7 +75,7 @@ data "komodo_variable" "secret" {
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_variable.secret", "name", "tf_var_ds_secret"),
-					resource.TestCheckResourceAttr("data.komodo_variable.secret", "is_secret", "true"),
+					resource.TestCheckResourceAttr("data.komodo_variable.secret", "secret_enabled", "true"),
 				),
 			},
 		},

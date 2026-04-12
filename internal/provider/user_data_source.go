@@ -25,12 +25,12 @@ type UserDataSource struct {
 }
 
 type UserDataSourceModel struct {
-	ID            types.String `tfsdk:"id"`
-	Username      types.String `tfsdk:"username"`
-	Enabled       types.Bool   `tfsdk:"enabled"`
-	Admin         types.Bool   `tfsdk:"admin"`
-	CreateServers types.Bool   `tfsdk:"create_servers"`
-	CreateBuilds  types.Bool   `tfsdk:"create_builds"`
+	ID                  types.String `tfsdk:"id"`
+	Username            types.String `tfsdk:"username"`
+	Enabled             types.Bool   `tfsdk:"enabled"`
+	AdminEnabled        types.Bool   `tfsdk:"admin_enabled"`
+	CreateServerEnabled types.Bool   `tfsdk:"create_server_enabled"`
+	CreateBuildEnabled  types.Bool   `tfsdk:"create_build_enabled"`
 }
 
 func (d *UserDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -55,15 +55,15 @@ func (d *UserDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 				Computed:            true,
 				MarkdownDescription: "Whether the user is enabled and able to access the API.",
 			},
-			"admin": schema.BoolAttribute{
+			"admin_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether the user has global admin permissions.",
 			},
-			"create_servers": schema.BoolAttribute{
+			"create_server_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether the user can create servers.",
 			},
-			"create_builds": schema.BoolAttribute{
+			"create_build_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether the user can create builds.",
 			},
@@ -115,8 +115,8 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	data.ID = types.StringValue(user.ID.OID)
 	data.Username = types.StringValue(user.Username)
 	data.Enabled = types.BoolValue(user.Enabled)
-	data.Admin = types.BoolValue(user.Admin)
-	data.CreateServers = types.BoolValue(user.CreateServers)
-	data.CreateBuilds = types.BoolValue(user.CreateBuilds)
+	data.AdminEnabled = types.BoolValue(user.Admin)
+	data.CreateServerEnabled = types.BoolValue(user.CreateServers)
+	data.CreateBuildEnabled = types.BoolValue(user.CreateBuilds)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

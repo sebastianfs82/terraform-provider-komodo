@@ -20,7 +20,7 @@ func TestAccUserGroupDataSource_basic(t *testing.T) {
 				Config: testAccUserGroupDataSourceConfig_basic("tf-test-ds-group"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_user_group.test", "name", "tf-test-ds-group"),
-					resource.TestCheckResourceAttr("data.komodo_user_group.test", "everyone", "false"),
+					resource.TestCheckResourceAttr("data.komodo_user_group.test", "everyone_enabled", "false"),
 					resource.TestCheckResourceAttrSet("data.komodo_user_group.test", "id"),
 					resource.TestCheckResourceAttrSet("data.komodo_user_group.test", "updated_at"),
 					resource.TestCheckResourceAttr("data.komodo_user_group.test", "users.#", "0"),

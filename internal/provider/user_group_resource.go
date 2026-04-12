@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -28,13 +29,13 @@ func (r *UserGroupResource) ValidateConfig(ctx context.Context, req resource.Val
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	everyoneSet := !data.Everyone.IsNull() && !data.Everyone.IsUnknown() && data.Everyone.ValueBool()
-	usersSet := !data.Users.IsNull() && !data.Users.IsUnknown() && len(data.Users.Elements()) > 0
+	everyoneSet := !data.EveryoneEnabled.IsNull() && !data.EveryoneEnabled.IsUnknown() && data.EveryoneEnabled.ValueBool()
+	usersSet := !data.Users.IsNull() && !data.Users.IsUnknown()
 	if everyoneSet && usersSet {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("users"),
 			"Conflicting configuration",
-			"\"everyone\" and \"users\" are mutually exclusive. Set only one.",
+			"\"everyone_enabled = true\" grants access to all users automatically. Remove the \"users\" block or set \"everyone_enabled = false\".",
 		)
 	}
 }
@@ -48,12 +49,12 @@ type UserGroupResource struct {
 }
 
 type UserGroupResourceModel struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	Everyone  types.Bool   `tfsdk:"everyone"`
-	Users     types.List   `tfsdk:"users"`
-	All       types.Map    `tfsdk:"all"`
-	UpdatedAt types.Int64  `tfsdk:"updated_at"`
+	ID              types.String `tfsdk:"id"`
+	Name            types.String `tfsdk:"name"`
+	EveryoneEnabled types.Bool   `tfsdk:"everyone_enabled"`
+	Users           types.List   `tfsdk:"users"`
+	All             types.Map    `tfsdk:"all"`
+	UpdatedAt       types.String `tfsdk:"updated_at"`
 }
 
 func NewUserGroupResource() resource.Resource {
@@ -81,8 +82,11 @@ func (r *UserGroupResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// Only populate the users list if it was explicitly configured (non-null in plan).
+	// When null, leave it null so manually-added users are not tracked or removed.
+	usersManaged := !data.Users.IsNull() && !data.Users.IsUnknown()
 	var users []string
-	if !data.Users.IsNull() && !data.Users.IsUnknown() {
+	if usersManaged {
 		data.Users.ElementsAs(ctx, &users, false)
 	}
 	var all map[string]interface{}
@@ -91,7 +95,7 @@ func (r *UserGroupResource) Create(ctx context.Context, req resource.CreateReque
 	}
 	createReq := client.CreateUserGroupRequest{
 		Name:     data.Name.ValueString(),
-		Everyone: data.Everyone.ValueBool(),
+		Everyone: data.EveryoneEnabled.ValueBool(),
 		Users:    users,
 		All:      all,
 	}
@@ -120,8 +124,8 @@ func (r *UserGroupResource) Create(ctx context.Context, req resource.CreateReque
 	}
 	data.ID = types.StringValue(fetched.ID.OID)
 	data.Name = types.StringValue(fetched.Name)
-	data.Everyone = types.BoolValue(fetched.Everyone)
-	if len(fetched.Users) == 0 {
+	data.EveryoneEnabled = types.BoolValue(fetched.Everyone)
+	if !usersManaged {
 		data.Users = types.ListNull(types.StringType)
 	} else {
 		data.Users, _ = types.ListValueFrom(ctx, types.StringType, fetched.Users)
@@ -135,7 +139,7 @@ func (r *UserGroupResource) Create(ctx context.Context, req resource.CreateReque
 		}
 		data.All = types.MapValueMust(types.StringType, allMap)
 	}
-	data.UpdatedAt = types.Int64Value(fetched.UpdatedAt)
+	data.UpdatedAt = types.StringValue(msToRFC3339(fetched.UpdatedAt))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -164,10 +168,10 @@ func (r *UserGroupResource) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 	data.ID = types.StringValue(group.ID.OID)
 	data.Name = types.StringValue(group.Name)
-	data.Everyone = types.BoolValue(group.Everyone)
-	if len(group.Users) == 0 {
-		data.Users = types.ListNull(types.StringType)
-	} else {
+	data.EveryoneEnabled = types.BoolValue(group.Everyone)
+	// Only refresh users from API if the attribute is managed (non-null in state).
+	// Keeping it null prevents drift detection for users added outside of Terraform.
+	if !data.Users.IsNull() {
 		data.Users, _ = types.ListValueFrom(ctx, types.StringType, group.Users)
 	}
 	if len(group.All) == 0 {
@@ -179,7 +183,7 @@ func (r *UserGroupResource) Read(ctx context.Context, req resource.ReadRequest, 
 		}
 		data.All = types.MapValueMust(types.StringType, allMap)
 	}
-	data.UpdatedAt = types.Int64Value(group.UpdatedAt)
+	data.UpdatedAt = types.StringValue(msToRFC3339(group.UpdatedAt))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -207,10 +211,10 @@ func (r *UserGroupResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	// Handle everyone attribute change
-	if oldData.Everyone.ValueBool() != data.Everyone.ValueBool() {
+	if oldData.EveryoneEnabled.ValueBool() != data.EveryoneEnabled.ValueBool() {
 		setEveryoneReq := client.SetEveryoneUserGroupRequest{
 			UserGroup: groupID,
-			Everyone:  data.Everyone.ValueBool(),
+			Everyone:  data.EveryoneEnabled.ValueBool(),
 		}
 		_, err := r.client.SetEveryoneUserGroup(ctx, setEveryoneReq)
 		if err != nil {
@@ -219,38 +223,59 @@ func (r *UserGroupResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
-	// Handle user list changes
-	var oldUsers, newUsers []string
-	if !oldData.Users.IsNull() && !oldData.Users.IsUnknown() {
-		resp.Diagnostics.Append(oldData.Users.ElementsAs(ctx, &oldUsers, false)...)
-	}
-	if !data.Users.IsNull() && !data.Users.IsUnknown() {
+	// Handle user list changes.
+	// Three cases:
+	//   1. users is non-null in plan → manage the full list (add/remove to match exactly).
+	//   2. users transitions from non-null (state) to null (plan) → one-time removal of all
+	//      previously-managed users, then leave the list unmanaged going forward.
+	//   3. users is null in both plan and state → skip entirely (unmanaged, no-op).
+	if !data.Users.IsNull() {
+		// Case 1: actively managed list.
+		var oldUsers, newUsers []string
+		if !oldData.Users.IsNull() && !oldData.Users.IsUnknown() {
+			resp.Diagnostics.Append(oldData.Users.ElementsAs(ctx, &oldUsers, false)...)
+		}
 		resp.Diagnostics.Append(data.Users.ElementsAs(ctx, &newUsers, false)...)
-	}
-	if resp.Diagnostics.HasError() {
-		return
-	}
+		if resp.Diagnostics.HasError() {
+			return
+		}
 
-	oldSet := make(map[string]bool, len(oldUsers))
-	for _, u := range oldUsers {
-		oldSet[u] = true
-	}
-	newSet := make(map[string]bool, len(newUsers))
-	for _, u := range newUsers {
-		newSet[u] = true
-	}
+		oldSet := make(map[string]bool, len(oldUsers))
+		for _, u := range oldUsers {
+			oldSet[u] = true
+		}
+		newSet := make(map[string]bool, len(newUsers))
+		for _, u := range newUsers {
+			newSet[u] = true
+		}
 
-	for _, u := range newUsers {
-		if !oldSet[u] {
-			_, err := r.client.AddUserToUserGroup(ctx, client.AddUserToUserGroupRequest{UserGroup: groupID, User: u})
-			if err != nil {
-				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to add user %s to group, got error: %s", u, err))
-				return
+		for _, u := range newUsers {
+			if !oldSet[u] {
+				_, err := r.client.AddUserToUserGroup(ctx, client.AddUserToUserGroupRequest{UserGroup: groupID, User: u})
+				if err != nil {
+					resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to add user %s to group, got error: %s", u, err))
+					return
+				}
 			}
 		}
-	}
-	for _, u := range oldUsers {
-		if !newSet[u] {
+		for _, u := range oldUsers {
+			if !newSet[u] {
+				_, err := r.client.RemoveUserFromUserGroup(ctx, client.RemoveUserFromUserGroupRequest{UserGroup: groupID, User: u})
+				if err != nil {
+					resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to remove user %s from group, got error: %s", u, err))
+					return
+				}
+			}
+		}
+	} else if !oldData.Users.IsNull() {
+		// Case 2: users was managed before (non-null in state) but is now unset (null in plan).
+		// Remove all previously-managed users once, then stop managing the list.
+		var oldUsers []string
+		resp.Diagnostics.Append(oldData.Users.ElementsAs(ctx, &oldUsers, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		for _, u := range oldUsers {
 			_, err := r.client.RemoveUserFromUserGroup(ctx, client.RemoveUserFromUserGroupRequest{UserGroup: groupID, User: u})
 			if err != nil {
 				resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to remove user %s from group, got error: %s", u, err))
@@ -267,10 +292,9 @@ func (r *UserGroupResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 	data.ID = types.StringValue(group.ID.OID)
 	data.Name = types.StringValue(group.Name)
-	data.Everyone = types.BoolValue(group.Everyone)
-	if len(group.Users) == 0 {
-		data.Users = types.ListNull(types.StringType)
-	} else {
+	data.EveryoneEnabled = types.BoolValue(group.Everyone)
+	// Only refresh users from API if the attribute is managed (non-null in plan).
+	if !data.Users.IsNull() {
 		data.Users, _ = types.ListValueFrom(ctx, types.StringType, group.Users)
 	}
 	if len(group.All) == 0 {
@@ -282,7 +306,7 @@ func (r *UserGroupResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 		data.All = types.MapValueMust(types.StringType, allMap)
 	}
-	data.UpdatedAt = types.Int64Value(group.UpdatedAt)
+	data.UpdatedAt = types.StringValue(msToRFC3339(group.UpdatedAt))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -319,10 +343,11 @@ func (r *UserGroupResource) Schema(ctx context.Context, req resource.SchemaReque
 				Required:            true,
 				MarkdownDescription: "The user group name.",
 			},
-			"everyone": schema.BoolAttribute{
+			"everyone_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Whether this is the 'everyone' group.",
+				Default:             booldefault.StaticBool(false),
 			},
 			"users": schema.ListAttribute{
 				ElementType:         types.StringType,
@@ -334,12 +359,10 @@ func (r *UserGroupResource) Schema(ctx context.Context, req resource.SchemaReque
 				Optional:            true,
 				MarkdownDescription: "All permissions or metadata.",
 			},
-			"updated_at": schema.Int64Attribute{
+			"updated_at": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Last update timestamp.",
+				MarkdownDescription: "Last update timestamp in RFC3339 format.",
 			},
 		},
 	}
 }
-
-// ...CRUD methods to be implemented...

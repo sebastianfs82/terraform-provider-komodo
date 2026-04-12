@@ -4,6 +4,6 @@ resource "komodo_user_group" "example" {
 }
 
 resource "komodo_user_group" "everyone" {
-  name     = "Everyone"
-  everyone = true
+  name             = "Everyone"
+  everyone_enabled = true
 }

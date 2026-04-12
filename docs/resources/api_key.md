@@ -14,13 +14,12 @@ Manages a Komodo API key.
 
 ```terraform
 resource "komodo_api_key" "example" {
-  name    = "my-api-key"
-  expires = 0
+  name = "my-api-key"
 }
 
 resource "komodo_api_key" "expiring" {
-  name    = "expiring-key"
-  expires = 1735689600000
+  name       = "expiring-key"
+  expires_at = "2030-01-01T00:00:00Z"
 }
 
 # API key for a service user
@@ -39,12 +38,12 @@ resource "komodo_api_key" "svc" {
 
 ### Optional
 
-- `expires` (Number) Expiration timestamp in milliseconds since epoch. Use 0 for no expiration.
+- `expires_at` (String) Expiration time in RFC3339 format (e.g. `2030-01-01T00:00:00Z`). Use `""` (empty string) for no expiration.
 - `service_user_id` (String) When set, creates the API key for the specified service user instead of the authenticated user.
 
 ### Read-Only
 
-- `created_at` (Number) Creation timestamp in milliseconds since epoch.
+- `created_at` (String) Creation timestamp in RFC3339 format.
 - `key` (String) The API key identifier.
 - `secret` (String, Sensitive) The API key secret (only available on creation).
 - `user_id` (String) The ID of the user who owns this key.

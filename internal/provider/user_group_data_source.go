@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -50,7 +51,7 @@ func (d *UserGroupDataSource) Read(ctx context.Context, req datasource.ReadReque
 	}
 	data.ID = types.StringValue(group.ID.OID)
 	data.Name = types.StringValue(group.Name)
-	data.Everyone = types.BoolValue(group.Everyone)
+	data.EveryoneEnabled = types.BoolValue(group.Everyone)
 	userIDs := group.Users
 	if userIDs == nil {
 		userIDs = []string{}
@@ -61,17 +62,17 @@ func (d *UserGroupDataSource) Read(ctx context.Context, req datasource.ReadReque
 		allMap[k] = types.StringValue(fmt.Sprintf("%v", v))
 	}
 	data.All = types.MapValueMust(types.StringType, allMap)
-	data.UpdatedAt = types.Int64Value(group.UpdatedAt)
+	data.UpdatedAt = types.StringValue(msToRFC3339(group.UpdatedAt))
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 type UserGroupDataSourceModel struct {
-	ID        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	Everyone  types.Bool   `tfsdk:"everyone"`
-	Users     types.List   `tfsdk:"users"`
-	All       types.Map    `tfsdk:"all"`
-	UpdatedAt types.Int64  `tfsdk:"updated_at"`
+	ID              types.String `tfsdk:"id"`
+	Name            types.String `tfsdk:"name"`
+	EveryoneEnabled types.Bool   `tfsdk:"everyone_enabled"`
+	Users           types.List   `tfsdk:"users"`
+	All             types.Map    `tfsdk:"all"`
+	UpdatedAt       types.String `tfsdk:"updated_at"`
 }
 
 func (d *UserGroupDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -90,7 +91,7 @@ func (d *UserGroupDataSource) Schema(ctx context.Context, req datasource.SchemaR
 				Required:            true,
 				MarkdownDescription: "The user group name.",
 			},
-			"everyone": schema.BoolAttribute{
+			"everyone_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether this is the 'everyone' group.",
 			},
@@ -104,9 +105,9 @@ func (d *UserGroupDataSource) Schema(ctx context.Context, req datasource.SchemaR
 				Computed:            true,
 				MarkdownDescription: "All permissions or metadata.",
 			},
-			"updated_at": schema.Int64Attribute{
+			"updated_at": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "Last update timestamp.",
+				MarkdownDescription: "Last update timestamp in RFC3339 format.",
 			},
 		},
 	}

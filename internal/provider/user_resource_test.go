@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
@@ -26,9 +27,9 @@ func TestAccUserResource_basic(t *testing.T) {
 					resource.TestCheckResourceAttr("komodo_user.test", "username", "tf-user-basic"),
 					resource.TestCheckResourceAttrSet("komodo_user.test", "id"),
 					resource.TestCheckResourceAttr("komodo_user.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("komodo_user.test", "admin", "false"),
-					resource.TestCheckResourceAttr("komodo_user.test", "create_servers", "false"),
-					resource.TestCheckResourceAttr("komodo_user.test", "create_builds", "false"),
+					resource.TestCheckResourceAttr("komodo_user.test", "admin_enabled", "false"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_server_enabled", "false"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_build_enabled", "false"),
 				),
 			},
 		},
@@ -44,16 +45,16 @@ func TestAccUserResource_withPermissions(t *testing.T) {
 				Config: testAccUserResourceConfig_withPermissions("tf-user-perms", "Password1!", true, true),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_user.test", "username", "tf-user-perms"),
-					resource.TestCheckResourceAttr("komodo_user.test", "create_servers", "true"),
-					resource.TestCheckResourceAttr("komodo_user.test", "create_builds", "true"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_server_enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_build_enabled", "true"),
 				),
 			},
 			// Update: revoke permissions
 			{
 				Config: testAccUserResourceConfig_withPermissions("tf-user-perms", "Password1!", false, false),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_user.test", "create_servers", "false"),
-					resource.TestCheckResourceAttr("komodo_user.test", "create_builds", "false"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_server_enabled", "false"),
+					resource.TestCheckResourceAttr("komodo_user.test", "create_build_enabled", "false"),
 				),
 			},
 		},
@@ -133,8 +134,8 @@ func testAccUserResourceConfig_withPermissions(username, password string, create
 resource "komodo_user" "test" {
   username       = %[1]q
   password       = %[2]q
-  create_servers = %[3]t
-  create_builds  = %[4]t
+  create_server_enabled = %[3]t
+  create_build_enabled  = %[4]t
 }
 `, username, password, createServers, createBuilds)
 }
@@ -147,6 +148,118 @@ resource "komodo_user" "test" {
   enabled  = %[3]t
 }
 `, username, password, enabled)
+}
+
+func TestAccUserResource_adminEnabled(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with admin_enabled = true
+			{
+				Config: testAccUserResourceConfig_withAdmin("tf-user-admin", "Password1!", true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "admin_enabled", "true"),
+					resource.TestCheckResourceAttr("komodo_user.test", "enabled", "true"),
+				),
+			},
+			// Update: revoke admin
+			{
+				Config: testAccUserResourceConfig_withAdmin("tf-user-admin", "Password1!", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "admin_enabled", "false"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccUserResource_enabledDefault(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// enabled not set explicitly — should default to true
+			{
+				Config: testAccUserResourceConfig_basic("tf-user-enabled-default", "Password1!"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "enabled", "true"),
+				),
+			},
+			// Explicitly disable
+			{
+				Config: testAccUserResourceConfig_withEnabled("tf-user-enabled-default", "Password1!", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "enabled", "false"),
+				),
+			},
+			// Remove enabled from config — should plan a change back to true and apply it
+			{
+				Config: testAccUserResourceConfig_basic("tf-user-enabled-default", "Password1!"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_user.test", "enabled", "true"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccUserResource_adminConflictWithCreateServer(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccUserResourceConfig_adminWithCreateServer("tf-user-conflict-srv", "Password1!"),
+				ExpectError: regexp.MustCompile(`create_server_enabled cannot be set to true alongside admin_enabled = true`),
+			},
+		},
+	})
+}
+
+func TestAccUserResource_adminConflictWithCreateBuild(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccUserResourceConfig_adminWithCreateBuild("tf-user-conflict-bld", "Password1!"),
+				ExpectError: regexp.MustCompile(`create_build_enabled cannot be set to true alongside admin_enabled = true`),
+			},
+		},
+	})
+}
+
+func testAccUserResourceConfig_withAdmin(username, password string, admin bool) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username      = %[1]q
+  password      = %[2]q
+  admin_enabled = %[3]t
+}
+`, username, password, admin)
+}
+
+func testAccUserResourceConfig_adminWithCreateServer(username, password string) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username              = %[1]q
+  password              = %[2]q
+  admin_enabled         = true
+  create_server_enabled = true
+}
+`, username, password)
+}
+
+func testAccUserResourceConfig_adminWithCreateBuild(username, password string) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username             = %[1]q
+  password             = %[2]q
+  admin_enabled        = true
+  create_build_enabled = true
+}
+`, username, password)
 }
 
 func TestAccUserResource_disappears(t *testing.T) {

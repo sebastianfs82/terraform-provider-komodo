@@ -19,8 +19,8 @@ resource "komodo_user_group" "example" {
 }
 
 resource "komodo_user_group" "everyone" {
-  name     = "Everyone"
-  everyone = true
+  name             = "Everyone"
+  everyone_enabled = true
 }
 ```
 
@@ -34,13 +34,13 @@ resource "komodo_user_group" "everyone" {
 ### Optional
 
 - `all` (Map of String) All permissions or metadata.
-- `everyone` (Boolean) Whether this is the 'everyone' group.
+- `everyone_enabled` (Boolean) Whether this is the 'everyone' group.
 - `users` (List of String) List of user IDs in the group.
 
 ### Read-Only
 
 - `id` (String) The user group ID (Mongo OID).
-- `updated_at` (Number) Last update timestamp.
+- `updated_at` (String) Last update timestamp in RFC3339 format.
 
 ## Import
 

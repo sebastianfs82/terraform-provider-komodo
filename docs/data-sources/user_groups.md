@@ -29,8 +29,8 @@ data "komodo_user_groups" "all" {}
 Read-Only:
 
 - `all` (Map of String) All permissions or metadata associated with the group.
-- `everyone` (Boolean) Whether this is the 'everyone' group.
+- `everyone_enabled` (Boolean) Whether this is the 'everyone' group.
 - `id` (String) The user group ID (Mongo OID).
 - `name` (String) The user group name.
-- `updated_at` (Number) Last update timestamp.
+- `updated_at` (String) Last update timestamp in RFC3339 format.
 - `users` (List of String) List of user IDs in the group.

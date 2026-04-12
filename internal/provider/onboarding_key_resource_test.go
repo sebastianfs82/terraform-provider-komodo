@@ -24,7 +24,7 @@ func TestAccOnboardingKeyResource_basic(t *testing.T) {
 					resource.TestCheckResourceAttrSet("komodo_onboarding_key.test", "public_key"),
 					resource.TestCheckResourceAttrSet("komodo_onboarding_key.test", "private_key"),
 					resource.TestCheckResourceAttr("komodo_onboarding_key.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("komodo_onboarding_key.test", "expires", "0"),
+					resource.TestCheckResourceAttr("komodo_onboarding_key.test", "expires", ""),
 					resource.TestCheckResourceAttr("komodo_onboarding_key.test", "privileged", "false"),
 					resource.TestCheckResourceAttr("komodo_onboarding_key.test", "create_builder", "false"),
 				),
