@@ -1,5 +1,11 @@
 default: fmt lint install generate
 
+# On Windows, GnuWin32 make needs Git's sh.exe to handle shell syntax (cd; go ...).
+# If SHELL is not already pointing to a Unix shell, use Git for Windows.
+ifeq ($(OS),Windows_NT)
+  SHELL := C:/Program Files/Git/bin/sh.exe
+endif
+
 build:
 	go build -v ./...
 
