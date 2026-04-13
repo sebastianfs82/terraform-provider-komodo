@@ -5,6 +5,26 @@ package client
 
 import "encoding/json"
 
+// ProcedureExecution represents a single execution step inside a procedure stage.
+// The Params field holds arbitrary JSON specific to each execution Type.
+type ProcedureExecution struct {
+	Type   string          `json:"type"`
+	Params json.RawMessage `json:"params,omitempty"`
+}
+
+// ProcedureStageExecution wraps an execution with an enabled flag.
+type ProcedureStageExecution struct {
+	Execution ProcedureExecution `json:"execution"`
+	Enabled   bool               `json:"enabled"`
+}
+
+// ProcedureStage represents one stage inside a procedure.
+type ProcedureStage struct {
+	Name       string                    `json:"name"`
+	Parallel   bool                      `json:"parallel"`
+	Executions []ProcedureStageExecution `json:"executions"`
+}
+
 // Procedure represents a Komodo procedure resource (Resource<ProcedureConfig>).
 type Procedure struct {
 	ID     OID             `json:"_id"`
@@ -15,31 +35,28 @@ type Procedure struct {
 
 // ProcedureConfig is the Komodo procedure configuration (full, as returned by the API).
 type ProcedureConfig struct {
-	// Stages is stored as raw JSON (array of ProcedureStage) to avoid enumerating
-	// all Execution enum variants. Terraform represents this as a JSON string.
-	Stages           json.RawMessage `json:"stages"`
-	ScheduleFormat   string          `json:"schedule_format"`
-	Schedule         string          `json:"schedule"`
-	ScheduleEnabled  bool            `json:"schedule_enabled"`
-	ScheduleTimezone string          `json:"schedule_timezone"`
-	ScheduleAlert    bool            `json:"schedule_alert"`
-	FailureAlert     bool            `json:"failure_alert"`
-	WebhookEnabled   bool            `json:"webhook_enabled"`
-	WebhookSecret    string          `json:"webhook_secret"`
+	Stages           []ProcedureStage `json:"stages"`
+	ScheduleFormat   string           `json:"schedule_format"`
+	Schedule         string           `json:"schedule"`
+	ScheduleEnabled  bool             `json:"schedule_enabled"`
+	ScheduleTimezone string           `json:"schedule_timezone"`
+	ScheduleAlert    bool             `json:"schedule_alert"`
+	FailureAlert     bool             `json:"failure_alert"`
+	WebhookEnabled   bool             `json:"webhook_enabled"`
+	WebhookSecret    string           `json:"webhook_secret"`
 }
 
 // PartialProcedureConfig holds optional config fields for Create/Update.
-// Stages is json.RawMessage so that nil is omitted and a set value is passed through.
 type PartialProcedureConfig struct {
-	Stages           json.RawMessage `json:"stages,omitempty"`
-	ScheduleFormat   *string         `json:"schedule_format,omitempty"`
-	Schedule         *string         `json:"schedule,omitempty"`
-	ScheduleEnabled  *bool           `json:"schedule_enabled,omitempty"`
-	ScheduleTimezone *string         `json:"schedule_timezone,omitempty"`
-	ScheduleAlert    *bool           `json:"schedule_alert,omitempty"`
-	FailureAlert     *bool           `json:"failure_alert,omitempty"`
-	WebhookEnabled   *bool           `json:"webhook_enabled,omitempty"`
-	WebhookSecret    *string         `json:"webhook_secret,omitempty"`
+	Stages           []ProcedureStage `json:"stages,omitempty"`
+	ScheduleFormat   *string          `json:"schedule_format,omitempty"`
+	Schedule         *string          `json:"schedule,omitempty"`
+	ScheduleEnabled  *bool            `json:"schedule_enabled,omitempty"`
+	ScheduleTimezone *string          `json:"schedule_timezone,omitempty"`
+	ScheduleAlert    *bool            `json:"schedule_alert,omitempty"`
+	FailureAlert     *bool            `json:"failure_alert,omitempty"`
+	WebhookEnabled   *bool            `json:"webhook_enabled,omitempty"`
+	WebhookSecret    *string          `json:"webhook_secret,omitempty"`
 }
 
 // CreateProcedureRequest is the payload for the CreateProcedure write API.

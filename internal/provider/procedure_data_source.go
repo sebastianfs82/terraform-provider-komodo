@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -31,7 +32,7 @@ type ProcedureDataSourceModel struct {
 	Name         types.String   `tfsdk:"name"`
 	Stages       types.String   `tfsdk:"stages"`
 	Schedule     *ScheduleModel `tfsdk:"schedule"`
-	FailureAlert types.Bool     `tfsdk:"failure_alert"`
+	FailureAlert types.Bool     `tfsdk:"failure_alert_enabled"`
 	Webhook      *WebhookModel  `tfsdk:"webhook"`
 }
 
@@ -83,7 +84,7 @@ func (d *ProcedureDataSource) Schema(ctx context.Context, req datasource.SchemaR
 					},
 				},
 			},
-			"failure_alert": schema.BoolAttribute{
+			"failure_alert_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether an alert is sent on procedure failure.",
 			},
@@ -164,8 +165,9 @@ func (d *ProcedureDataSource) Read(ctx context.Context, req datasource.ReadReque
 	data.ID = types.StringValue(proc.ID.OID)
 	data.Name = types.StringValue(proc.Name)
 
-	stagesStr := string(proc.Config.Stages)
-	if len(proc.Config.Stages) > 0 && stagesStr != "null" {
+	stagesBytes, _ := json.Marshal(proc.Config.Stages)
+	stagesStr := string(stagesBytes)
+	if len(proc.Config.Stages) > 0 && stagesStr != "null" && stagesStr != "[]" {
 		data.Stages = types.StringValue(stagesStr)
 	} else {
 		data.Stages = types.StringNull()

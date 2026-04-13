@@ -25,6 +25,19 @@ import (
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 )
 
+// ProcedureExecutionModel is the Terraform model for a single execution within a stage.
+type ProcedureExecutionModel struct {
+	Enabled    types.Bool   `tfsdk:"enabled"`
+	Type       types.String `tfsdk:"type"`
+	Parameters types.Map    `tfsdk:"parameters"`
+}
+
+// ProcedureStageModel is the Terraform model for one procedure stage.
+type ProcedureStageModel struct {
+	Name       types.String              `tfsdk:"name"`
+	Executions []ProcedureExecutionModel `tfsdk:"execution"`
+}
+
 var _ resource.Resource = &ProcedureResource{}
 var _ resource.ResourceWithImportState = &ProcedureResource{}
 
@@ -38,13 +51,13 @@ type ProcedureResource struct {
 
 // ProcedureResourceModel is the Terraform resource model for komodo_procedure.
 type ProcedureResourceModel struct {
-	ID           types.String   `tfsdk:"id"`
-	Name         types.String   `tfsdk:"name"`
-	Tags         types.List     `tfsdk:"tags"`
-	Stages       types.String   `tfsdk:"stages"`
-	Schedule     *ScheduleModel `tfsdk:"schedule"`
-	FailureAlert types.Bool     `tfsdk:"failure_alert"`
-	Webhook      *WebhookModel  `tfsdk:"webhook"`
+	ID           types.String          `tfsdk:"id"`
+	Name         types.String          `tfsdk:"name"`
+	Tags         types.List            `tfsdk:"tags"`
+	Stages       []ProcedureStageModel `tfsdk:"stage"`
+	Schedule     *ScheduleModel        `tfsdk:"schedule"`
+	FailureAlert types.Bool            `tfsdk:"failure_alert_enabled"`
+	Webhook      *WebhookModel         `tfsdk:"webhook"`
 }
 
 func (r *ProcedureResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -73,14 +86,6 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 				MarkdownDescription: "A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.",
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"stages": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "JSON array of procedure stages. Each stage is a `ProcedureStage` object with `name`, `enabled`, and `executions` fields.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"schedule": schema.SingleNestedAttribute{
@@ -132,13 +137,11 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 					},
 				},
 			},
-			"failure_alert": schema.BoolAttribute{
+			"failure_alert_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Whether to send an alert when the procedure fails.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
+				Default:             booldefault.StaticBool(true),
 			},
 			"webhook": schema.SingleNestedAttribute{
 				Optional:            true,
@@ -152,6 +155,43 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 						Optional:            true,
 						Sensitive:           true,
 						MarkdownDescription: "Override the default webhook secret for this procedure.",
+					},
+				},
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"stage": schema.ListNestedBlock{
+				MarkdownDescription: "Ordered list of procedure stages. Stages run sequentially; executions within a stage run in parallel.",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"name": schema.StringAttribute{
+							Required:            true,
+							MarkdownDescription: "The name of the stage.",
+						},
+					},
+					Blocks: map[string]schema.Block{
+						"execution": schema.ListNestedBlock{
+							MarkdownDescription: "Ordered list of executions in this stage.",
+							NestedObject: schema.NestedBlockObject{
+								Attributes: map[string]schema.Attribute{
+									"type": schema.StringAttribute{
+										Required:            true,
+										MarkdownDescription: "The execution type (e.g. `DeployStack`, `RunBuild`, `RunProcedure`).",
+									},
+									"parameters": schema.MapAttribute{
+										Optional:            true,
+										ElementType:         types.StringType,
+										MarkdownDescription: "Parameters specific to the execution type as key-value string pairs.",
+									},
+									"enabled": schema.BoolAttribute{
+										Optional:            true,
+										Computed:            true,
+										MarkdownDescription: "Whether this execution is enabled.",
+										Default:             booldefault.StaticBool(true),
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -324,18 +364,59 @@ func partialProcedureConfigFromModel(data *ProcedureResourceModel) (client.Parti
 	var diags diag.Diagnostics
 	cfg := client.PartialProcedureConfig{}
 
-	if !data.Stages.IsNull() && !data.Stages.IsUnknown() {
-		raw := json.RawMessage(data.Stages.ValueString())
-		// Validate that it's valid JSON.
-		if !json.Valid(raw) {
-			diags.AddAttributeError(
-				path.Root("stages"),
-				"Invalid JSON",
-				fmt.Sprintf("The stages value is not valid JSON: %s", data.Stages.ValueString()),
-			)
-			return cfg, diags
+	if len(data.Stages) > 0 {
+		stages := make([]client.ProcedureStage, len(data.Stages))
+		for i, s := range data.Stages {
+			executions := make([]client.ProcedureStageExecution, len(s.Executions))
+			for j, e := range s.Executions {
+				var params json.RawMessage
+				if e.Parameters.IsNull() || e.Parameters.IsUnknown() || len(e.Parameters.Elements()) == 0 {
+					params = json.RawMessage("{}")
+				} else {
+					m := make(map[string]interface{}, len(e.Parameters.Elements()))
+					for k, v := range e.Parameters.Elements() {
+						if sv, ok := v.(types.String); ok {
+							raw := sv.ValueString()
+							// Attempt to decode as a native JSON number or boolean so the
+							// API receives the correct type (e.g. stop_time expects i32,
+							// not a string). Plain strings (IDs, names) are not valid JSON
+							// tokens and will remain as strings.
+							var native interface{}
+							if json.Unmarshal([]byte(raw), &native) == nil {
+								switch native.(type) {
+								case float64, bool:
+									m[k] = native
+									continue
+								}
+							}
+							m[k] = raw
+						}
+					}
+					b, err := json.Marshal(m)
+					if err != nil {
+						diags.AddAttributeError(
+							path.Root("stage").AtListIndex(i).AtName("execution").AtListIndex(j).AtName("parameters"),
+							"Parameter Serialization Error",
+							fmt.Sprintf("Unable to serialize parameters to JSON: %s", err),
+						)
+						return cfg, diags
+					}
+					params = json.RawMessage(b)
+				}
+				executions[j] = client.ProcedureStageExecution{
+					Enabled: e.Enabled.ValueBool(),
+					Execution: client.ProcedureExecution{
+						Type:   e.Type.ValueString(),
+						Params: params,
+					},
+				}
+			}
+			stages[i] = client.ProcedureStage{
+				Name:       s.Name.ValueString(),
+				Executions: executions,
+			}
 		}
-		cfg.Stages = raw
+		cfg.Stages = stages
 	}
 	if data.Schedule != nil {
 		if !data.Schedule.Format.IsNull() && !data.Schedule.Format.IsUnknown() {
@@ -396,12 +477,58 @@ func procedureToModel(proc *client.Procedure, data *ProcedureResourceModel) {
 	}
 	data.Tags = types.ListValueMust(types.StringType, tagVals)
 
-	// stages: set as JSON string if non-empty, otherwise null.
-	stagesStr := string(proc.Config.Stages)
-	if len(proc.Config.Stages) > 0 && stagesStr != "null" {
-		data.Stages = types.StringValue(stagesStr)
+	// stages: convert []client.ProcedureStage → []ProcedureStageModel
+	if len(proc.Config.Stages) > 0 {
+		stages := make([]ProcedureStageModel, len(proc.Config.Stages))
+		for i, s := range proc.Config.Stages {
+			execs := make([]ProcedureExecutionModel, len(s.Executions))
+			for j, e := range s.Executions {
+				// Read parameters from the API response, but only keep keys the user
+				// configured. This detects out-of-band drift while ignoring extra
+				// API-injected fields (e.g. services, stop_time).
+				var parameters types.Map
+				if i < len(data.Stages) && j < len(data.Stages[i].Executions) {
+					existing := data.Stages[i].Executions[j].Parameters
+					if existing.IsNull() || existing.IsUnknown() {
+						parameters = existing
+					} else {
+						// Decode the raw API params JSON into a flat map.
+						var apiParams map[string]interface{}
+						if err := json.Unmarshal(e.Execution.Params, &apiParams); err != nil {
+							apiParams = nil
+						}
+						elems := make(map[string]attr.Value, len(existing.Elements()))
+						for k := range existing.Elements() {
+							if apiParams != nil {
+								if v, ok := apiParams[k]; ok {
+									elems[k] = types.StringValue(fmt.Sprintf("%v", v))
+								} else {
+									// key removed on server — keep current value so user is aware
+									elems[k] = existing.Elements()[k]
+								}
+							} else {
+								elems[k] = existing.Elements()[k]
+							}
+						}
+						parameters, _ = types.MapValue(types.StringType, elems)
+					}
+				} else {
+					parameters = types.MapNull(types.StringType)
+				}
+				execs[j] = ProcedureExecutionModel{
+					Enabled:    types.BoolValue(e.Enabled),
+					Type:       types.StringValue(e.Execution.Type),
+					Parameters: parameters,
+				}
+			}
+			stages[i] = ProcedureStageModel{
+				Name:       types.StringValue(s.Name),
+				Executions: execs,
+			}
+		}
+		data.Stages = stages
 	} else {
-		data.Stages = types.StringNull()
+		data.Stages = nil
 	}
 
 	if proc.Config.ScheduleEnabled || proc.Config.Schedule != "" || proc.Config.ScheduleTimezone != "" || proc.Config.ScheduleAlert {

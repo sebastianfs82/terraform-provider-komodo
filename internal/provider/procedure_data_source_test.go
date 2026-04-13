@@ -38,7 +38,7 @@ func TestAccProcedureDataSource_fields(t *testing.T) {
 					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule.format", "Cron"),
 					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule.expression", "0 * * * *"),
 					resource.TestCheckResourceAttr("data.komodo_procedure.test", "schedule.enabled", "true"),
-					resource.TestCheckResourceAttrSet("data.komodo_procedure.test", "failure_alert"),
+					resource.TestCheckResourceAttrSet("data.komodo_procedure.test", "failure_alert_enabled"),
 					resource.TestCheckResourceAttrSet("data.komodo_procedure.test", "webhook.enabled"),
 				),
 			},
@@ -68,6 +68,76 @@ resource "komodo_procedure" "src" {
     expression = "0 * * * *"
     enabled    = true
   }
+}
+
+data "komodo_procedure" "test" {
+  id         = komodo_procedure.src.id
+  depends_on = [komodo_procedure.src]
+}
+`, name)
+}
+
+func TestAccProcedureDataSource_stages(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureDataSourceConfig_withStages("tf-acc-procedure-ds-stages"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.komodo_procedure.test", "name", "tf-acc-procedure-ds-stages"),
+					// data source exposes stages as a JSON string
+					resource.TestCheckResourceAttrSet("data.komodo_procedure.test", "stages"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccProcedureDataSource_failureAlertEnabled(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureDataSourceConfig_withFailureAlert("tf-acc-procedure-ds-failure-alert"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.komodo_procedure.test", "failure_alert_enabled", "false"),
+				),
+			},
+		},
+	})
+}
+
+func testAccProcedureDataSourceConfig_withStages(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "src" {
+  name = %q
+
+  stage {
+    name = "Run"
+
+    execution {
+      type = "RunProcedure"
+      parameters = {
+        id = "some-id"
+      }
+    }
+  }
+}
+
+data "komodo_procedure" "test" {
+  id         = komodo_procedure.src.id
+  depends_on = [komodo_procedure.src]
+}
+`, name)
+}
+
+func testAccProcedureDataSourceConfig_withFailureAlert(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "src" {
+  name                  = %q
+  failure_alert_enabled = false
 }
 
 data "komodo_procedure" "test" {

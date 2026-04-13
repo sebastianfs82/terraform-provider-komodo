@@ -302,3 +302,261 @@ resource "komodo_procedure" "test" {
 }
 `, name)
 }
+
+// ---------------------------------------------------------------------------
+// failure_alert_enabled
+// ---------------------------------------------------------------------------
+
+func TestAccProcedureResource_failureAlertDefault(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureResourceConfig("tf-acc-procedure-failure-alert-default"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// default is true
+					resource.TestCheckResourceAttr("komodo_procedure.test", "failure_alert_enabled", "true"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccProcedureResource_failureAlertDisabled(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureResourceConfigWithFailureAlert("tf-acc-procedure-failure-alert-off", false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "failure_alert_enabled", "false"),
+				),
+			},
+			{
+				Config: testAccProcedureResourceConfigWithFailureAlert("tf-acc-procedure-failure-alert-off", true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "failure_alert_enabled", "true"),
+				),
+			},
+		},
+	})
+}
+
+func testAccProcedureResourceConfigWithFailureAlert(name string, enabled bool) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "test" {
+  name                  = %q
+  failure_alert_enabled = %t
+}
+`, name, enabled)
+}
+
+// ---------------------------------------------------------------------------
+// stage / execution blocks (native HCL, no jsonencode)
+// ---------------------------------------------------------------------------
+
+func TestAccProcedureResource_stages(t *testing.T) {
+	const name = "tf-acc-procedure-stages"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with one stage containing one execution
+			{
+				Config: testAccProcedureResourceConfigWithStage(name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.#", "1"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.name", "Deploy"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.#", "1"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.type", "RunProcedure"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.enabled", "true"),
+				),
+			},
+			// Update to two stages
+			{
+				Config: testAccProcedureResourceConfigWithTwoStages(name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.#", "2"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.name", "Stage1"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.1.name", "Stage2"),
+				),
+			},
+			// Remove all stages
+			{
+				Config: testAccProcedureResourceConfig(name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccProcedureResource_executionEnabled(t *testing.T) {
+	const name = "tf-acc-procedure-exec-enabled"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureResourceConfigWithDisabledExecution(name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.enabled", "false"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccProcedureResource_stagesImport(t *testing.T) {
+	var procedureID string
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureResourceConfigWithStage("tf-acc-procedure-stages-import"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("komodo_procedure.test", "id"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["komodo_procedure.test"]
+						procedureID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config:            testAccProcedureResourceConfigWithStage("tf-acc-procedure-stages-import"),
+				ResourceName:      "komodo_procedure.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					return procedureID, nil
+				},
+				ImportStateVerifyIgnore: []string{"webhook"},
+			},
+		},
+	})
+}
+
+// ---------------------------------------------------------------------------
+// execution parameters (native HCL map, no jsonencode)
+// ---------------------------------------------------------------------------
+
+func TestAccProcedureResource_executionParameters(t *testing.T) {
+	const name = "tf-acc-procedure-exec-params"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProcedureResourceConfigWithParameters(name, "my-proc"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.parameters.%", "1"),
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.parameters.id", "my-proc"),
+				),
+			},
+			// Update parameter value — should be detected as a change (drift detection)
+			{
+				Config: testAccProcedureResourceConfigWithParameters(name, "other-proc"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.parameters.id", "other-proc"),
+				),
+			},
+		},
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Config helpers
+// ---------------------------------------------------------------------------
+
+func testAccProcedureResourceConfigWithStage(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "test" {
+  name = %q
+
+  stage {
+    name = "Deploy"
+
+    execution {
+      type = "RunProcedure"
+      parameters = {
+        id = "some-procedure-id"
+      }
+    }
+  }
+}
+`, name)
+}
+
+func testAccProcedureResourceConfigWithTwoStages(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "test" {
+  name = %q
+
+  stage {
+    name = "Stage1"
+
+    execution {
+      type = "RunProcedure"
+      parameters = {
+        id = "proc-1"
+      }
+    }
+  }
+
+  stage {
+    name = "Stage2"
+
+    execution {
+      type = "RunProcedure"
+      parameters = {
+        id = "proc-2"
+      }
+    }
+  }
+}
+`, name)
+}
+
+func testAccProcedureResourceConfigWithDisabledExecution(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "test" {
+  name = %q
+
+  stage {
+    name = "Stage1"
+
+    execution {
+      type    = "RunProcedure"
+      enabled = false
+      parameters = {
+        id = "proc-1"
+      }
+    }
+  }
+}
+`, name)
+}
+
+func testAccProcedureResourceConfigWithParameters(name, procID string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "test" {
+  name = %q
+
+  stage {
+    name = "Run"
+
+    execution {
+      type = "RunProcedure"
+      parameters = {
+        id = %q
+      }
+    }
+  }
+}
+`, name, procID)
+}

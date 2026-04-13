@@ -1,3 +1,25 @@
+## 0.7.0 (April 13, 2026)
+
+BREAKING CHANGES:
+
+* **`komodo_procedure` resource / data source:**
+  * The `stages` JSON string attribute has been replaced by a `stage` nested list block. Each `stage` block has a `name` attribute and one or more `execution` nested blocks with `type`, `parameters` (map), and `enabled` attributes.
+  * `failure_alert` has been renamed to `failure_alert_enabled` for consistency with the naming convention used across other resources.
+* **`komodo_builds` data source:** The `repo_id` and `builder_id` filter attributes have been removed. The data source now always returns all builds.
+* **`komodo_deployments` data source:** The `server_id` filter attribute has been removed. The data source now always returns all deployments.
+* **`komodo_networks` data source:** The previously required `server_id` attribute has been removed. The data source now lists Docker networks across all Komodo-managed servers instead of a single server.
+* **`komodo_repos` data source:** The `server_id` and `builder_id` filter attributes have been removed. The data source now always returns all repositories.
+* **`komodo_resource_syncs` data source:** The `repo_id` filter attribute has been removed. The data source now always returns all resource syncs.
+* **`komodo_stacks` data source:** The `server_id` and `repo_id` filter attributes have been removed. The data source now always returns all stacks.
+
+FEATURES:
+
+* **`komodo_terminal` resource:** Manages a Komodo terminal session attached to a target resource (server, deployment, or stack). Supports `target_type`, `target_id`, `container`, `service`, `mode`, and `command` attributes.
+* **`komodo_terminal` data source:** Reads an existing Komodo terminal session by name.
+* **`komodo_terminals` data source:** Lists all Komodo terminal sessions visible to the authenticated user.
+
+---
+
 ## 0.6.0 (April 12, 2026)
 
 BREAKING CHANGES:

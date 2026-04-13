@@ -3560,3 +3560,67 @@ func (c *Client) GetVersion(ctx context.Context) (*GetVersionResponse, error) {
 	}
 	return &result, nil
 }
+
+// Terminal operations.
+
+// CreateTerminal creates a terminal session for a server.
+func (c *Client) CreateTerminal(ctx context.Context, req CreateTerminalRequest) (*Terminal, error) {
+	payload := map[string]interface{}{
+		"type":   "CreateTerminal",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var terminal Terminal
+	if err := json.NewDecoder(resp.Body).Decode(&terminal); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &terminal, nil
+}
+
+// ListTerminals lists terminals, optionally filtered by target.
+func (c *Client) ListTerminals(ctx context.Context, req ListTerminalsRequest) ([]Terminal, error) {
+	payload := map[string]interface{}{
+		"type":   "ListTerminals",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/read", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var terminals []Terminal
+	if err := json.NewDecoder(resp.Body).Decode(&terminals); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return terminals, nil
+}
+
+// DeleteTerminal deletes the named terminal on the given target.
+func (c *Client) DeleteTerminal(ctx context.Context, req DeleteTerminalRequest) error {
+	payload := map[string]interface{}{
+		"type":   "DeleteTerminal",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}

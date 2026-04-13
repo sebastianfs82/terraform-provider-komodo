@@ -28,7 +28,7 @@ data "komodo_procedure" "example" {
 
 ### Read-Only
 
-- `failure_alert` (Boolean) Whether an alert is sent on procedure failure.
+- `failure_alert_enabled` (Boolean) Whether an alert is sent on procedure failure.
 - `schedule` (Attributes) Schedule configuration for the procedure. (see [below for nested schema](#nestedatt--schedule))
 - `stages` (String) JSON array of procedure stages.
 - `webhook` (Attributes) Webhook configuration for the procedure. (see [below for nested schema](#nestedatt--webhook))
