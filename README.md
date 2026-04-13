@@ -71,7 +71,7 @@ terraform {
   required_providers {
     komodo = {
       source  = "sebastianfs82/komodo"
-      version = "~> 0.1"
+      version = "~> 0.7"
     }
   }
 }
@@ -112,7 +112,7 @@ terraform {
   required_providers {
     komodo = {
       source  = "sebastianfs82/komodo"
-      version = "~> 0.1"
+      version = "~> 0.7"
     }
   }
 }
@@ -220,6 +220,7 @@ resource "komodo_stack" "app" {
 | [`komodo_service_user`](docs/resources/service_user.md) | Non-human service account |
 | [`komodo_stack`](docs/resources/stack.md) | Docker Compose stack |
 | [`komodo_tag`](docs/resources/tag.md) | Label for grouping resources |
+| [`komodo_terminal`](docs/resources/terminal.md) | Terminal session on a target resource |
 | [`komodo_user`](docs/resources/user.md) | Human user account |
 | [`komodo_user_group`](docs/resources/user_group.md) | User group for permission management |
 | [`komodo_user_group_membership`](docs/resources/user_group.md) | User ↔ group membership |
@@ -250,6 +251,7 @@ Plural data sources return a filtered list.
 | [`komodo_service_user`](docs/data-sources/service_user.md) | Look up a service user |
 | [`komodo_stack`](docs/data-sources/stack.md) | Look up a stack |
 | [`komodo_tag`](docs/data-sources/tag.md) | Look up a tag |
+| [`komodo_terminal`](docs/data-sources/terminal.md) | Look up a terminal session |
 | [`komodo_user`](docs/data-sources/user.md) | Look up a user |
 | [`komodo_user_group`](docs/data-sources/user_group.md) | Look up a user group |
 | [`komodo_variable`](docs/data-sources/variable.md) | Look up a variable |
@@ -273,6 +275,7 @@ Plural data sources return a filtered list.
 | [`komodo_service_users`](docs/data-sources/service_users.md) | List / filter service users |
 | [`komodo_stacks`](docs/data-sources/stacks.md) | List / filter stacks |
 | [`komodo_tags`](docs/data-sources/tags.md) | List / filter tags |
+| [`komodo_terminals`](docs/data-sources/terminals.md) | List terminal sessions |
 | [`komodo_users`](docs/data-sources/users.md) | List / filter users |
 | [`komodo_user_groups`](docs/data-sources/user_groups.md) | List / filter user groups |
 | [`komodo_variables`](docs/data-sources/variables.md) | List / filter variables |
