@@ -94,7 +94,7 @@ func TestAccBuildResource_importState(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccBuildResourceWithSourceConfig("tf-acc-build-import", "myorg/myrepo", "main"),
+				Config: testAccBuildResourceWithSourceConfig("tf-acc-build-import", "main"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("komodo_build.test", "id"),
 					func(s *terraform.State) error {
@@ -108,7 +108,7 @@ func TestAccBuildResource_importState(t *testing.T) {
 				),
 			},
 			{
-				Config:            testAccBuildResourceWithSourceConfig("tf-acc-build-import", "myorg/myrepo", "main"),
+				Config:            testAccBuildResourceWithSourceConfig("tf-acc-build-import", "main"),
 				ResourceName:      "komodo_build.test",
 				ImportState:       true,
 				ImportStateVerify: true,
@@ -158,7 +158,7 @@ func TestAccBuildResource_sourceBlock(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Add source block
 			{
-				Config: testAccBuildResourceWithSourceConfig(name, "myorg/myrepo", "main"),
+				Config: testAccBuildResourceWithSourceConfig(name, "main"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_build.test", "source.path", "myorg/myrepo"),
 					resource.TestCheckResourceAttr("komodo_build.test", "source.branch", "main"),
@@ -166,7 +166,7 @@ func TestAccBuildResource_sourceBlock(t *testing.T) {
 			},
 			// Update source block
 			{
-				Config: testAccBuildResourceWithSourceConfig(name, "myorg/myrepo", "develop"),
+				Config: testAccBuildResourceWithSourceConfig(name, "develop"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_build.test", "source.path", "myorg/myrepo"),
 					resource.TestCheckResourceAttr("komodo_build.test", "source.branch", "develop"),
@@ -559,16 +559,16 @@ resource "komodo_build" "test" {
 `, name)
 }
 
-func testAccBuildResourceWithSourceConfig(name, path, branch string) string {
+func testAccBuildResourceWithSourceConfig(name, branch string) string {
 	return fmt.Sprintf(`
 resource "komodo_build" "test" {
   name = %q
   source {
-    path   = %q
+    path   = "myorg/myrepo"
     branch = %q
   }
 }
-`, name, path, branch)
+`, name, branch)
 }
 
 func testAccBuildWithTagConfig(name string) string {
