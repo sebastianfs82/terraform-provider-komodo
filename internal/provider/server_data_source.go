@@ -273,13 +273,13 @@ func serverToDataSourceModel(ctx context.Context, s *client.Server, data *Server
 	data.Alerts = &ServerAlertsModel{
 		Enabled: types.BoolValue(cfg.StatsMonitoring),
 		Types:   typesSet,
-		Thresholds: ServerAlertsThresholdsModel{
-			CPUCritical:    types.Float64Value(cfg.CPUCritical),
-			CPUWarning:     types.Float64Value(cfg.CPUWarning),
-			DiskCritical:   types.Float64Value(cfg.DiskCritical),
-			DiskWarning:    types.Float64Value(cfg.DiskWarning),
-			MemoryCritical: types.Float64Value(cfg.MemCritical),
-			MemoryWarning:  types.Float64Value(cfg.MemWarning),
+		Thresholds: &ServerAlertsThresholdsModel{
+			CPUCritical:    types.Int64Value(int64(cfg.CPUCritical)),
+			CPUWarning:     types.Int64Value(int64(cfg.CPUWarning)),
+			DiskCritical:   types.Int64Value(int64(cfg.DiskCritical)),
+			DiskWarning:    types.Int64Value(int64(cfg.DiskWarning)),
+			MemoryCritical: types.Int64Value(int64(cfg.MemCritical)),
+			MemoryWarning:  types.Int64Value(int64(cfg.MemWarning)),
 		},
 	}
 }

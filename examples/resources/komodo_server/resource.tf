@@ -18,13 +18,14 @@ resource "komodo_server" "production" {
   alerts {
     enabled = true
     types   = ["cpu", "memory", "disk", "unreachable"]
+
     thresholds {
-      cpu_warning     = 75.0
-      cpu_critical    = 90.0
-      memory_warning  = 75.0
-      memory_critical = 90.0
-      disk_warning    = 80.0
-      disk_critical   = 95.0
+      cpu_warning     = 75
+      cpu_critical    = 90
+      memory_warning  = 75
+      memory_critical = 90
+      disk_warning    = 80
+      disk_critical   = 95
     }
   }
 

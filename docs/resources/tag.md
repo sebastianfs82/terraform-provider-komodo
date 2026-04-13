@@ -15,7 +15,7 @@ Manages a Komodo tag.
 ```terraform
 resource "komodo_tag" "example" {
   name  = "production"
-  color = "#FF0000"
+  color = "Red"
 }
 ```
 

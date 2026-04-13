@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
@@ -217,6 +218,50 @@ resource "komodo_action" "test" {
 `, name)
 }
 
+func TestUnitActionResource_cronExpressionValidation(t *testing.T) {
+	// These tests run without a live Komodo server (no TF_ACC required).
+	cases := []struct {
+		name        string
+		expression  string
+		expectError bool
+	}{
+		{"valid 6-field", "0 0 * * * *", false},
+		{"valid 7-field", "0 0 0 * * * *", false},
+		{"invalid 5-field", "0 0 * * *", true},
+		{"invalid 4-field", "0 * * *", true},
+		{"invalid 1-field", "0", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := fmt.Sprintf(`
+resource "komodo_action" "test" {
+  name = "test-cron-validation"
+  schedule {
+    format     = "Cron"
+    expression = %q
+  }
+}
+`, tc.expression)
+
+			resource.UnitTest(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config: cfg,
+						ExpectError: func() *regexp.Regexp {
+							if tc.expectError {
+								return regexp.MustCompile(`Invalid Cron expression`)
+							}
+							return nil
+						}(),
+					},
+				},
+			})
+		})
+	}
+}
+
 func TestAccActionResource_schedule(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -226,7 +271,7 @@ func TestAccActionResource_schedule(t *testing.T) {
 				Config: testAccActionResourceConfigWithFullSchedule("tf-acc-action-schedule"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.format", "Cron"),
-					resource.TestCheckResourceAttr("komodo_action.test", "schedule.expression", "0 * * * *"),
+					resource.TestCheckResourceAttr("komodo_action.test", "schedule.expression", "0 0 * * * *"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.enabled", "true"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.alert_enabled", "true"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.timezone", "Europe/Berlin"),
@@ -245,7 +290,7 @@ func TestAccActionResource_scheduleDefaults(t *testing.T) {
 				Config: testAccActionResourceConfigWithMinimalSchedule("tf-acc-action-schedule-defaults"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.format", "Cron"),
-					resource.TestCheckResourceAttr("komodo_action.test", "schedule.expression", "0 * * * *"),
+					resource.TestCheckResourceAttr("komodo_action.test", "schedule.expression", "0 0 * * * *"),
 					// enabled and alert_enabled default to true; timezone defaults to ""
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.enabled", "true"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.alert_enabled", "true"),
@@ -265,7 +310,7 @@ func TestAccActionResource_scheduleUpdate(t *testing.T) {
 			{
 				Config: testAccActionResourceConfigWithFullSchedule(name),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_action.test", "schedule.expression", "0 * * * *"),
+					resource.TestCheckResourceAttr("komodo_action.test", "schedule.expression", "0 0 * * * *"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.enabled", "true"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.alert_enabled", "true"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.timezone", "Europe/Berlin"),
@@ -275,7 +320,7 @@ func TestAccActionResource_scheduleUpdate(t *testing.T) {
 				// Update expression only; omit enabled/alert_enabled/timezone → defaults applied
 				Config: testAccActionResourceConfigWithMinimalSchedule(name),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_action.test", "schedule.expression", "0 * * * *"),
+					resource.TestCheckResourceAttr("komodo_action.test", "schedule.expression", "0 0 * * * *"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.enabled", "true"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.alert_enabled", "true"),
 					resource.TestCheckResourceAttr("komodo_action.test", "schedule.timezone", ""),
@@ -321,7 +366,7 @@ resource "komodo_action" "test" {
   name = %q
   schedule {
     format        = "Cron"
-    expression    = "0 * * * *"
+    expression    = "0 0 * * * *"
     enabled       = true
     alert_enabled = true
     timezone      = "Europe/Berlin"
@@ -336,7 +381,7 @@ resource "komodo_action" "test" {
   name = %q
   schedule {
     format     = "Cron"
-    expression = "0 * * * *"
+    expression = "0 0 * * * *"
   }
 }
 `, name)

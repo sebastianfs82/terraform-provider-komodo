@@ -16,9 +16,33 @@ Manages a Komodo build resource.
 resource "komodo_build" "example" {
   name       = "my-service"
   builder_id = komodo_builder.example.id
-  image_name = "myorg/my-service"
-  repo       = "myorg/my-service"
-  branch     = "main"
+
+  source {
+    path   = "myorg/my-service"
+    branch = "main"
+  }
+
+  image {
+    name = "myorg/my-service"
+
+    registry {
+      account_id = komodo_registry_account.example.id
+    }
+  }
+
+  build {
+    path = "."
+
+    argument {
+      name  = "BUILD_ENV"
+      value = "production"
+    }
+    argument {
+      name           = "API_KEY"
+      value          = "my-secret-value"
+      secret_enabled = true
+    }
+  }
 }
 ```
 
@@ -56,10 +80,22 @@ resource "komodo_build" "example" {
 
 Optional:
 
-- `args` (String) Docker build arguments in `KEY=VALUE` format, newline-separated.
-- `extra_args` (List of String) Additional arguments to pass to the `docker build` command.
+- `argument` (Block List) Docker build argument. Set `secret_enabled = true` to pass it as a Docker secret (`--secret id=NAME,env=VALUE`) instead of a plain build-arg (`--build-arg NAME=VALUE`). (see [below for nested schema](#nestedblock--build--argument))
+- `extra_arguments` (List of String) Additional arguments to pass to the `docker build` command.
 - `path` (String) Path to the Docker build context directory. Defaults to `.`.
-- `secret_args` (String, Sensitive) Docker secret build arguments. These are not stored in the image layers.
+
+<a id="nestedblock--build--argument"></a>
+### Nested Schema for `build.argument`
+
+Required:
+
+- `name` (String) The build argument name.
+- `value` (String) The build argument value.
+
+Optional:
+
+- `secret_enabled` (Boolean) When `true`, passes this argument as a Docker secret instead of a plain build-arg. Defaults to `false`.
+
 
 
 <a id="nestedblock--image"></a>

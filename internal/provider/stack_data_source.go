@@ -250,13 +250,9 @@ func (d *StackDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed:            true,
 				MarkdownDescription: "Registry login configuration for the stack.",
 				Attributes: map[string]schema.Attribute{
-					"provider": schema.StringAttribute{
+					"account_id": schema.StringAttribute{
 						Computed:            true,
-						MarkdownDescription: "Registry provider domain.",
-					},
-					"account": schema.StringAttribute{
-						Computed:            true,
-						MarkdownDescription: "Registry account name.",
+						MarkdownDescription: "The ID of the `komodo_registry_account` used to authenticate.",
 					},
 				},
 			},
@@ -345,12 +341,12 @@ func (d *StackDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		return
 	}
 
-	stackToDataSourceModel(ctx, stack, &data)
+	stackToDataSourceModel(ctx, d.client, stack, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 // stackToDataSourceModel populates a StackDataSourceModel from an API Stack response.
-func stackToDataSourceModel(ctx context.Context, stack *client.Stack, data *StackDataSourceModel) {
+func stackToDataSourceModel(ctx context.Context, c *client.Client, stack *client.Stack, data *StackDataSourceModel) {
 	strOrNull := func(s string) types.String {
 		if s != "" {
 			return types.StringValue(s)
@@ -378,9 +374,9 @@ func stackToDataSourceModel(ctx context.Context, stack *client.Stack, data *Stac
 	}
 	data.PollUpdatesEnabled = types.BoolValue(stack.Config.PollForUpdates)
 	data.AlertsEnabled = types.BoolValue(stack.Config.SendAlerts)
+	accountID := c.ResolveDockerRegistryAccountID(ctx, stack.Config.RegistryProvider, stack.Config.RegistryAccount)
 	data.Registry = &RegistryConfigModel{
-		Provider: strOrNull(stack.Config.RegistryProvider),
-		Account:  strOrNull(stack.Config.RegistryAccount),
+		AccountID: types.StringValue(accountID),
 	}
 	data.ComposeCmdWrapper = strOrNull(stack.Config.ComposeCmdWrapper)
 

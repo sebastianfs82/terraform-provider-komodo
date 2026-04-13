@@ -33,13 +33,14 @@ resource "komodo_server" "production" {
   alerts {
     enabled = true
     types   = ["cpu", "memory", "disk", "unreachable"]
+
     thresholds {
-      cpu_warning     = 75.0
-      cpu_critical    = 90.0
-      memory_warning  = 75.0
-      memory_critical = 90.0
-      disk_warning    = 80.0
-      disk_critical   = 95.0
+      cpu_warning     = 75
+      cpu_critical    = 90
+      memory_warning  = 75
+      memory_critical = 90
+      disk_warning    = 80
+      disk_critical   = 95
     }
   }
 
@@ -91,20 +92,20 @@ resource "komodo_server" "production" {
 Optional:
 
 - `enabled` (Boolean) Whether alerting is enabled. When `false`, all alert types are disabled regardless of `types`. Defaults to `true`.
-- `thresholds` (Attributes) Alert threshold percentages. (see [below for nested schema](#nestedatt--alerts--thresholds))
+- `thresholds` (Block, Optional) Alert threshold percentages. (see [below for nested schema](#nestedblock--alerts--thresholds))
 - `types` (Set of String) Alert types to enable when `enabled` is `true`. Valid values: `cpu`, `disk`, `memory`, `unreachable`, `version`. Required (non-empty) when `enabled` is `true`. Defaults to `[]`.
 
-<a id="nestedatt--alerts--thresholds"></a>
+<a id="nestedblock--alerts--thresholds"></a>
 ### Nested Schema for `alerts.thresholds`
 
 Optional:
 
-- `cpu_critical` (Number) CPU percentage threshold for CRITICAL state. Defaults to `99`.
-- `cpu_warning` (Number) CPU percentage threshold for WARNING state. Defaults to `90`.
-- `disk_critical` (Number) Disk percentage threshold for CRITICAL state. Defaults to `95`.
-- `disk_warning` (Number) Disk percentage threshold for WARNING state. Defaults to `75`.
-- `memory_critical` (Number) Memory percentage threshold for CRITICAL state. Defaults to `95`.
-- `memory_warning` (Number) Memory percentage threshold for WARNING state. Defaults to `75`.
+- `cpu_critical` (Number) CPU percentage threshold for CRITICAL state. Must be between 0 and 100. Defaults to `99`.
+- `cpu_warning` (Number) CPU percentage threshold for WARNING state. Must be between 0 and 100. Defaults to `90`.
+- `disk_critical` (Number) Disk percentage threshold for CRITICAL state. Must be between 0 and 100. Defaults to `95`.
+- `disk_warning` (Number) Disk percentage threshold for WARNING state. Must be between 0 and 100. Defaults to `75`.
+- `memory_critical` (Number) Memory percentage threshold for CRITICAL state. Must be between 0 and 100. Defaults to `95`.
+- `memory_warning` (Number) Memory percentage threshold for WARNING state. Must be between 0 and 100. Defaults to `75`.
 
 
 

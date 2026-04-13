@@ -154,7 +154,7 @@ resource "komodo_provider_account" "github" {
 # Tags let you group and filter resources in the Komodo UI.
 resource "komodo_tag" "app" {
   name  = "my-app"
-  color = "#4f46e5"
+  color = "Indigo"
 }
 
 # ─── Repository ──────────────────────────────────────────────────────────────

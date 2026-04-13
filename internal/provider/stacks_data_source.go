@@ -217,13 +217,9 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 							Computed:            true,
 							MarkdownDescription: "Registry login configuration for the stack.",
 							Attributes: map[string]schema.Attribute{
-								"provider": schema.StringAttribute{
+								"account_id": schema.StringAttribute{
 									Computed:            true,
-									MarkdownDescription: "Registry provider domain.",
-								},
-								"account": schema.StringAttribute{
-									Computed:            true,
-									MarkdownDescription: "Registry account name.",
+									MarkdownDescription: "The ID of the `komodo_registry_account` used to authenticate.",
 								},
 							},
 						},
@@ -356,8 +352,7 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 			PollUpdatesEnabled: types.BoolValue(stack.Config.PollForUpdates),
 			AlertsEnabled:      types.BoolValue(stack.Config.SendAlerts),
 			Registry: &RegistryConfigModel{
-				Provider: strOrNull(stack.Config.RegistryProvider),
-				Account:  strOrNull(stack.Config.RegistryAccount),
+				AccountID: types.StringValue(d.client.ResolveDockerRegistryAccountID(ctx, stack.Config.RegistryProvider, stack.Config.RegistryAccount)),
 			},
 			ComposeCmdWrapper:        strOrNull(stack.Config.ComposeCmdWrapper),
 			ExtraArguments:           extraArgs,

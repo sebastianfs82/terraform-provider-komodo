@@ -7,13 +7,255 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+// ---------------------------------------------------------------------------
+// Unit tests – trailing-newline trimming (no API required)
+// ---------------------------------------------------------------------------
+
+func TestUnitBuildResource_trailingNewlineTrim(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no newline", "KEY=value", "KEY=value"},
+		{"trailing LF", "KEY=value\n", "KEY=value"},
+		{"trailing CRLF", "KEY=value\r\n", "KEY=value"},
+		{"trailing multi LF", "KEY=value\n\n", "KEY=value"},
+		{"multiline LF", "A=1\nB=2\n", "A=1\nB=2"},
+		{"empty string", "", ""},
+		{"only newline", "\n", ""},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.TrimRight(tc.input, "\n\r")
+			if got != tc.want {
+				t.Errorf("TrimRight(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUnitBuildResource_parseBuildArguments(t *testing.T) {
+	boolFalse := types.BoolValue(false)
+	boolTrue := types.BoolValue(true)
+	cases := []struct {
+		name   string
+		input  string
+		secret bool
+		want   []BuildArgumentModel
+	}{
+		{"empty", "", false, nil},
+		{"whitespace", "  \n  ", false, nil},
+		{"single plain", "KEY=value", false, []BuildArgumentModel{{Name: strVal("KEY"), Value: strVal("value"), SecretEnabled: boolFalse}}},
+		{"single secret", "KEY=value", true, []BuildArgumentModel{{Name: strVal("KEY"), Value: strVal("value"), SecretEnabled: boolTrue}}},
+		{"trailing LF", "KEY=value\n", false, []BuildArgumentModel{{Name: strVal("KEY"), Value: strVal("value"), SecretEnabled: boolFalse}}},
+		{"two entries sorted", "Z=last\nA=first", false, []BuildArgumentModel{
+			{Name: strVal("A"), Value: strVal("first"), SecretEnabled: boolFalse},
+			{Name: strVal("Z"), Value: strVal("last"), SecretEnabled: boolFalse},
+		}},
+		{"value with equals", "URL=http://x?a=1", false, []BuildArgumentModel{{Name: strVal("URL"), Value: strVal("http://x?a=1"), SecretEnabled: boolFalse}}},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseBuildArguments(tc.input, tc.secret)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len=%d want %d: %v", len(got), len(tc.want), got)
+			}
+			for i := range got {
+				if got[i].Name != tc.want[i].Name || got[i].Value != tc.want[i].Value || got[i].SecretEnabled != tc.want[i].SecretEnabled {
+					t.Errorf("[%d] got {%s=%s secret=%v} want {%s=%s secret=%v}",
+						i, got[i].Name, got[i].Value, got[i].SecretEnabled,
+						tc.want[i].Name, tc.want[i].Value, tc.want[i].SecretEnabled)
+				}
+			}
+		})
+	}
+}
+
+func TestUnitBuildResource_buildArgsToString(t *testing.T) {
+	boolFalse := types.BoolValue(false)
+	cases := []struct {
+		name  string
+		input []BuildArgumentModel
+		want  string
+	}{
+		{"empty", nil, ""},
+		{"single", []BuildArgumentModel{{Name: strVal("KEY"), Value: strVal("v"), SecretEnabled: boolFalse}}, "KEY=v"},
+		{"sorted", []BuildArgumentModel{
+			{Name: strVal("Z"), Value: strVal("last"), SecretEnabled: boolFalse},
+			{Name: strVal("A"), Value: strVal("first"), SecretEnabled: boolFalse},
+		}, "A=first\nZ=last"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildArgsToString(tc.input)
+			if got != tc.want {
+				t.Errorf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUnitBuildResource_argsRoundTrip(t *testing.T) {
+	boolFalse := types.BoolValue(false)
+	args := []BuildArgumentModel{
+		{Name: strVal("LOG_LEVEL"), Value: strVal("info"), SecretEnabled: boolFalse},
+		{Name: strVal("BUILD_ENV"), Value: strVal("production"), SecretEnabled: boolFalse},
+	}
+	serialised := buildArgsToString(args)
+	parsed := parseBuildArguments(serialised, false)
+	if len(parsed) != len(args) {
+		t.Fatalf("got %d entries want %d", len(parsed), len(args))
+	}
+	// both are sorted by name
+	expected := []BuildArgumentModel{
+		{Name: strVal("BUILD_ENV"), Value: strVal("production"), SecretEnabled: boolFalse},
+		{Name: strVal("LOG_LEVEL"), Value: strVal("info"), SecretEnabled: boolFalse},
+	}
+	for i := range parsed {
+		if parsed[i].Name != expected[i].Name || parsed[i].Value != expected[i].Value || parsed[i].SecretEnabled != expected[i].SecretEnabled {
+			t.Errorf("[%d] got {%s=%s secret=%v} want {%s=%s secret=%v}",
+				i, parsed[i].Name, parsed[i].Value, parsed[i].SecretEnabled,
+				expected[i].Name, expected[i].Value, expected[i].SecretEnabled)
+		}
+	}
+}
+
+// strVal is a test helper to create a types.String value.
+func strVal(s string) types.String { return types.StringValue(s) }
+
+// ---------------------------------------------------------------------------
+// Acceptance tests – build.argument / labels / dockerfile
+// round-trip without drift (regression for trailing-newline bug)
+// ---------------------------------------------------------------------------
+
+func TestAccBuildResource_argsNoDrift(t *testing.T) {
+	const name = "tf-acc-build-args-drift"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with argument blocks - second plan must be empty (no drift).
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  build {
+    argument {
+      name  = "BUILD_ENV"
+      value = "production"
+    }
+  }
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "build.argument.0.name", "BUILD_ENV"),
+					resource.TestCheckResourceAttr("komodo_build.test", "build.argument.0.value", "production"),
+				),
+			},
+			// ExpectNonEmptyPlan would fail this step if there is drift.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  build {
+    argument {
+      name  = "BUILD_ENV"
+      value = "production"
+    }
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Multiple arguments.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  build {
+    argument {
+      name  = "BUILD_ENV"
+      value = "production"
+    }
+    argument {
+      name  = "LOG_LEVEL"
+      value = "info"
+    }
+  }
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "build.argument.#", "2"),
+				),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  build {
+    argument {
+      name  = "BUILD_ENV"
+      value = "production"
+    }
+    argument {
+      name  = "LOG_LEVEL"
+      value = "info"
+    }
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+func TestAccBuildResource_labelsNoDrift(t *testing.T) {
+	const name = "tf-acc-build-labels-drift"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name   = %q
+  labels = "maintainer=team"
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "labels", "maintainer=team"),
+				),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name   = %q
+  labels = "maintainer=team"
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
 
 // ---------------------------------------------------------------------------
 // Basic lifecycle
@@ -113,8 +355,8 @@ func TestAccBuildResource_importState(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 				ImportStateIdFunc: func(_ *terraform.State) (string, error) { return buildID, nil },
-				// webhook.secret and build.secret_args are sensitive and may not round-trip
-				ImportStateVerifyIgnore: []string{"webhook.secret", "build.secret_args"},
+				// webhook.secret and build.secret_argument are sensitive and may not round-trip
+				ImportStateVerifyIgnore: []string{"webhook.secret", "build.secret_argument"},
 			},
 		},
 	})
@@ -393,16 +635,20 @@ resource "komodo_build" "test" {
   name = %q
   build {
     path       = "./app"
-    extra_args = ["--no-cache"]
-    args       = "ENV=production"
+    extra_arguments = ["--no-cache"]
+    argument {
+      name  = "ENV"
+      value = "production"
+    }
   }
 }
 `, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_build.test", "build.path", "./app"),
-					resource.TestCheckResourceAttr("komodo_build.test", "build.extra_args.#", "1"),
-					resource.TestCheckResourceAttr("komodo_build.test", "build.extra_args.0", "--no-cache"),
-					resource.TestCheckResourceAttr("komodo_build.test", "build.args", "ENV=production"),
+					resource.TestCheckResourceAttr("komodo_build.test", "build.extra_arguments.#", "1"),
+					resource.TestCheckResourceAttr("komodo_build.test", "build.extra_arguments.0", "--no-cache"),
+					resource.TestCheckResourceAttr("komodo_build.test", "build.argument.0.name", "ENV"),
+					resource.TestCheckResourceAttr("komodo_build.test", "build.argument.0.value", "production"),
 				),
 			},
 			// Update build block
@@ -417,7 +663,7 @@ resource "komodo_build" "test" {
 `, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_build.test", "build.path", "."),
-					resource.TestCheckResourceAttr("komodo_build.test", "build.extra_args.#", "0"),
+					resource.TestCheckResourceAttr("komodo_build.test", "build.extra_arguments.#", "0"),
 				),
 			},
 			// Remove build block

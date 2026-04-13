@@ -14,8 +14,7 @@ Manages a Komodo alerter resource.
 
 ```terraform
 resource "komodo_alerter" "slack" {
-  name    = "slack-alerts"
-  enabled = true
+  name = "slack-alerts"
 
   endpoint {
     type = "Slack"

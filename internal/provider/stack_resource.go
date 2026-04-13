@@ -45,8 +45,7 @@ type StackWebhookModel struct {
 }
 
 type RegistryConfigModel struct {
-	Provider types.String `tfsdk:"provider"`
-	Account  types.String `tfsdk:"account"`
+	AccountID types.String `tfsdk:"account_id"`
 }
 
 type StackSourceModel struct {
@@ -283,7 +282,6 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						MarkdownDescription: "Inline compose file contents. When set, this takes precedence over git repo sourcing.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
-							normalizeNewlinesPlanModifier{},
 						},
 					},
 					"local_enabled": schema.BoolAttribute{
@@ -370,13 +368,9 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"registry": schema.SingleNestedBlock{
 				MarkdownDescription: "Registry login configuration. When set, `docker login` is run before deploying.",
 				Attributes: map[string]schema.Attribute{
-					"provider": schema.StringAttribute{
-						Required:            true,
-						MarkdownDescription: "Registry provider domain, e.g. `docker.io` or `ghcr.io`.",
-					},
-					"account": schema.StringAttribute{
-						Required:            true,
-						MarkdownDescription: "Registry account name used to authenticate.",
+					"account_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The ID of a `komodo_registry_account` resource to authenticate with.",
 					},
 				},
 			},
@@ -735,13 +729,17 @@ func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackReso
 
 		RegistryProvider: func() string {
 			if data.Registry != nil {
-				return data.Registry.Provider.ValueString()
+				if acc, err := c.GetDockerRegistryAccount(ctx, data.Registry.AccountID.ValueString()); err == nil && acc != nil {
+					return acc.Domain
+				}
 			}
 			return ""
 		}(),
 		RegistryAccount: func() string {
 			if data.Registry != nil {
-				return data.Registry.Account.ValueString()
+				if acc, err := c.GetDockerRegistryAccount(ctx, data.Registry.AccountID.ValueString()); err == nil && acc != nil {
+					return acc.Username
+				}
 			}
 			return ""
 		}(),
@@ -898,9 +896,9 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	data.PollUpdatesEnabled = types.BoolValue(stack.Config.PollForUpdates)
 	data.AlertsEnabled = types.BoolValue(stack.Config.SendAlerts)
 	if stack.Config.RegistryProvider != "" || stack.Config.RegistryAccount != "" {
+		accountID := c.ResolveDockerRegistryAccountID(ctx, stack.Config.RegistryProvider, stack.Config.RegistryAccount)
 		data.Registry = &RegistryConfigModel{
-			Provider: strOrNull(stack.Config.RegistryProvider),
-			Account:  strOrNull(stack.Config.RegistryAccount),
+			AccountID: types.StringValue(accountID),
 		}
 	} else {
 		data.Registry = nil
@@ -1010,8 +1008,22 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	if data.Compose != nil || stack.Config.FileContents != "" || stack.Config.FilesOnHost ||
 		len(stack.Config.FilePaths) > 0 || stack.Config.RunDirectory != "" {
 		filePaths, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
+		normalize := func(s string) string {
+			return strings.TrimRight(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+		}
+		apiNorm := normalize(stack.Config.FileContents)
+		var contents types.String
+		if data.Compose != nil && !data.Compose.Contents.IsNull() && !data.Compose.Contents.IsUnknown() {
+			if normalize(data.Compose.Contents.ValueString()) == apiNorm {
+				contents = data.Compose.Contents
+			} else {
+				contents = strOrNull(apiNorm)
+			}
+		} else {
+			contents = strOrNull(apiNorm)
+		}
 		data.Compose = &FilesConfigModel{
-			Contents:     strOrNull(strings.ReplaceAll(stack.Config.FileContents, "\r\n", "\n")),
+			Contents:     contents,
 			LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
 			Directory:    strOrNull(stack.Config.RunDirectory),
 			FilePaths:    filePaths,
@@ -1064,25 +1076,4 @@ func (m trimTrailingNewlinePlanModifier) PlanModifyString(_ context.Context, req
 		return
 	}
 	resp.PlanValue = types.StringValue(strings.TrimRight(req.PlanValue.ValueString(), "\n"))
-}
-
-// normalizeNewlinesPlanModifier replaces \r\n with \n in string plan values.
-// This prevents "inconsistent result" errors when heredocs on Windows produce
-// CRLF line endings that the API normalises to LF.
-type normalizeNewlinesPlanModifier struct{}
-
-func (m normalizeNewlinesPlanModifier) Description(_ context.Context) string {
-	return "Normalizes \\r\\n to \\n in the planned value."
-}
-
-func (m normalizeNewlinesPlanModifier) MarkdownDescription(_ context.Context) string {
-	return "Normalizes `\\r\\n` to `\\n` in the planned value."
-}
-
-func (m normalizeNewlinesPlanModifier) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
-		return
-	}
-	normalized := strings.ReplaceAll(req.PlanValue.ValueString(), "\r\n", "\n")
-	resp.PlanValue = types.StringValue(normalized)
 }

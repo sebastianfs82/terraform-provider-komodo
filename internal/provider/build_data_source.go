@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -201,19 +202,30 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 						Computed:            true,
 						MarkdownDescription: "Path to the Docker build context directory.",
 					},
-					"extra_args": schema.ListAttribute{
+					"extra_arguments": schema.ListAttribute{
 						Computed:            true,
 						ElementType:         types.StringType,
 						MarkdownDescription: "Additional arguments passed to `docker build`.",
 					},
-					"args": schema.StringAttribute{
+					"argument": schema.ListNestedAttribute{
 						Computed:            true,
 						MarkdownDescription: "Docker build arguments.",
-					},
-					"secret_args": schema.StringAttribute{
-						Computed:            true,
-						Sensitive:           true,
-						MarkdownDescription: "Docker secret build arguments.",
+						NestedObject: schema.NestedAttributeObject{
+							Attributes: map[string]schema.Attribute{
+								"name": schema.StringAttribute{
+									Computed:            true,
+									MarkdownDescription: "The build argument name.",
+								},
+								"value": schema.StringAttribute{
+									Computed:            true,
+									MarkdownDescription: "The build argument value.",
+								},
+								"secret_enabled": schema.BoolAttribute{
+									Computed:            true,
+									MarkdownDescription: "Whether this argument is passed as a Docker secret.",
+								},
+							},
+						},
 					},
 				},
 			},
@@ -354,12 +366,22 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	}
 	data.FilesOnHost = types.BoolValue(b.Config.FilesOnHost)
 	{
-		extraArgs, _ := types.ListValueFrom(ctx, types.StringType, b.Config.ExtraArgs)
+		var extraArgs types.List
+		if len(b.Config.ExtraArgs) > 0 {
+			extraArgs, _ = types.ListValueFrom(ctx, types.StringType, b.Config.ExtraArgs)
+		} else {
+			extraArgs = types.ListNull(types.StringType)
+		}
+		plain := parseBuildArguments(b.Config.BuildArgs, false)
+		secret := parseBuildArguments(b.Config.SecretArgs, true)
+		allArgs := append(plain, secret...)
+		sort.Slice(allArgs, func(i, j int) bool {
+			return allArgs[i].Name.ValueString() < allArgs[j].Name.ValueString()
+		})
 		data.Build = &DockerBuildModel{
-			Path:       types.StringValue(b.Config.BuildPath),
-			ExtraArgs:  extraArgs,
-			Args:       types.StringValue(b.Config.BuildArgs),
-			SecretArgs: types.StringValue(b.Config.SecretArgs),
+			Path:           types.StringValue(b.Config.BuildPath),
+			ExtraArguments: extraArgs,
+			Arguments:      allArgs,
 		}
 	}
 	data.DockerfilePath = types.StringValue(b.Config.DockerfilePath)

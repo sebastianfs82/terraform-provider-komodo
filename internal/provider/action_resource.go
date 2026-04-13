@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -27,6 +28,7 @@ import (
 
 var _ resource.Resource = &ActionResource{}
 var _ resource.ResourceWithImportState = &ActionResource{}
+var _ resource.ResourceWithConfigValidators = &ActionResource{}
 
 func NewActionResource() resource.Resource {
 	return &ActionResource{}
@@ -353,6 +355,59 @@ func (r *ActionResource) ImportState(ctx context.Context, req resource.ImportSta
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+// ConfigValidators returns validators that run against the whole resource config.
+func (r *ActionResource) ConfigValidators(_ context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		cronScheduleExpressionValidator{},
+	}
+}
+
+// cronScheduleExpressionValidator rejects Cron schedule expressions that do not
+// have 6 or 7 whitespace-separated fields. Komodo requires seconds as the first
+// field, so the standard 5-field crontab syntax ("0 * * * *") is invalid.
+type cronScheduleExpressionValidator struct{}
+
+func (v cronScheduleExpressionValidator) Description(_ context.Context) string {
+	return "When `schedule.format` is `Cron`, `schedule.expression` must have 6 or 7 fields (seconds required), e.g. `\"0 0 * * * *\"`."
+}
+
+func (v cronScheduleExpressionValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v cronScheduleExpressionValidator) ValidateResource(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data ActionResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Schedule == nil {
+		return
+	}
+	if data.Schedule.Format.IsNull() || data.Schedule.Format.IsUnknown() {
+		return
+	}
+	if data.Schedule.Format.ValueString() != "Cron" {
+		return
+	}
+	if data.Schedule.Expression.IsNull() || data.Schedule.Expression.IsUnknown() {
+		return
+	}
+	expr := strings.TrimSpace(data.Schedule.Expression.ValueString())
+	fields := strings.Fields(expr)
+	if n := len(fields); n != 6 && n != 7 {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("schedule").AtName("expression"),
+			"Invalid Cron expression",
+			fmt.Sprintf(
+				"Komodo requires cron expressions with 6 or 7 fields (seconds are mandatory as the first field). "+
+					"Got %d field(s): %q. Example of a valid expression: \"0 0 * * * *\" (every day at midnight).",
+				n, expr,
+			),
+		)
+	}
+}
+
 // partialActionConfigFromModel converts the Terraform model into a PartialActionConfig.
 func partialActionConfigFromModel(data *ActionResourceModel) client.PartialActionConfig {
 	cfg := client.PartialActionConfig{}
@@ -489,6 +544,9 @@ func parseActionArguments(format, raw string) []ArgumentModel {
 				Value: types.StringValue(v),
 			})
 		}
+		sort.Slice(result, func(i, j int) bool {
+			return result[i].Name.ValueString() < result[j].Name.ValueString()
+		})
 		return result
 	default:
 		// key_value / toml / yaml: fall back to line-oriented KEY=VALUE parsing
@@ -507,6 +565,9 @@ func parseActionArguments(format, raw string) []ArgumentModel {
 				Value: types.StringValue(strings.Trim(strings.TrimSpace(line[idx+1:]), `"`)),
 			})
 		}
+		sort.Slice(result, func(i, j int) bool {
+			return result[i].Name.ValueString() < result[j].Name.ValueString()
+		})
 		return result
 	}
 }

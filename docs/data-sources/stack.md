@@ -103,8 +103,7 @@ Read-Only:
 
 Read-Only:
 
-- `account` (String) Registry account name.
-- `provider` (String) Registry provider domain.
+- `account_id` (String) The ID of the `komodo_registry_account` used to authenticate.
 
 
 <a id="nestedatt--source"></a>

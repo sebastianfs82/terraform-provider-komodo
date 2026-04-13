@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -54,12 +55,20 @@ type BuildImageModel struct {
 	Registries         []ImageRegistryConfigModel `tfsdk:"registry"`
 }
 
+// BuildArgumentModel holds a single build argument for a Docker build.
+// When SecretEnabled is true the argument is passed as a Docker secret
+// (--secret id=NAME,env=VALUE) instead of a plain build-arg.
+type BuildArgumentModel struct {
+	Name          types.String `tfsdk:"name"`
+	Value         types.String `tfsdk:"value"`
+	SecretEnabled types.Bool   `tfsdk:"secret_enabled"`
+}
+
 // DockerBuildModel is the Terraform model for the build block of a build.
 type DockerBuildModel struct {
-	Path       types.String `tfsdk:"path"`
-	ExtraArgs  types.List   `tfsdk:"extra_args"`
-	Args       types.String `tfsdk:"args"`
-	SecretArgs types.String `tfsdk:"secret_args"`
+	Path           types.String         `tfsdk:"path"`
+	ExtraArguments types.List           `tfsdk:"extra_arguments"`
+	Arguments      []BuildArgumentModel `tfsdk:"argument"`
 }
 
 // BuildSourceModel is the Terraform model for the source block of a build.
@@ -328,25 +337,33 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						Default:             stringdefault.StaticString("."),
 						MarkdownDescription: "Path to the Docker build context directory. Defaults to `.`.",
 					},
-					"extra_args": schema.ListAttribute{
+					"extra_arguments": schema.ListAttribute{
 						Optional:            true,
-						Computed:            true,
 						ElementType:         types.StringType,
-						Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
 						MarkdownDescription: "Additional arguments to pass to the `docker build` command.",
 					},
-					"args": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						Default:             stringdefault.StaticString(""),
-						MarkdownDescription: "Docker build arguments in `KEY=VALUE` format, newline-separated.",
-					},
-					"secret_args": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						Sensitive:           true,
-						Default:             stringdefault.StaticString(""),
-						MarkdownDescription: "Docker secret build arguments. These are not stored in the image layers.",
+				},
+				Blocks: map[string]schema.Block{
+					"argument": schema.ListNestedBlock{
+						MarkdownDescription: "Docker build argument. Set `secret_enabled = true` to pass it as a Docker secret (`--secret id=NAME,env=VALUE`) instead of a plain build-arg (`--build-arg NAME=VALUE`).",
+						NestedObject: schema.NestedBlockObject{
+							Attributes: map[string]schema.Attribute{
+								"name": schema.StringAttribute{
+									Required:            true,
+									MarkdownDescription: "The build argument name.",
+								},
+								"value": schema.StringAttribute{
+									Required:            true,
+									MarkdownDescription: "The build argument value.",
+								},
+								"secret_enabled": schema.BoolAttribute{
+									Optional:            true,
+									Computed:            true,
+									Default:             booldefault.StaticBool(false),
+									MarkdownDescription: "When `true`, passes this argument as a Docker secret instead of a plain build-arg. Defaults to `false`.",
+								},
+							},
+						},
 					},
 				},
 			},
@@ -689,20 +706,28 @@ func partialBuildConfigFromModel(ctx context.Context, c *client.Client, data *Bu
 			v := data.Build.Path.ValueString()
 			cfg.BuildPath = &v
 		}
-		if !data.Build.ExtraArgs.IsNull() && !data.Build.ExtraArgs.IsUnknown() {
-			var args []string
-			data.Build.ExtraArgs.ElementsAs(ctx, &args, false)
-			if args == nil {
-				args = []string{}
-			}
-			cfg.ExtraArgs = &args
+		var extraArgSlice []string
+		if !data.Build.ExtraArguments.IsNull() && !data.Build.ExtraArguments.IsUnknown() {
+			data.Build.ExtraArguments.ElementsAs(ctx, &extraArgSlice, false)
 		}
-		if !data.Build.Args.IsNull() && !data.Build.Args.IsUnknown() {
-			v := data.Build.Args.ValueString()
+		if extraArgSlice == nil {
+			extraArgSlice = []string{}
+		}
+		cfg.ExtraArgs = &extraArgSlice
+		var plainBuildArgs, secretBuildArgs []BuildArgumentModel
+		for _, a := range data.Build.Arguments {
+			if a.SecretEnabled.ValueBool() {
+				secretBuildArgs = append(secretBuildArgs, a)
+			} else {
+				plainBuildArgs = append(plainBuildArgs, a)
+			}
+		}
+		{
+			v := buildArgsToString(plainBuildArgs)
 			cfg.BuildArgs = &v
 		}
-		if !data.Build.SecretArgs.IsNull() && !data.Build.SecretArgs.IsUnknown() {
-			v := data.Build.SecretArgs.ValueString()
+		{
+			v := buildArgsToString(secretBuildArgs)
 			cfg.SecretArgs = &v
 		}
 	}
@@ -855,12 +880,23 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 	}
 	data.FilesOnHost = types.BoolValue(b.Config.FilesOnHost)
 	if data.Build != nil {
-		extraArgs, _ := types.ListValueFrom(ctx, types.StringType, b.Config.ExtraArgs)
+		var extraArgs types.List
+		if len(b.Config.ExtraArgs) > 0 {
+			extraArgs, _ = types.ListValueFrom(ctx, types.StringType, b.Config.ExtraArgs)
+		} else {
+			extraArgs = types.ListNull(types.StringType)
+		}
+		plain := parseBuildArguments(b.Config.BuildArgs, false)
+		secret := parseBuildArguments(b.Config.SecretArgs, true)
+		allArgs := append(plain, secret...)
+		sort.Slice(allArgs, func(i, j int) bool {
+			return allArgs[i].Name.ValueString() < allArgs[j].Name.ValueString()
+		})
+		allArgs = matchPriorOrder(data.Build.Arguments, allArgs)
 		data.Build = &DockerBuildModel{
-			Path:       types.StringValue(b.Config.BuildPath),
-			ExtraArgs:  extraArgs,
-			Args:       types.StringValue(b.Config.BuildArgs),
-			SecretArgs: types.StringValue(b.Config.SecretArgs),
+			Path:           types.StringValue(b.Config.BuildPath),
+			ExtraArguments: extraArgs,
+			Arguments:      allArgs,
 		}
 	}
 	data.DockerfilePath = types.StringValue(b.Config.DockerfilePath)
@@ -884,6 +920,83 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 		data.PreBuild = nil
 	}
 
-	data.Dockerfile = types.StringValue(b.Config.Dockerfile)
-	data.Labels = types.StringValue(b.Config.Labels)
+	data.Dockerfile = types.StringValue(strings.TrimRight(b.Config.Dockerfile, "\n\r"))
+	data.Labels = types.StringValue(strings.TrimRight(b.Config.Labels, "\n\r"))
+}
+
+// buildArgsToString serialises a slice of BuildArgumentModel to the KEY=VALUE\n
+// format expected by the Komodo API's build_args / secret_args fields.
+func buildArgsToString(args []BuildArgumentModel) string {
+	sorted := make([]BuildArgumentModel, len(args))
+	copy(sorted, args)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Name.ValueString() < sorted[j].Name.ValueString()
+	})
+	var sb strings.Builder
+	for _, a := range sorted {
+		sb.WriteString(a.Name.ValueString())
+		sb.WriteByte('=')
+		sb.WriteString(a.Value.ValueString())
+		sb.WriteByte('\n')
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+// parseBuildArguments parses a KEY=VALUE\n string returned by the API back
+// into a sorted slice of BuildArgumentModel. secretEnabled controls the
+// SecretEnabled field set on every returned entry.
+func parseBuildArguments(raw string, secretEnabled bool) []BuildArgumentModel {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var result []BuildArgumentModel
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		idx := strings.Index(line, "=")
+		if idx < 0 {
+			continue
+		}
+		result = append(result, BuildArgumentModel{
+			Name:          types.StringValue(strings.TrimSpace(line[:idx])),
+			Value:         types.StringValue(strings.TrimSpace(line[idx+1:])),
+			SecretEnabled: types.BoolValue(secretEnabled),
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name.ValueString() < result[j].Name.ValueString()
+	})
+	return result
+}
+
+// matchPriorOrder returns apiArgs reordered so that entries matching prior by
+// name appear in the same relative order as in prior. Entries not found in
+// prior (newly added) are appended at the end in their original order.
+func matchPriorOrder(prior, apiArgs []BuildArgumentModel) []BuildArgumentModel {
+	if len(prior) == 0 {
+		return apiArgs
+	}
+	// Build name→index map for API results.
+	idx := make(map[string]int, len(apiArgs))
+	for i, a := range apiArgs {
+		idx[a.Name.ValueString()] = i
+	}
+	used := make([]bool, len(apiArgs))
+	result := make([]BuildArgumentModel, 0, len(apiArgs))
+	for _, p := range prior {
+		i, ok := idx[p.Name.ValueString()]
+		if ok {
+			result = append(result, apiArgs[i])
+			used[i] = true
+		}
+	}
+	for i, a := range apiArgs {
+		if !used[i] {
+			result = append(result, a)
+		}
+	}
+	return result
 }

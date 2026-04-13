@@ -54,10 +54,19 @@ data "komodo_build" "example" {
 
 Read-Only:
 
-- `args` (String) Docker build arguments.
-- `extra_args` (List of String) Additional arguments passed to `docker build`.
+- `argument` (Attributes List) Docker build arguments. (see [below for nested schema](#nestedatt--build--argument))
+- `extra_arguments` (List of String) Additional arguments passed to `docker build`.
 - `path` (String) Path to the Docker build context directory.
-- `secret_args` (String, Sensitive) Docker secret build arguments.
+
+<a id="nestedatt--build--argument"></a>
+### Nested Schema for `build.argument`
+
+Read-Only:
+
+- `name` (String) The build argument name.
+- `secret_enabled` (Boolean) Whether this argument is passed as a Docker secret.
+- `value` (String) The build argument value.
+
 
 
 <a id="nestedatt--image"></a>
