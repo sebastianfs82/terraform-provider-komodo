@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -161,117 +163,11 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Optional:            true,
 				MarkdownDescription: "Custom project name for `docker compose -p`. Defaults to the stack name when empty.",
 			},
-			"source": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Git source configuration for repo-based stacks.",
-				Attributes: map[string]schema.Attribute{
-					"repo_id": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "Id or name of a linked `komodo_repo` resource.",
-					},
-					"url": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "The URL of the git provider, e.g. `https://github.com`.",
-					},
-					"account_id": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "Git account for private repositories.",
-					},
-					"path": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "The repository path, e.g. `owner/repo`.",
-					},
-					"branch": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "The branch to check out.",
-					},
-					"commit": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "A specific commit hash to check out.",
-					},
-					"reclone_enforced": schema.BoolAttribute{
-						Optional:            true,
-						Computed:            true,
-						Default:             booldefault.StaticBool(false),
-						MarkdownDescription: "Whether to delete and reclone the repo folder instead of `git pull`.",
-					},
-				},
-			},
-			"compose": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Compose file configuration.",
-				Attributes: map[string]schema.Attribute{
-					"contents": schema.StringAttribute{
-						Optional:            true,
-						Computed:            true,
-						MarkdownDescription: "Inline compose file contents. When set, this takes precedence over git repo sourcing.",
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.UseStateForUnknown(),
-							normalizeNewlinesPlanModifier{},
-						},
-					},
-					"local_enabled": schema.BoolAttribute{
-						Optional:            true,
-						Computed:            true,
-						Default:             booldefault.StaticBool(false),
-						MarkdownDescription: "Whether to source compose files from the host filesystem instead of a git repo or inline contents.",
-					},
-					"directory": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "Directory to `cd` into before running `docker compose up`.",
-					},
-					"file_paths": schema.ListAttribute{
-						Optional:            true,
-						Computed:            true,
-						ElementType:         types.StringType,
-						MarkdownDescription: "Paths to compose files relative to `directory`. Defaults to `[\"compose.yaml\"]` when empty.",
-						PlanModifiers: []planmodifier.List{
-							listplanmodifier.UseStateForUnknown(),
-						},
-					},
-				},
-			},
-			"environment": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Environment variable configuration written to an env file before deploying.",
-				Attributes: map[string]schema.Attribute{
-					"file_path": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "Relative path (from `run_directory`) for the written env file. Defaults to `.env`.",
-					},
-					"variables": schema.MapAttribute{
-						Optional:            true,
-						Computed:            true,
-						ElementType:         types.StringType,
-						MarkdownDescription: "Environment variables to inject. Keys are automatically uppercased.",
-						PlanModifiers: []planmodifier.Map{
-							mapplanmodifier.UseStateForUnknown(),
-						},
-					},
-				},
-			},
 			"auto_pull_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 				MarkdownDescription: "Whether to run `compose pull` before redeploying to ensure the latest images are used.",
-			},
-			"build": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Build configuration. When set, `docker compose build` is run before deploying.",
-				Attributes: map[string]schema.Attribute{
-					"enabled": schema.BoolAttribute{
-						Optional:            true,
-						Computed:            true,
-						Default:             booldefault.StaticBool(false),
-						MarkdownDescription: "Whether to run `docker compose build` before deploying.",
-					},
-					"extra_arguments": schema.ListAttribute{
-						Optional:            true,
-						ElementType:         types.StringType,
-						MarkdownDescription: "Extra arguments appended to `docker compose build`.",
-					},
-				},
 			},
 			"destroy_enforced": schema.BoolAttribute{
 				Optional:            true,
@@ -302,48 +198,6 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Computed:            true,
 				Default:             booldefault.StaticBool(true),
 				MarkdownDescription: "Whether to send stack-state-change alerts for this stack.",
-			},
-			"webhook": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Webhook configuration for the stack.",
-				Attributes: map[string]schema.Attribute{
-					"enabled": schema.BoolAttribute{
-						Optional:            true,
-						MarkdownDescription: "Whether incoming webhooks trigger a deployment.",
-					},
-					"secret": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "Alternate webhook secret. Defaults to the global secret when empty.",
-					},
-					"force_deploy": schema.BoolAttribute{
-						Optional:            true,
-						MarkdownDescription: "When true, always runs `DeployStack` instead of `DeployStackIfChanged`.",
-					},
-				},
-			},
-			"pre_deploy": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Command to run before the stack is deployed.",
-				Attributes:          systemCommandAttrs,
-			},
-			"post_deploy": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Command to run after the stack is deployed.",
-				Attributes:          systemCommandAttrs,
-			},
-			"registry": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Registry login configuration. When set, `docker login` is run before deploying.",
-				Attributes: map[string]schema.Attribute{
-					"provider": schema.StringAttribute{
-						Required:            true,
-						MarkdownDescription: "Registry provider domain, e.g. `docker.io` or `ghcr.io`.",
-					},
-					"account": schema.StringAttribute{
-						Required:            true,
-						MarkdownDescription: "Registry account name used to authenticate.",
-					},
-				},
 			},
 			"extra_arguments": schema.ListAttribute{
 				Optional:            true,
@@ -380,9 +234,150 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Optional:            true,
 				Computed:            true,
 				ElementType:         types.StringType,
+				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
 				MarkdownDescription: "Quick links displayed in the Komodo UI for this stack.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"source": schema.SingleNestedBlock{
+				MarkdownDescription: "Git source configuration for repo-based stacks.",
+				Attributes: map[string]schema.Attribute{
+					"repo_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "Id or name of a linked `komodo_repo` resource.",
+					},
+					"url": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The URL of the git provider, e.g. `https://github.com`.",
+					},
+					"account_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "Git account for private repositories.",
+					},
+					"path": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The repository path, e.g. `owner/repo`.",
+					},
+					"branch": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "The branch to check out.",
+					},
+					"commit": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "A specific commit hash to check out.",
+					},
+					"reclone_enforced": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(false),
+						MarkdownDescription: "Whether to delete and reclone the repo folder instead of `git pull`.",
+					},
+				},
+			},
+			"compose": schema.SingleNestedBlock{
+				MarkdownDescription: "Compose file configuration.",
+				Attributes: map[string]schema.Attribute{
+					"contents": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Inline compose file contents. When set, this takes precedence over git repo sourcing.",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+							normalizeNewlinesPlanModifier{},
+						},
+					},
+					"local_enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(false),
+						MarkdownDescription: "Whether to source compose files from the host filesystem instead of a git repo or inline contents.",
+					},
+					"directory": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "Directory to `cd` into before running `docker compose up`.",
+					},
+					"file_paths": schema.ListAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Paths to compose files relative to `directory`. Defaults to `[\"compose.yaml\"]` when empty.",
+						PlanModifiers: []planmodifier.List{
+							listplanmodifier.UseStateForUnknown(),
+						},
+					},
+				},
+			},
+			"environment": schema.SingleNestedBlock{
+				MarkdownDescription: "Environment variable configuration written to an env file before deploying.",
+				Attributes: map[string]schema.Attribute{
+					"file_path": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "Relative path (from `run_directory`) for the written env file. Defaults to `.env`.",
+					},
+					"variables": schema.MapAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Environment variables to inject. Keys are automatically uppercased.",
+						PlanModifiers: []planmodifier.Map{
+							mapplanmodifier.UseStateForUnknown(),
+						},
+					},
+				},
+			},
+			"build": schema.SingleNestedBlock{
+				MarkdownDescription: "Build configuration. When set, `docker compose build` is run before deploying.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(false),
+						MarkdownDescription: "Whether to run `docker compose build` before deploying.",
+					},
+					"extra_arguments": schema.ListAttribute{
+						Optional:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Extra arguments appended to `docker compose build`.",
+					},
+				},
+			},
+			"webhook": schema.SingleNestedBlock{
+				MarkdownDescription: "Webhook configuration for the stack.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether incoming webhooks trigger a deployment.",
+					},
+					"secret": schema.StringAttribute{
+						Optional:            true,
+						Sensitive:           true,
+						MarkdownDescription: "Alternate webhook secret. Defaults to the global secret when empty.",
+					},
+					"force_deploy": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "When true, always runs `DeployStack` instead of `DeployStackIfChanged`.",
+					},
+				},
+			},
+			"pre_deploy": schema.SingleNestedBlock{
+				MarkdownDescription: "Command to run before the stack is deployed.",
+				Attributes:          systemCommandAttrs,
+			},
+			"post_deploy": schema.SingleNestedBlock{
+				MarkdownDescription: "Command to run after the stack is deployed.",
+				Attributes:          systemCommandAttrs,
+			},
+			"registry": schema.SingleNestedBlock{
+				MarkdownDescription: "Registry login configuration. When set, `docker login` is run before deploying.",
+				Attributes: map[string]schema.Attribute{
+					"provider": schema.StringAttribute{
+						Required:            true,
+						MarkdownDescription: "Registry provider domain, e.g. `docker.io` or `ghcr.io`.",
+					},
+					"account": schema.StringAttribute{
+						Required:            true,
+						MarkdownDescription: "Registry account name used to authenticate.",
+					},
 				},
 			},
 		},
@@ -625,9 +620,18 @@ func (r *StackResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 	if stack == nil {
-		tflog.Debug(ctx, "Stack not found, removing from state", map[string]interface{}{"id": data.ID.ValueString()})
-		resp.State.RemoveResource(ctx)
-		return
+		// Resource may have been externally recreated with a new ID — try name lookup before removing from state.
+		stack, err = r.client.GetStack(ctx, data.Name.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read stack by name, got error: %s", err))
+			return
+		}
+		if stack == nil {
+			tflog.Debug(ctx, "Stack not found by ID or name, removing from state", map[string]interface{}{"id": data.ID.ValueString()})
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, "Stack adopted by name after ID lookup failed", map[string]interface{}{"name": stack.Name, "new_id": stack.ID.OID})
 	}
 	stackToModel(ctx, r.client, stack, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -789,6 +793,11 @@ func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackReso
 		} else if url != "" {
 			cfg.GitProvider = url
 			cfg.GitHttps = true
+		} else if acc := c.ResolveGitAccountFull(ctx, data.Source.AccountID.ValueString()); acc != nil {
+			// No URL set: derive the provider domain from the account's registered domain
+			// so the API stores the correct domain instead of defaulting to "github.com".
+			cfg.GitProvider = acc.Domain
+			cfg.GitHttps = true
 		}
 		account, err := c.ResolveGitAccountUsername(ctx, data.Source.AccountID.ValueString())
 		if err != nil {
@@ -912,7 +921,10 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 		branchVal := types.StringNull()
 		commitVal := types.StringNull()
 		if stack.Config.LinkedRepo == "" {
-			if stack.Config.GitProvider != "" {
+			// Only reconstruct url if the prior state/plan had it explicitly set.
+			// If user omitted url (relying on account_id for domain), keep it null.
+			priorURLSet := data.Source != nil && !data.Source.URL.IsNull()
+			if stack.Config.GitProvider != "" && priorURLSet {
 				if stack.Config.GitHttps {
 					urlVal = types.StringValue("https://" + stack.Config.GitProvider)
 				} else {

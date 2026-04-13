@@ -177,23 +177,6 @@ func (r *ResourceSyncResource) Schema(_ context.Context, _ resource.SchemaReques
 				},
 			},
 
-			// Webhook
-			"webhook": schema.SingleNestedAttribute{
-				Optional:            true,
-				MarkdownDescription: "Webhook configuration for the sync.",
-				Attributes: map[string]schema.Attribute{
-					"enabled": schema.BoolAttribute{
-						Optional:            true,
-						MarkdownDescription: "Whether incoming webhooks trigger the sync.",
-					},
-					"secret": schema.StringAttribute{
-						Optional:            true,
-						Sensitive:           true,
-						MarkdownDescription: "Override the default webhook secret for this sync.",
-					},
-				},
-			},
-
 			// Sync behaviour
 			"managed": schema.BoolAttribute{
 				Optional:            true,
@@ -250,6 +233,22 @@ func (r *ResourceSyncResource) Schema(_ context.Context, _ resource.SchemaReques
 				MarkdownDescription: "Whether the sync should send an alert when it enters Pending state. Default: `true`.",
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"webhook": schema.SingleNestedBlock{
+				MarkdownDescription: "Webhook configuration for the sync.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						MarkdownDescription: "Whether incoming webhooks trigger the sync.",
+					},
+					"secret": schema.StringAttribute{
+						Optional:            true,
+						Sensitive:           true,
+						MarkdownDescription: "Override the default webhook secret for this sync.",
+					},
 				},
 			},
 		},

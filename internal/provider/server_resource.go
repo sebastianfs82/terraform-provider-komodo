@@ -225,9 +225,9 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
 				MarkdownDescription: "Quick links displayed in the Komodo UI for this server.",
 			},
-			"alerts": schema.SingleNestedAttribute{
-				Optional:            true,
-				Computed:            true,
+		},
+		Blocks: map[string]schema.Block{
+			"alerts": schema.SingleNestedBlock{
 				MarkdownDescription: "Alert configuration for this server.",
 				Attributes: map[string]schema.Attribute{
 					"enabled": schema.BoolAttribute{
@@ -288,8 +288,6 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					},
 				},
 			},
-		},
-		Blocks: map[string]schema.Block{
 			"maintenance": schema.ListNestedBlock{
 				MarkdownDescription: "Scheduled maintenance windows during which alerts from this server will be suppressed.",
 				NestedObject: schema.NestedBlockObject{
@@ -750,17 +748,19 @@ func serverToResourceModel(ctx context.Context, s *client.Server, data *ServerRe
 		typesSet, d = types.SetValueFrom(ctx, types.StringType, []string{})
 		diags.Append(d...)
 	}
-	data.Alerts = &ServerAlertsModel{
-		Enabled: types.BoolValue(anyAlertEnabled),
-		Types:   typesSet,
-		Thresholds: ServerAlertsThresholdsModel{
-			CPUCritical:    types.Float64Value(cfg.CPUCritical),
-			CPUWarning:     types.Float64Value(cfg.CPUWarning),
-			DiskCritical:   types.Float64Value(cfg.DiskCritical),
-			DiskWarning:    types.Float64Value(cfg.DiskWarning),
-			MemoryCritical: types.Float64Value(cfg.MemCritical),
-			MemoryWarning:  types.Float64Value(cfg.MemWarning),
-		},
+	if data.Alerts != nil {
+		data.Alerts = &ServerAlertsModel{
+			Enabled: types.BoolValue(anyAlertEnabled),
+			Types:   typesSet,
+			Thresholds: ServerAlertsThresholdsModel{
+				CPUCritical:    types.Float64Value(cfg.CPUCritical),
+				CPUWarning:     types.Float64Value(cfg.CPUWarning),
+				DiskCritical:   types.Float64Value(cfg.DiskCritical),
+				DiskWarning:    types.Float64Value(cfg.DiskWarning),
+				MemoryCritical: types.Float64Value(cfg.MemCritical),
+				MemoryWarning:  types.Float64Value(cfg.MemWarning),
+			},
+		}
 	}
 
 	// Maintenance windows

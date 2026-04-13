@@ -17,7 +17,7 @@ resource "komodo_builder" "server" {
   name = "my-builder"
   type = "Server"
 
-  server_config = {
+  server_config {
     server_id = komodo_server.example.id
   }
 }
@@ -26,7 +26,7 @@ resource "komodo_builder" "url" {
   name = "peripheral-builder"
   type = "Url"
 
-  url_config = {
+  url_config {
     address = "https://periphery.example.com"
   }
 }
@@ -42,16 +42,16 @@ resource "komodo_builder" "url" {
 
 ### Optional
 
-- `aws_config` (Attributes) Configuration for an AWS builder. Required when `type` is `Aws`. (see [below for nested schema](#nestedatt--aws_config))
-- `server_config` (Attributes) Configuration for a server builder. Required when `type` is `Server`. (see [below for nested schema](#nestedatt--server_config))
+- `aws_config` (Block, Optional) Configuration for an AWS builder. Required when `type` is `Aws`. (see [below for nested schema](#nestedblock--aws_config))
+- `server_config` (Block, Optional) Configuration for a server builder. Required when `type` is `Server`. (see [below for nested schema](#nestedblock--server_config))
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
-- `url_config` (Attributes) Configuration for a URL builder. Required when `type` is `Url`. (see [below for nested schema](#nestedatt--url_config))
+- `url_config` (Block, Optional) Configuration for a URL builder. Required when `type` is `Url`. (see [below for nested schema](#nestedblock--url_config))
 
 ### Read-Only
 
 - `id` (String) The builder identifier (ObjectId).
 
-<a id="nestedatt--aws_config"></a>
+<a id="nestedblock--aws_config"></a>
 ### Nested Schema for `aws_config`
 
 Optional:
@@ -73,7 +73,7 @@ Optional:
 - `volume_gb` (Number) The size of the builder volume in GiB.
 
 
-<a id="nestedatt--server_config"></a>
+<a id="nestedblock--server_config"></a>
 ### Nested Schema for `server_config`
 
 Optional:
@@ -81,7 +81,7 @@ Optional:
 - `server_id` (String) The ID of the Komodo server to use as the builder.
 
 
-<a id="nestedatt--url_config"></a>
+<a id="nestedblock--url_config"></a>
 ### Nested Schema for `url_config`
 
 Optional:

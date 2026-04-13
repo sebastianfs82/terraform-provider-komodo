@@ -17,7 +17,7 @@ resource "komodo_alerter" "slack" {
   name    = "slack-alerts"
   enabled = true
 
-  endpoint = {
+  endpoint {
     type = "Slack"
     url  = var.slack_webhook_url
   }
@@ -26,7 +26,7 @@ resource "komodo_alerter" "slack" {
 resource "komodo_alerter" "discord" {
   name = "discord-alerts"
 
-  endpoint = {
+  endpoint {
     type = "Discord"
     url  = "https://discord.com/api/webhooks/000000000000000000/xxxxxxxxxxxx"
   }
@@ -35,7 +35,7 @@ resource "komodo_alerter" "discord" {
 resource "komodo_alerter" "custom" {
   name = "custom-webhook"
 
-  endpoint = {
+  endpoint {
     type = "Custom"
     url  = "https://my-webhook.example.com/alert"
   }
@@ -52,7 +52,7 @@ resource "komodo_alerter" "custom" {
 ### Optional
 
 - `enabled` (Boolean) Whether the alerter is enabled.
-- `endpoint` (Attributes) The alerter endpoint configuration. (see [below for nested schema](#nestedatt--endpoint))
+- `endpoint` (Block, Optional) The alerter endpoint configuration. (see [below for nested schema](#nestedblock--endpoint))
 - `maintenance` (Block List) Scheduled maintenance windows during which alerts from this alerter will be suppressed. (see [below for nested schema](#nestedblock--maintenance))
 - `resource` (Block List) Filter alerts to specific resources. Set `enabled = true` to include a resource, `enabled = false` to exclude it. (see [below for nested schema](#nestedblock--resource))
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
@@ -62,7 +62,7 @@ resource "komodo_alerter" "custom" {
 
 - `id` (String) The alerter identifier (ObjectId).
 
-<a id="nestedatt--endpoint"></a>
+<a id="nestedblock--endpoint"></a>
 ### Nested Schema for `endpoint`
 
 Required:

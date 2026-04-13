@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -146,8 +147,20 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 				Optional:            true,
 				MarkdownDescription: "The ID of the builder to attach. Omit or set to empty string to disconnect.",
 			},
-			"source": schema.SingleNestedAttribute{
+			"path": schema.StringAttribute{
 				Optional:            true,
+				MarkdownDescription: "The folder on the server to clone into. Omit or set to empty string to clear.",
+			},
+			"links": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
+				MarkdownDescription: "Quick links associated with this repository.",
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"source": schema.SingleNestedBlock{
 				MarkdownDescription: "Git provider configuration.",
 				Attributes: map[string]schema.Attribute{
 					"domain": schema.StringAttribute{
@@ -180,12 +193,7 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 					},
 				},
 			},
-			"path": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "The folder on the server to clone into. Omit or set to empty string to clear.",
-			},
-			"webhook": schema.SingleNestedAttribute{
-				Optional:            true,
+			"webhook": schema.SingleNestedBlock{
 				MarkdownDescription: "Webhook configuration for the repository.",
 				Attributes: map[string]schema.Attribute{
 					"enabled": schema.BoolAttribute{
@@ -194,31 +202,20 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 					},
 					"secret": schema.StringAttribute{
 						Optional:            true,
+						Sensitive:           true,
 						MarkdownDescription: "An alternate webhook secret for this repository.",
 					},
 				},
 			},
-			"on_clone": schema.SingleNestedAttribute{
-				Optional:            true,
+			"on_clone": schema.SingleNestedBlock{
 				MarkdownDescription: "A command to run after the repository is cloned.",
 				Attributes:          systemCommandAttrs,
 			},
-			"on_pull": schema.SingleNestedAttribute{
-				Optional:            true,
+			"on_pull": schema.SingleNestedBlock{
 				MarkdownDescription: "A command to run after the repository is pulled.",
 				Attributes:          systemCommandAttrs,
 			},
-			"links": schema.ListAttribute{
-				Optional:            true,
-				Computed:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "Quick links associated with this repository.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"environment": schema.SingleNestedAttribute{
-				Optional:            true,
+			"environment": schema.SingleNestedBlock{
 				MarkdownDescription: "Environment configuration for the repository.",
 				Attributes: map[string]schema.Attribute{
 					"file_path": schema.StringAttribute{

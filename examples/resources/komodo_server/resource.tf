@@ -15,10 +15,10 @@ resource "komodo_server" "production" {
   auto_rotate_keys_enabled             = true
   historical_system_statistics_enabled = true
 
-  alerts = {
+  alerts {
     enabled = true
     types   = ["cpu", "memory", "disk", "unreachable"]
-    thresholds = {
+    thresholds {
       cpu_warning     = 75.0
       cpu_critical    = 90.0
       memory_warning  = 75.0

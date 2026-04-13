@@ -31,52 +31,60 @@ resource "komodo_build" "example" {
 
 ### Optional
 
-- `auto_increment_version` (Boolean) Whether to automatically increment the patch version on each build. Defaults to true.
-- `branch` (String) Branch to build from.
-- `build_args` (String) Docker build arguments in `KEY=VALUE` format, newline-separated.
-- `build_path` (String) Path to the Docker build context directory. Defaults to `.`.
+- `build` (Block, Optional) Docker build configuration. (see [below for nested schema](#nestedblock--build))
 - `builder_id` (String) The ID of the builder to use. Leave empty to use the default builder.
-- `commit` (String) Specific commit hash to build. Overrides branch.
 - `dockerfile` (String) Inline Dockerfile contents. Overrides `dockerfile_path` when set.
 - `dockerfile_path` (String) Path to the Dockerfile relative to `build_path`.
-- `extra_args` (List of String) Additional arguments to pass to the `docker build` command.
 - `files_on_host` (Boolean) Whether to use files on the host filesystem for the build context instead of a git repository.
-- `git_account` (String) Git account to use for private repositories.
-- `git_https` (Boolean) Whether to use HTTPS for git access. Defaults to true.
-- `git_provider` (String) Git provider domain, e.g. `github.com`. Defaults to `github.com`.
-- `image_name` (String) Override for the image name. Defaults to the build name.
-- `image_registry` (Attributes List) Image registry configurations to push the built image to. (see [below for nested schema](#nestedatt--image_registry))
-- `image_tag` (String) An extra tag suffix to apply to the image.
-- `include_commit_tag` (Boolean) Whether to push a tag with the git commit hash.
-- `include_latest_tag` (Boolean) Whether to push a `:latest` tag alongside the versioned tag.
-- `include_version_tags` (Boolean) Whether to push individual semver component tags (e.g. `:1`, `:1.2`).
+- `image` (Block, Optional) Image configuration for the build output. (see [below for nested schema](#nestedblock--image))
 - `labels` (String) Docker image labels in `KEY=VALUE` format, newline-separated.
-- `linked_repo` (String) The name of a Komodo Repo resource to link for source code.
 - `links` (List of String) Quick links associated with this build.
-- `pre_build` (Attributes) A command to run before the Docker build. (see [below for nested schema](#nestedatt--pre_build))
-- `repo` (String) Repository path, e.g. `owner/repo`.
-- `secret_args` (String, Sensitive) Docker secret build arguments. These are not stored in the image layers.
+- `pre_build` (Block, Optional) A command to run before the Docker build. (see [below for nested schema](#nestedblock--pre_build))
 - `skip_secret_interp` (Boolean) Whether to skip secret interpolation in build args.
+- `source` (Block, Optional) Git source configuration for repo-based builds. (see [below for nested schema](#nestedblock--source))
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
 - `use_buildx` (Boolean) Whether to use `docker buildx` for multi-platform builds.
-- `version` (Attributes) Semantic version for the built image. Managed automatically when `auto_increment_version` is true. (see [below for nested schema](#nestedatt--version))
-- `webhook` (Attributes) Webhook configuration for the build. (see [below for nested schema](#nestedatt--webhook))
+- `version` (Block, Optional) Semantic version and auto-increment settings for the built image. (see [below for nested schema](#nestedblock--version))
+- `webhook` (Block, Optional) Webhook configuration for the build. (see [below for nested schema](#nestedblock--webhook))
 
 ### Read-Only
 
 - `id` (String) The build identifier (ObjectId).
 
-<a id="nestedatt--image_registry"></a>
-### Nested Schema for `image_registry`
+<a id="nestedblock--build"></a>
+### Nested Schema for `build`
 
 Optional:
 
-- `account` (String) Account to use with this registry.
-- `domain` (String) Registry provider domain, e.g. `docker.io`.
+- `args` (String) Docker build arguments in `KEY=VALUE` format, newline-separated.
+- `extra_args` (List of String) Additional arguments to pass to the `docker build` command.
+- `path` (String) Path to the Docker build context directory. Defaults to `.`.
+- `secret_args` (String, Sensitive) Docker secret build arguments. These are not stored in the image layers.
+
+
+<a id="nestedblock--image"></a>
+### Nested Schema for `image`
+
+Optional:
+
+- `include_commit_tag_enabled` (Boolean) Whether to push a tag with the git commit hash.
+- `include_latest_tag_enabled` (Boolean) Whether to push a `:latest` tag alongside the versioned tag.
+- `include_version_tags_enabled` (Boolean) Whether to push individual semver component tags (e.g. `:1`, `:1.2`).
+- `name` (String) Override for the image name. Defaults to the build name.
+- `registry` (Block List) Image registry configurations to push the built image to. (see [below for nested schema](#nestedblock--image--registry))
+- `tag` (String) An extra tag suffix to apply to the image.
+
+<a id="nestedblock--image--registry"></a>
+### Nested Schema for `image.registry`
+
+Optional:
+
+- `account_id` (String) The ID of a `komodo_registry_account` resource to push the image to.
 - `organization` (String) Optional organization name within the registry account.
 
 
-<a id="nestedatt--pre_build"></a>
+
+<a id="nestedblock--pre_build"></a>
 ### Nested Schema for `pre_build`
 
 Optional:
@@ -85,17 +93,29 @@ Optional:
 - `path` (String) The working directory for the command.
 
 
-<a id="nestedatt--version"></a>
+<a id="nestedblock--source"></a>
+### Nested Schema for `source`
+
+Optional:
+
+- `account_id` (String) Git account for private repositories.
+- `branch` (String) The branch to check out.
+- `commit` (String) A specific commit hash to check out.
+- `path` (String) The repository path, e.g. `owner/repo`.
+- `repo_id` (String) Id or name of a linked `komodo_repo` resource.
+- `url` (String) The URL of the git provider, e.g. `https://github.com`.
+
+
+<a id="nestedblock--version"></a>
 ### Nested Schema for `version`
 
 Optional:
 
-- `major` (Number) Major version component.
-- `minor` (Number) Minor version component.
-- `patch` (Number) Patch version component.
+- `auto_increment_enabled` (Boolean) Whether to automatically increment the patch version on each build. Defaults to true.
+- `value` (String) Semantic version for the built image, e.g. `1.0.0`.
 
 
-<a id="nestedatt--webhook"></a>
+<a id="nestedblock--webhook"></a>
 ### Nested Schema for `webhook`
 
 Optional:

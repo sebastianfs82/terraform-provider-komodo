@@ -262,22 +262,19 @@ func (d *DeploymentDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 	// image block: always populate from API.
 	if dep.Config.Image.Build != nil {
+		bv := dep.Config.Image.Build.Version
 		data.Image = &DeploymentImageModel{
 			Type:    types.StringValue("Build"),
 			Image:   types.StringValue(""),
 			BuildID: types.StringValue(dep.Config.Image.Build.BuildID),
-			Version: &BuildVersionModel{
-				Major: types.Int64Value(int64(dep.Config.Image.Build.Version.Major)),
-				Minor: types.Int64Value(int64(dep.Config.Image.Build.Version.Minor)),
-				Patch: types.Int64Value(int64(dep.Config.Image.Build.Version.Patch)),
-			},
+			Version: types.StringValue(fmt.Sprintf("%d.%d.%d", bv.Major, bv.Minor, bv.Patch)),
 		}
 	} else if dep.Config.Image.Image != nil {
 		data.Image = &DeploymentImageModel{
 			Type:    types.StringValue("Image"),
 			Image:   types.StringValue(dep.Config.Image.Image.Image),
 			BuildID: types.StringValue(""),
-			Version: nil,
+			Version: types.StringNull(),
 		}
 	} else {
 		data.Image = nil

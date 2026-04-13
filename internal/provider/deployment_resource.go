@@ -6,12 +6,16 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -34,10 +38,10 @@ type DeploymentResource struct {
 
 // DeploymentImageModel is the Terraform model for the image block.
 type DeploymentImageModel struct {
-	Type    types.String       `tfsdk:"type"`
-	Image   types.String       `tfsdk:"image"`
-	BuildID types.String       `tfsdk:"build_id"`
-	Version *BuildVersionModel `tfsdk:"version"`
+	Type    types.String `tfsdk:"type"`
+	Image   types.String `tfsdk:"image"`
+	BuildID types.String `tfsdk:"build_id"`
+	Version types.String `tfsdk:"version"`
 }
 
 // DeploymentResourceModel is the Terraform resource model for komodo_deployment.
@@ -74,33 +78,6 @@ func (r *DeploymentResource) Metadata(ctx context.Context, req resource.Metadata
 }
 
 func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
-	buildVersionAttrs := map[string]schema.Attribute{
-		"major": schema.Int64Attribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Major version component.",
-			PlanModifiers: []planmodifier.Int64{
-				int64planmodifier.UseStateForUnknown(),
-			},
-		},
-		"minor": schema.Int64Attribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Minor version component.",
-			PlanModifiers: []planmodifier.Int64{
-				int64planmodifier.UseStateForUnknown(),
-			},
-		},
-		"patch": schema.Int64Attribute{
-			Optional:            true,
-			Computed:            true,
-			MarkdownDescription: "Patch version component.",
-			PlanModifiers: []planmodifier.Int64{
-				int64planmodifier.UseStateForUnknown(),
-			},
-		},
-	}
-
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a Komodo deployment resource.",
 		Attributes: map[string]schema.Attribute{
@@ -156,10 +133,9 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 						Optional:            true,
 						MarkdownDescription: "ID of the Komodo Build to deploy. Used when `type` is `Build`.",
 					},
-					"version": schema.SingleNestedAttribute{
+					"version": schema.StringAttribute{
 						Optional:            true,
-						MarkdownDescription: "Build version to deploy. Used when `type` is `Build`. Defaults to latest (0.0.0).",
-						Attributes:          buildVersionAttrs,
+						MarkdownDescription: "Build version to deploy, e.g. `1.0.0`. Used when `type` is `Build`. Defaults to latest (0.0.0).",
 					},
 				},
 			},
@@ -215,10 +191,8 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Optional:            true,
 				Computed:            true,
 				ElementType:         types.StringType,
+				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
 				MarkdownDescription: "Quick links displayed in the resource header.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"network": schema.StringAttribute{
 				Optional:            true,
@@ -581,12 +555,15 @@ func imageModelToClient(m *DeploymentImageModel) client.DeploymentImage {
 		b := &client.DeploymentImageBuild{
 			BuildID: m.BuildID.ValueString(),
 		}
-		if m.Version != nil {
-			b.Version = client.BuildVersion{
-				Major: int(m.Version.Major.ValueInt64()),
-				Minor: int(m.Version.Minor.ValueInt64()),
-				Patch: int(m.Version.Patch.ValueInt64()),
+		if v := m.Version.ValueString(); v != "" {
+			parts := strings.SplitN(v, ".", 3)
+			for len(parts) < 3 {
+				parts = append(parts, "0")
 			}
+			major, _ := strconv.Atoi(parts[0])
+			minor, _ := strconv.Atoi(parts[1])
+			patch, _ := strconv.Atoi(parts[2])
+			b.Version = client.BuildVersion{Major: major, Minor: minor, Patch: patch}
 		}
 		img.Build = b
 	default: // "Image"
@@ -612,24 +589,15 @@ func deploymentToModel(ctx context.Context, d *client.Deployment, data *Deployme
 
 	// image block: populate from the API response.
 	if d.Config.Image.Build != nil {
-		ver := &BuildVersionModel{
-			Major: types.Int64Value(int64(d.Config.Image.Build.Version.Major)),
-			Minor: types.Int64Value(int64(d.Config.Image.Build.Version.Minor)),
-			Patch: types.Int64Value(int64(d.Config.Image.Build.Version.Patch)),
-		}
-		// preserve version block only if it was set in model or any component non-zero
-		if data.Image != nil && data.Image.Version != nil {
-			// keep it
-		} else if d.Config.Image.Build.Version.Major != 0 || d.Config.Image.Build.Version.Minor != 0 || d.Config.Image.Build.Version.Patch != 0 {
-			// keep it
-		} else {
-			ver = nil
+		ver := ""
+		if bv := d.Config.Image.Build.Version; !data.Image.Version.IsNull() || bv.Major != 0 || bv.Minor != 0 || bv.Patch != 0 {
+			ver = fmt.Sprintf("%d.%d.%d", bv.Major, bv.Minor, bv.Patch)
 		}
 		data.Image = &DeploymentImageModel{
 			Type:    types.StringValue("Build"),
 			Image:   types.StringNull(),
 			BuildID: types.StringValue(d.Config.Image.Build.BuildID),
-			Version: ver,
+			Version: types.StringValue(ver),
 		}
 	} else if d.Config.Image.Image != nil && (d.Config.Image.Image.Image != "" || data.Image != nil) {
 		// Only set image block when the API returned a real image value, or the user
@@ -638,7 +606,7 @@ func deploymentToModel(ctx context.Context, d *client.Deployment, data *Deployme
 			Type:    types.StringValue("Image"),
 			Image:   types.StringValue(d.Config.Image.Image.Image),
 			BuildID: types.StringNull(),
-			Version: nil,
+			Version: types.StringNull(),
 		}
 	} else if data.Image != nil {
 		// preserve existing model if API returned neither variant (empty/default)

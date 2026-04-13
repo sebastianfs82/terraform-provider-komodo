@@ -51,13 +51,13 @@ resource "komodo_resource_sync" "example" {
 - `repo` (String) The git repository slug, e.g. `owner/repo`.
 - `resource_path` (List of String) Path(s) to the resource file(s) to sync. Relative to `sync_directory` (files on host) or repo root (git-based).
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
-- `webhook` (Attributes) Webhook configuration for the sync. (see [below for nested schema](#nestedatt--webhook))
+- `webhook` (Block, Optional) Webhook configuration for the sync. (see [below for nested schema](#nestedblock--webhook))
 
 ### Read-Only
 
 - `id` (String) The resource sync identifier (ObjectId).
 
-<a id="nestedatt--webhook"></a>
+<a id="nestedblock--webhook"></a>
 ### Nested Schema for `webhook`
 
 Optional:

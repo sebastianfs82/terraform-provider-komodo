@@ -103,8 +103,9 @@ func (r *AlerterResource) Schema(ctx context.Context, req resource.SchemaRequest
 				MarkdownDescription: "Only send specific alert types. If empty, all alert types are sent.",
 				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
 			},
-			"endpoint": schema.SingleNestedAttribute{
-				Optional:            true,
+		},
+		Blocks: map[string]schema.Block{
+			"endpoint": schema.SingleNestedBlock{
 				MarkdownDescription: "The alerter endpoint configuration.",
 				Attributes: map[string]schema.Attribute{
 					"type": schema.StringAttribute{
@@ -121,8 +122,6 @@ func (r *AlerterResource) Schema(ctx context.Context, req resource.SchemaRequest
 					},
 				},
 			},
-		},
-		Blocks: map[string]schema.Block{
 			"resource": schema.ListNestedBlock{
 				MarkdownDescription: "Filter alerts to specific resources. Set `enabled = true` to include a resource, `enabled = false` to exclude it.",
 				NestedObject: schema.NestedBlockObject{

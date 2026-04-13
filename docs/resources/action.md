@@ -48,9 +48,9 @@ resource "komodo_action" "scheduled" {
 - `file_contents` (String) TypeScript file contents using the Komodo client.
 - `reload_dependencies_enabled` (Boolean) Whether to reload Deno dependencies on each run.
 - `run_on_startup_enabled` (Boolean) Whether to run the action at Komodo startup.
-- `schedule` (Attributes) Schedule configuration for the action. (see [below for nested schema](#nestedatt--schedule))
+- `schedule` (Block, Optional) Schedule configuration for the action. (see [below for nested schema](#nestedblock--schedule))
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
-- `webhook` (Attributes) Webhook configuration for the action. (see [below for nested schema](#nestedatt--webhook))
+- `webhook` (Block, Optional) Webhook configuration for the action. (see [below for nested schema](#nestedblock--webhook))
 
 ### Read-Only
 
@@ -65,7 +65,7 @@ Required:
 - `value` (String) The argument value.
 
 
-<a id="nestedatt--schedule"></a>
+<a id="nestedblock--schedule"></a>
 ### Nested Schema for `schedule`
 
 Optional:
@@ -77,7 +77,7 @@ Optional:
 - `timezone` (String) Timezone for the schedule (IANA TZ identifier, e.g. `America/New_York`). Defaults to `""` (Core local timezone).
 
 
-<a id="nestedatt--webhook"></a>
+<a id="nestedblock--webhook"></a>
 ### Nested Schema for `webhook`
 
 Optional:

@@ -1311,22 +1311,55 @@ func (c *Client) ResolveGitAccountFull(ctx context.Context, accountID string) *G
 }
 
 // ResolveGitAccountID resolves a git account username (as returned by the API) back
-// to the provider account ObjectId. It lists all provider accounts and matches by
-// domain + username. Returns the ObjectId when found, or the username as fallback.
+// to the provider account ObjectId. It lists all provider accounts and tries an exact
+// (domain + username) match first, then falls back to username-only to handle cases
+// where the domain stored by the API does not exactly match the account's registered
+// domain (e.g. custom-hosted git providers).
 func (c *Client) ResolveGitAccountID(ctx context.Context, domain, username string) string {
 	if username == "" {
 		return ""
 	}
 	accounts, err := c.ListGitProviderAccounts(ctx)
 	if err != nil {
-		return username
+		return ""
 	}
 	for _, a := range accounts {
 		if a.Username == username && a.Domain == domain {
 			return a.ID.OID
 		}
 	}
-	return username
+	// Fallback: match by username alone so custom-domain accounts are found even when
+	// git_provider returned by the API differs from the account's registered domain.
+	for _, a := range accounts {
+		if a.Username == username {
+			return a.ID.OID
+		}
+	}
+	return ""
+}
+
+// ResolveDockerRegistryAccountID resolves a docker registry account domain+username
+// back to its ObjectId. It lists all accounts and tries an exact domain+username match
+// first, then falls back to username-only.
+func (c *Client) ResolveDockerRegistryAccountID(ctx context.Context, domain, username string) string {
+	if username == "" {
+		return ""
+	}
+	accounts, err := c.ListDockerRegistryAccounts(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, a := range accounts {
+		if a.Username == username && a.Domain == domain {
+			return a.ID.OID
+		}
+	}
+	for _, a := range accounts {
+		if a.Username == username {
+			return a.ID.OID
+		}
+	}
+	return ""
 }
 
 // DockerRegistryAccount CRUD
@@ -2545,7 +2578,7 @@ func (c *Client) DeleteBuilder(ctx context.Context, id string) error {
 
 func (c *Client) ListBuilders(ctx context.Context) ([]Builder, error) {
 	payload := map[string]interface{}{
-		"type":   "ListBuilders",
+		"type":   "ListFullBuilders",
 		"params": map[string]interface{}{},
 	}
 	resp, err := c.doRequest(ctx, "/read", payload)
@@ -2865,9 +2898,6 @@ func (c *Client) GetBuild(ctx context.Context, idOrName string) (*Build, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-	if strings.Contains(strings.ToLower(string(body)), "not found") || strings.Contains(strings.ToLower(string(body)), "did not find") {
-		return nil, nil
-	}
 	var build Build
 	if err := json.Unmarshal(body, &build); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
@@ -3007,9 +3037,6 @@ func (c *Client) GetDeployment(ctx context.Context, idOrName string) (*Deploymen
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-	if strings.Contains(strings.ToLower(string(body)), "not found") || strings.Contains(strings.ToLower(string(body)), "did not find") {
-		return nil, nil
 	}
 	var deployment Deployment
 	if err := json.Unmarshal(body, &deployment); err != nil {

@@ -82,16 +82,7 @@ Optional:
 
 - `build_id` (String) ID of the Komodo Build to deploy. Used when `type` is `Build`.
 - `image` (String) Docker image to deploy. Used when `type` is `Image`.
-- `version` (Attributes) Build version to deploy. Used when `type` is `Build`. Defaults to latest (0.0.0). (see [below for nested schema](#nestedatt--image--version))
-
-<a id="nestedatt--image--version"></a>
-### Nested Schema for `image.version`
-
-Optional:
-
-- `major` (Number) Major version component.
-- `minor` (Number) Minor version component.
-- `patch` (Number) Patch version component.
+- `version` (String) Build version to deploy, e.g. `1.0.0`. Used when `type` is `Build`. Defaults to latest (0.0.0).
 
 ## Import
 

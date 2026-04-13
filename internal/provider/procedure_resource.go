@@ -88,8 +88,15 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 					listplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"schedule": schema.SingleNestedAttribute{
+			"failure_alert_enabled": schema.BoolAttribute{
 				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether to send an alert when the procedure fails.",
+				Default:             booldefault.StaticBool(true),
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"schedule": schema.SingleNestedBlock{
 				MarkdownDescription: "Schedule configuration for the procedure.",
 				Attributes: map[string]schema.Attribute{
 					"format": schema.StringAttribute{
@@ -137,14 +144,7 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 					},
 				},
 			},
-			"failure_alert_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send an alert when the procedure fails.",
-				Default:             booldefault.StaticBool(true),
-			},
-			"webhook": schema.SingleNestedAttribute{
-				Optional:            true,
+			"webhook": schema.SingleNestedBlock{
 				MarkdownDescription: "Webhook configuration for the procedure.",
 				Attributes: map[string]schema.Attribute{
 					"enabled": schema.BoolAttribute{
@@ -158,8 +158,6 @@ func (r *ProcedureResource) Schema(ctx context.Context, req resource.SchemaReque
 					},
 				},
 			},
-		},
-		Blocks: map[string]schema.Block{
 			"stage": schema.ListNestedBlock{
 				MarkdownDescription: "Ordered list of procedure stages. Stages run sequentially; executions within a stage run in parallel.",
 				NestedObject: schema.NestedBlockObject{

@@ -17,7 +17,7 @@ resource "komodo_repo" "example" {
   name      = "my-repo"
   server_id = komodo_server.example.id
 
-  source = {
+  source {
     path   = "myorg/myrepo"
     branch = "main"
   }
@@ -34,21 +34,21 @@ resource "komodo_repo" "example" {
 ### Optional
 
 - `builder_id` (String) The ID of the builder to attach. Omit or set to empty string to disconnect.
-- `environment` (Attributes) Environment configuration for the repository. (see [below for nested schema](#nestedatt--environment))
+- `environment` (Block, Optional) Environment configuration for the repository. (see [below for nested schema](#nestedblock--environment))
 - `links` (List of String) Quick links associated with this repository.
-- `on_clone` (Attributes) A command to run after the repository is cloned. (see [below for nested schema](#nestedatt--on_clone))
-- `on_pull` (Attributes) A command to run after the repository is pulled. (see [below for nested schema](#nestedatt--on_pull))
+- `on_clone` (Block, Optional) A command to run after the repository is cloned. (see [below for nested schema](#nestedblock--on_clone))
+- `on_pull` (Block, Optional) A command to run after the repository is pulled. (see [below for nested schema](#nestedblock--on_pull))
 - `path` (String) The folder on the server to clone into. Omit or set to empty string to clear.
 - `server_id` (String) The ID of the server to clone the repo on. Omit or set to empty string to disconnect.
-- `source` (Attributes) Git provider configuration. (see [below for nested schema](#nestedatt--source))
+- `source` (Block, Optional) Git provider configuration. (see [below for nested schema](#nestedblock--source))
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
-- `webhook` (Attributes) Webhook configuration for the repository. (see [below for nested schema](#nestedatt--webhook))
+- `webhook` (Block, Optional) Webhook configuration for the repository. (see [below for nested schema](#nestedblock--webhook))
 
 ### Read-Only
 
 - `id` (String) The git repository identifier (ObjectId).
 
-<a id="nestedatt--environment"></a>
+<a id="nestedblock--environment"></a>
 ### Nested Schema for `environment`
 
 Optional:
@@ -57,7 +57,7 @@ Optional:
 - `variables` (Map of String) Environment variables to inject. Keys are automatically uppercased.
 
 
-<a id="nestedatt--on_clone"></a>
+<a id="nestedblock--on_clone"></a>
 ### Nested Schema for `on_clone`
 
 Optional:
@@ -66,7 +66,7 @@ Optional:
 - `path` (String) The working directory for the command.
 
 
-<a id="nestedatt--on_pull"></a>
+<a id="nestedblock--on_pull"></a>
 ### Nested Schema for `on_pull`
 
 Optional:
@@ -75,7 +75,7 @@ Optional:
 - `path` (String) The working directory for the command.
 
 
-<a id="nestedatt--source"></a>
+<a id="nestedblock--source"></a>
 ### Nested Schema for `source`
 
 Optional:
@@ -88,13 +88,13 @@ Optional:
 - `path` (String) The repository to clone, e.g. `owner/repo`. Omit or set to empty string to clear.
 
 
-<a id="nestedatt--webhook"></a>
+<a id="nestedblock--webhook"></a>
 ### Nested Schema for `webhook`
 
 Optional:
 
 - `enabled` (Boolean) Whether webhooks should trigger an action on this repository.
-- `secret` (String) An alternate webhook secret for this repository.
+- `secret` (String, Sensitive) An alternate webhook secret for this repository.
 
 ## Import
 

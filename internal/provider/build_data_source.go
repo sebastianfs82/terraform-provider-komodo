@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -27,37 +28,28 @@ type BuildDataSource struct {
 }
 
 type BuildDataSourceModel struct {
-	ID                   types.String               `tfsdk:"id"`
-	Name                 types.String               `tfsdk:"name"`
-	BuilderID            types.String               `tfsdk:"builder_id"`
-	Version              *BuildVersionModel         `tfsdk:"version"`
-	AutoIncrementVersion types.Bool                 `tfsdk:"auto_increment_version"`
-	ImageName            types.String               `tfsdk:"image_name"`
-	ImageTag             types.String               `tfsdk:"image_tag"`
-	IncludeLatestTag     types.Bool                 `tfsdk:"include_latest_tag"`
-	IncludeVersionTags   types.Bool                 `tfsdk:"include_version_tags"`
-	IncludeCommitTag     types.Bool                 `tfsdk:"include_commit_tag"`
-	Links                types.List                 `tfsdk:"links"`
-	LinkedRepo           types.String               `tfsdk:"linked_repo"`
-	GitProvider          types.String               `tfsdk:"git_provider"`
-	GitHttps             types.Bool                 `tfsdk:"git_https"`
-	GitAccount           types.String               `tfsdk:"git_account"`
-	Repo                 types.String               `tfsdk:"repo"`
-	Branch               types.String               `tfsdk:"branch"`
-	Commit               types.String               `tfsdk:"commit"`
-	Webhook              *WebhookModel              `tfsdk:"webhook"`
-	FilesOnHost          types.Bool                 `tfsdk:"files_on_host"`
-	BuildPath            types.String               `tfsdk:"build_path"`
-	DockerfilePath       types.String               `tfsdk:"dockerfile_path"`
-	ImageRegistry        []ImageRegistryConfigModel `tfsdk:"image_registry"`
-	SkipSecretInterp     types.Bool                 `tfsdk:"skip_secret_interp"`
-	UseBuildx            types.Bool                 `tfsdk:"use_buildx"`
-	ExtraArgs            types.List                 `tfsdk:"extra_args"`
-	PreBuild             *SystemCommandModel        `tfsdk:"pre_build"`
-	Dockerfile           types.String               `tfsdk:"dockerfile"`
-	BuildArgs            types.String               `tfsdk:"build_args"`
-	SecretArgs           types.String               `tfsdk:"secret_args"`
-	Labels               types.String               `tfsdk:"labels"`
+	ID               types.String        `tfsdk:"id"`
+	Name             types.String        `tfsdk:"name"`
+	BuilderID        types.String        `tfsdk:"builder_id"`
+	Version          *BuildVersionModel  `tfsdk:"version"`
+	Image            *BuildImageModel    `tfsdk:"image"`
+	Links            types.List          `tfsdk:"links"`
+	LinkedRepo       types.String        `tfsdk:"linked_repo"`
+	GitProvider      types.String        `tfsdk:"git_provider"`
+	GitHttps         types.Bool          `tfsdk:"git_https"`
+	GitAccount       types.String        `tfsdk:"git_account"`
+	Repo             types.String        `tfsdk:"repo"`
+	Branch           types.String        `tfsdk:"branch"`
+	Commit           types.String        `tfsdk:"commit"`
+	Webhook          *WebhookModel       `tfsdk:"webhook"`
+	FilesOnHost      types.Bool          `tfsdk:"files_on_host"`
+	Build            *DockerBuildModel   `tfsdk:"build"`
+	DockerfilePath   types.String        `tfsdk:"dockerfile_path"`
+	SkipSecretInterp types.Bool          `tfsdk:"skip_secret_interp"`
+	UseBuildx        types.Bool          `tfsdk:"use_buildx"`
+	PreBuild         *SystemCommandModel `tfsdk:"pre_build"`
+	Dockerfile       types.String        `tfsdk:"dockerfile"`
+	Labels           types.String        `tfsdk:"labels"`
 }
 
 func (d *BuildDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -95,45 +87,59 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 			},
 			"version": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "The current semantic version of the built image.",
+				MarkdownDescription: "Semantic version and auto-increment settings for the built image.",
 				Attributes: map[string]schema.Attribute{
-					"major": schema.Int64Attribute{
+					"value": schema.StringAttribute{
 						Computed:            true,
-						MarkdownDescription: "Major version component.",
+						MarkdownDescription: "The current semantic version, e.g. `1.0.0`.",
 					},
-					"minor": schema.Int64Attribute{
+					"auto_increment_enabled": schema.BoolAttribute{
 						Computed:            true,
-						MarkdownDescription: "Minor version component.",
-					},
-					"patch": schema.Int64Attribute{
-						Computed:            true,
-						MarkdownDescription: "Patch version component.",
+						MarkdownDescription: "Whether the patch version is automatically incremented on each build.",
 					},
 				},
 			},
-			"auto_increment_version": schema.BoolAttribute{
+			"image": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Whether the patch version is automatically incremented on each build.",
-			},
-			"image_name": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Override for the image name.",
-			},
-			"image_tag": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Extra tag suffix applied to the built image.",
-			},
-			"include_latest_tag": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether a `:latest` tag is pushed.",
-			},
-			"include_version_tags": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether individual semver component tags are pushed.",
-			},
-			"include_commit_tag": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether a git commit hash tag is pushed.",
+				MarkdownDescription: "Image configuration for the build output.",
+				Attributes: map[string]schema.Attribute{
+					"name": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Override for the image name.",
+					},
+					"tag": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Extra tag suffix applied to the built image.",
+					},
+					"include_latest_tag_enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether a `:latest` tag is pushed.",
+					},
+					"include_version_tags_enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether individual semver component tags are pushed.",
+					},
+					"include_commit_tag_enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether a git commit hash tag is pushed.",
+					},
+					"registry": schema.ListNestedAttribute{
+						Computed:            true,
+						MarkdownDescription: "Image registry configurations the built image is pushed to.",
+						NestedObject: schema.NestedAttributeObject{
+							Attributes: map[string]schema.Attribute{
+								"account_id": schema.StringAttribute{
+									Computed:            true,
+									MarkdownDescription: "The ID of the `komodo_registry_account` used with this registry.",
+								},
+								"organization": schema.StringAttribute{
+									Computed:            true,
+									MarkdownDescription: "Organization name within the registry account.",
+								},
+							},
+						},
+					},
+				},
 			},
 			"links": schema.ListAttribute{
 				Computed:            true,
@@ -187,33 +193,33 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed:            true,
 				MarkdownDescription: "Whether host filesystem files are used instead of a git repository.",
 			},
-			"build_path": schema.StringAttribute{
+			"build": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Path to the Docker build context directory.",
+				MarkdownDescription: "Docker build configuration.",
+				Attributes: map[string]schema.Attribute{
+					"path": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Path to the Docker build context directory.",
+					},
+					"extra_args": schema.ListAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Additional arguments passed to `docker build`.",
+					},
+					"args": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Docker build arguments.",
+					},
+					"secret_args": schema.StringAttribute{
+						Computed:            true,
+						Sensitive:           true,
+						MarkdownDescription: "Docker secret build arguments.",
+					},
+				},
 			},
 			"dockerfile_path": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Path to the Dockerfile.",
-			},
-			"image_registry": schema.ListNestedAttribute{
-				Computed:            true,
-				MarkdownDescription: "Image registry configurations the built image is pushed to.",
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"domain": schema.StringAttribute{
-							Computed:            true,
-							MarkdownDescription: "Registry provider domain.",
-						},
-						"account": schema.StringAttribute{
-							Computed:            true,
-							MarkdownDescription: "Account used with this registry.",
-						},
-						"organization": schema.StringAttribute{
-							Computed:            true,
-							MarkdownDescription: "Organization name within the registry account.",
-						},
-					},
-				},
 			},
 			"skip_secret_interp": schema.BoolAttribute{
 				Computed:            true,
@@ -223,11 +229,6 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed:            true,
 				MarkdownDescription: "Whether `docker buildx` is used.",
 			},
-			"extra_args": schema.ListAttribute{
-				Computed:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "Additional arguments passed to `docker build`.",
-			},
 			"pre_build": schema.SingleNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "Command run before the Docker build.",
@@ -236,15 +237,6 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 			"dockerfile": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Inline Dockerfile contents.",
-			},
-			"build_args": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Docker build arguments.",
-			},
-			"secret_args": schema.StringAttribute{
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Docker secret build arguments.",
 			},
 			"labels": schema.StringAttribute{
 				Computed:            true,
@@ -313,17 +305,32 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	data.ID = types.StringValue(b.ID.OID)
 	data.Name = types.StringValue(b.Name)
 	data.BuilderID = types.StringValue(b.Config.BuilderID)
+	v := b.Config.Version
 	data.Version = &BuildVersionModel{
-		Major: types.Int64Value(int64(b.Config.Version.Major)),
-		Minor: types.Int64Value(int64(b.Config.Version.Minor)),
-		Patch: types.Int64Value(int64(b.Config.Version.Patch)),
+		Value:                types.StringValue(fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)),
+		AutoIncrementEnabled: types.BoolValue(b.Config.AutoIncrementVersion),
 	}
-	data.AutoIncrementVersion = types.BoolValue(b.Config.AutoIncrementVersion)
-	data.ImageName = types.StringValue(b.Config.ImageName)
-	data.ImageTag = types.StringValue(b.Config.ImageTag)
-	data.IncludeLatestTag = types.BoolValue(b.Config.IncludeLatestTag)
-	data.IncludeVersionTags = types.BoolValue(b.Config.IncludeVersionTags)
-	data.IncludeCommitTag = types.BoolValue(b.Config.IncludeCommitTag)
+	{
+		var regs []ImageRegistryConfigModel
+		if len(b.Config.ImageRegistry) > 0 {
+			regs = make([]ImageRegistryConfigModel, len(b.Config.ImageRegistry))
+			for i, r := range b.Config.ImageRegistry {
+				accountID := d.client.ResolveDockerRegistryAccountID(ctx, r.Domain, r.Account)
+				regs[i] = ImageRegistryConfigModel{
+					Account:      types.StringValue(accountID),
+					Organization: types.StringValue(r.Organization),
+				}
+			}
+		}
+		data.Image = &BuildImageModel{
+			Name:               types.StringValue(b.Config.ImageName),
+			Tag:                types.StringValue(b.Config.ImageTag),
+			IncludeLatestTag:   types.BoolValue(b.Config.IncludeLatestTag),
+			IncludeVersionTags: types.BoolValue(b.Config.IncludeVersionTags),
+			IncludeCommitTag:   types.BoolValue(b.Config.IncludeCommitTag),
+			Registries:         regs,
+		}
+	}
 	links, _ := types.ListValueFrom(ctx, types.StringType, b.Config.Links)
 	data.Links = links
 	data.LinkedRepo = types.StringValue(b.Config.LinkedRepo)
@@ -346,40 +353,29 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		data.Webhook = nil
 	}
 	data.FilesOnHost = types.BoolValue(b.Config.FilesOnHost)
-	data.BuildPath = types.StringValue(b.Config.BuildPath)
-	data.DockerfilePath = types.StringValue(b.Config.DockerfilePath)
-
-	if len(b.Config.ImageRegistry) > 0 {
-		regs := make([]ImageRegistryConfigModel, len(b.Config.ImageRegistry))
-		for i, r := range b.Config.ImageRegistry {
-			regs[i] = ImageRegistryConfigModel{
-				Domain:       types.StringValue(r.Domain),
-				Account:      types.StringValue(r.Account),
-				Organization: types.StringValue(r.Organization),
-			}
+	{
+		extraArgs, _ := types.ListValueFrom(ctx, types.StringType, b.Config.ExtraArgs)
+		data.Build = &DockerBuildModel{
+			Path:       types.StringValue(b.Config.BuildPath),
+			ExtraArgs:  extraArgs,
+			Args:       types.StringValue(b.Config.BuildArgs),
+			SecretArgs: types.StringValue(b.Config.SecretArgs),
 		}
-		data.ImageRegistry = regs
-	} else {
-		data.ImageRegistry = nil
 	}
-
+	data.DockerfilePath = types.StringValue(b.Config.DockerfilePath)
 	data.SkipSecretInterp = types.BoolValue(b.Config.SkipSecretInterp)
 	data.UseBuildx = types.BoolValue(b.Config.UseBuildx)
-	extraArgs, _ := types.ListValueFrom(ctx, types.StringType, b.Config.ExtraArgs)
-	data.ExtraArgs = extraArgs
 
 	if b.Config.PreBuild.Path != "" || b.Config.PreBuild.Command != "" {
 		data.PreBuild = &SystemCommandModel{
 			Path:    types.StringValue(b.Config.PreBuild.Path),
-			Command: types.StringValue(b.Config.PreBuild.Command),
+			Command: types.StringValue(strings.TrimRight(b.Config.PreBuild.Command, "\n\r")),
 		}
 	} else {
 		data.PreBuild = nil
 	}
 
 	data.Dockerfile = types.StringValue(b.Config.Dockerfile)
-	data.BuildArgs = types.StringValue(b.Config.BuildArgs)
-	data.SecretArgs = types.StringValue(b.Config.SecretArgs)
 	data.Labels = types.StringValue(b.Config.Labels)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

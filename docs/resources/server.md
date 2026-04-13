@@ -30,10 +30,10 @@ resource "komodo_server" "production" {
   auto_rotate_keys_enabled             = true
   historical_system_statistics_enabled = true
 
-  alerts = {
+  alerts {
     enabled = true
     types   = ["cpu", "memory", "disk", "unreachable"]
-    thresholds = {
+    thresholds {
       cpu_warning     = 75.0
       cpu_critical    = 90.0
       memory_warning  = 75.0
@@ -67,7 +67,7 @@ resource "komodo_server" "production" {
 ### Optional
 
 - `address` (String) The ws/s address of the periphery client. If unset, server expects Periphery → Core connection.
-- `alerts` (Attributes) Alert configuration for this server. (see [below for nested schema](#nestedatt--alerts))
+- `alerts` (Block, Optional) Alert configuration for this server. (see [below for nested schema](#nestedblock--alerts))
 - `auto_prune_images_enabled` (Boolean) Whether to run `docker image prune -a -f` every 24 hours. Defaults to `false`.
 - `auto_rotate_keys_enabled` (Boolean) Whether to automatically rotate server keys when `RotateAllServerKeys` is called. Defaults to `true`.
 - `certificate_verification_enabled` (Boolean) Whether to verify the periphery TLS certificate. When `false`, certificate validation is skipped (useful for self-signed certs). Defaults to `true`.
@@ -85,7 +85,7 @@ resource "komodo_server" "production" {
 
 - `id` (String) The server identifier (ObjectId).
 
-<a id="nestedatt--alerts"></a>
+<a id="nestedblock--alerts"></a>
 ### Nested Schema for `alerts`
 
 Optional:

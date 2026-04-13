@@ -84,16 +84,16 @@ resource "komodo_procedure" "example" {
 ### Optional
 
 - `failure_alert_enabled` (Boolean) Whether to send an alert when the procedure fails.
-- `schedule` (Attributes) Schedule configuration for the procedure. (see [below for nested schema](#nestedatt--schedule))
+- `schedule` (Block, Optional) Schedule configuration for the procedure. (see [below for nested schema](#nestedblock--schedule))
 - `stage` (Block List) Ordered list of procedure stages. Stages run sequentially; executions within a stage run in parallel. (see [below for nested schema](#nestedblock--stage))
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
-- `webhook` (Attributes) Webhook configuration for the procedure. (see [below for nested schema](#nestedatt--webhook))
+- `webhook` (Block, Optional) Webhook configuration for the procedure. (see [below for nested schema](#nestedblock--webhook))
 
 ### Read-Only
 
 - `id` (String) The procedure identifier (ObjectId).
 
-<a id="nestedatt--schedule"></a>
+<a id="nestedblock--schedule"></a>
 ### Nested Schema for `schedule`
 
 Optional:
@@ -130,7 +130,7 @@ Optional:
 
 
 
-<a id="nestedatt--webhook"></a>
+<a id="nestedblock--webhook"></a>
 ### Nested Schema for `webhook`
 
 Optional:

@@ -165,7 +165,7 @@ resource "komodo_repo" "app" {
   server_id = var.server_id
   links     = [komodo_tag.app.id]
 
-  source = {
+  source {
     path       = "myorg/my-app"   # <owner>/<repo> on GitHub
     branch     = "main"
     account_id = komodo_provider_account.github.id
@@ -181,13 +181,13 @@ resource "komodo_stack" "app" {
   server_id = var.server_id
   links     = [komodo_tag.app.id]
 
-  source = {
+  source {
     repo_id = komodo_repo.app.id
     path    = "docker-compose.yml"
     branch  = "main"
   }
 
-  environment = {
+  environment {
     variables = {
       APP_ENV  = "production"
       APP_PORT = "8080"

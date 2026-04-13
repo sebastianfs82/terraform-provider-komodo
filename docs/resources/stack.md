@@ -17,7 +17,7 @@ resource "komodo_stack" "example" {
   name      = "my-stack"
   server_id = komodo_server.example.id
 
-  compose = {
+  compose {
     contents = file("${path.module}/compose.yaml")
   }
 }
@@ -36,31 +36,31 @@ resource "komodo_stack" "example" {
 - `auto_pull_enabled` (Boolean) Whether to run `compose pull` before redeploying to ensure the latest images are used.
 - `auto_update_enabled` (Boolean) Whether to automatically redeploy when newer images are found.
 - `auto_update_scope` (String) How services are redeployed when `auto_update_enabled` is active. Allowed values: `"stack"`, `"service"`.
-- `build` (Attributes) Build configuration. When set, `docker compose build` is run before deploying. (see [below for nested schema](#nestedatt--build))
-- `compose` (Attributes) Compose file configuration. (see [below for nested schema](#nestedatt--compose))
+- `build` (Block, Optional) Build configuration. When set, `docker compose build` is run before deploying. (see [below for nested schema](#nestedblock--build))
+- `compose` (Block, Optional) Compose file configuration. (see [below for nested schema](#nestedblock--compose))
 - `compose_cmd_wrapper` (String) A command prefix to wrap the compose command, e.g. for secrets management. Use `[[COMPOSE_COMMAND]]` as placeholder.
 - `compose_cmd_wrapper_include` (List of String) Which compose subcommands get wrapped by `compose_cmd_wrapper`.
 - `destroy_enforced` (Boolean) Whether to run `docker compose down` before `compose up`.
-- `environment` (Attributes) Environment variable configuration written to an env file before deploying. (see [below for nested schema](#nestedatt--environment))
+- `environment` (Block, Optional) Environment variable configuration written to an env file before deploying. (see [below for nested schema](#nestedblock--environment))
 - `extra_arguments` (List of String) Extra arguments appended to `docker compose up -d` (Compose) or `docker stack deploy` (Swarm).
 - `ignore_services` (List of String) Services to ignore when checking stack health status (e.g. init containers).
 - `links` (List of String) Quick links displayed in the Komodo UI for this stack.
 - `poll_updates_enabled` (Boolean) Whether to poll for image updates.
-- `post_deploy` (Attributes) Command to run after the stack is deployed. (see [below for nested schema](#nestedatt--post_deploy))
-- `pre_deploy` (Attributes) Command to run before the stack is deployed. (see [below for nested schema](#nestedatt--pre_deploy))
+- `post_deploy` (Block, Optional) Command to run after the stack is deployed. (see [below for nested schema](#nestedblock--post_deploy))
+- `pre_deploy` (Block, Optional) Command to run before the stack is deployed. (see [below for nested schema](#nestedblock--pre_deploy))
 - `project_name` (String) Custom project name for `docker compose -p`. Defaults to the stack name when empty.
-- `registry` (Attributes) Registry login configuration. When set, `docker login` is run before deploying. (see [below for nested schema](#nestedatt--registry))
+- `registry` (Block, Optional) Registry login configuration. When set, `docker login` is run before deploying. (see [below for nested schema](#nestedblock--registry))
 - `server_id` (String) The ID of the server to deploy the stack on (Compose mode). If both `server_id` and `swarm_id` are set, `swarm_id` takes precedence.
-- `source` (Attributes) Git source configuration for repo-based stacks. (see [below for nested schema](#nestedatt--source))
+- `source` (Block, Optional) Git source configuration for repo-based stacks. (see [below for nested schema](#nestedblock--source))
 - `swarm_id` (String) The ID of the swarm to deploy the stack on (Swarm mode). Overrides `server_id`.
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
-- `webhook` (Attributes) Webhook configuration for the stack. (see [below for nested schema](#nestedatt--webhook))
+- `webhook` (Block, Optional) Webhook configuration for the stack. (see [below for nested schema](#nestedblock--webhook))
 
 ### Read-Only
 
 - `id` (String) The stack identifier (ObjectId).
 
-<a id="nestedatt--build"></a>
+<a id="nestedblock--build"></a>
 ### Nested Schema for `build`
 
 Optional:
@@ -69,7 +69,7 @@ Optional:
 - `extra_arguments` (List of String) Extra arguments appended to `docker compose build`.
 
 
-<a id="nestedatt--compose"></a>
+<a id="nestedblock--compose"></a>
 ### Nested Schema for `compose`
 
 Optional:
@@ -80,7 +80,7 @@ Optional:
 - `local_enabled` (Boolean) Whether to source compose files from the host filesystem instead of a git repo or inline contents.
 
 
-<a id="nestedatt--environment"></a>
+<a id="nestedblock--environment"></a>
 ### Nested Schema for `environment`
 
 Optional:
@@ -89,7 +89,7 @@ Optional:
 - `variables` (Map of String) Environment variables to inject. Keys are automatically uppercased.
 
 
-<a id="nestedatt--post_deploy"></a>
+<a id="nestedblock--post_deploy"></a>
 ### Nested Schema for `post_deploy`
 
 Optional:
@@ -98,7 +98,7 @@ Optional:
 - `path` (String) The working directory for the command.
 
 
-<a id="nestedatt--pre_deploy"></a>
+<a id="nestedblock--pre_deploy"></a>
 ### Nested Schema for `pre_deploy`
 
 Optional:
@@ -107,7 +107,7 @@ Optional:
 - `path` (String) The working directory for the command.
 
 
-<a id="nestedatt--registry"></a>
+<a id="nestedblock--registry"></a>
 ### Nested Schema for `registry`
 
 Required:
@@ -116,7 +116,7 @@ Required:
 - `provider` (String) Registry provider domain, e.g. `docker.io` or `ghcr.io`.
 
 
-<a id="nestedatt--source"></a>
+<a id="nestedblock--source"></a>
 ### Nested Schema for `source`
 
 Optional:
@@ -130,14 +130,14 @@ Optional:
 - `url` (String) The URL of the git provider, e.g. `https://github.com`.
 
 
-<a id="nestedatt--webhook"></a>
+<a id="nestedblock--webhook"></a>
 ### Nested Schema for `webhook`
 
 Optional:
 
 - `enabled` (Boolean) Whether incoming webhooks trigger a deployment.
 - `force_deploy` (Boolean) When true, always runs `DeployStack` instead of `DeployStackIfChanged`.
-- `secret` (String) Alternate webhook secret. Defaults to the global secret when empty.
+- `secret` (String, Sensitive) Alternate webhook secret. Defaults to the global secret when empty.
 
 ## Import
 

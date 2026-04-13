@@ -1,3 +1,42 @@
+## 0.8.0 (April 13, 2026)
+
+BREAKING CHANGES:
+
+* **Configuration block syntax change across multiple resources:** The following optional single-nested configuration blocks have been converted from `SingleNestedAttribute` (attribute-assignment style: `block = { ... }`) to `SingleNestedBlock` (HCL block style: `block { ... }`). All existing configurations using the `=` assignment form must be updated to use bare block syntax:
+  * `komodo_action`: `schedule`, `webhook`
+  * `komodo_alerter`: `endpoint`
+  * `komodo_builder`: `url_config`, `server_config`, `aws_config`
+  * `komodo_procedure`: `schedule`, `webhook`
+  * `komodo_repo`: `source`, `webhook`, `on_clone`, `on_pull`, `environment`
+  * `komodo_resource_sync`: `webhook`
+  * `komodo_server`: `alerts`
+  * `komodo_stack`: `source`, `compose`, `environment`, `build`, `webhook`, `pre_deploy`, `post_deploy`
+* **`komodo_build` resource / data source:** Complete schema overhaul:
+  * The flat `version` block (`major`, `minor`, `patch` as integer attributes) and the top-level `auto_increment_version` attribute have been replaced by a `version` block with two sub-attributes: `value` (string, e.g. `"1.0.0"`) and `auto_increment_enabled` (bool).
+  * Flat source attributes (`git_provider`, `git_https`, `git_account`, `linked_repo`, `repo`, `branch`, `commit`) have been replaced by a `source` block.
+  * Flat image attributes (`image_name`, `image_tag`, `include_latest_tag`, `include_version_tags`, `include_commit_tag`) have been replaced by an `image` block.
+  * Flat build attributes (`build_path`, `build_args`, `secret_args`, `extra_args`) have been replaced by a `build` block.
+  * `image_registry[].account` has been renamed to `account_id`; `image_registry[].domain` has been removed.
+* **`komodo_deployment` resource / data source:** `image.version` is no longer a nested block with `major`, `minor`, and `patch` integer attributes. It is now a plain string attribute formatted as `"MAJOR.MINOR.PATCH"` (e.g. `version = "1.0.0"`). Omit or set to `""` for latest.
+
+FEATURES:
+
+* **`komodo_stack` resource:** New attributes: `auto_update_enabled`, `auto_update_scope`, `poll_updates_enabled`, `alerts_enabled`, `extra_arguments`, `compose_cmd_wrapper`, `compose_cmd_wrapper_include`, `ignore_services`, `links`, and `destroy_enforced`.
+* **`komodo_repo` resource:** New `links` attribute for quick links in the Komodo UI.
+* **`komodo_build` resource:** New `links` attribute for quick links in the Komodo UI.
+* **`komodo_deployment` resource:** New `links` attribute for quick links in the Komodo UI.
+
+BUG FIXES:
+
+* **Git account resolution:** `ResolveGitAccountID` now tries an exact `domain + username` match first and falls back to `username`-only matching, fixing resolution failures for custom-hosted git providers.
+* **Docker registry account resolution:** New `ResolveDockerRegistryAccountID` client method uses the same two-step matching logic, replacing the previous best-effort approach.
+* **`komodo_builder` data source / resource:** `ListBuilders` now calls the `ListFullBuilders` API endpoint to retrieve complete builder configuration data.
+* **`komodo_build`, `komodo_deployment` resources:** Removed incorrect text-based "not found" detection from `GetBuild` and `GetDeployment` API response parsing that could suppress real errors.
+* **`komodo_server` resource:** The `alerts` block is now only populated when it was already present in the plan, preventing spurious diffs for servers configured without an explicit `alerts` block.
+* **`komodo_stack`, `komodo_repo` resources:** `webhook.secret` is now correctly marked as `Sensitive`, preventing the value from appearing in plain text in plan output and logs.
+
+---
+
 ## 0.7.0 (April 13, 2026)
 
 BREAKING CHANGES:

@@ -107,8 +107,9 @@ func (r *BuilderResource) Schema(ctx context.Context, req resource.SchemaRequest
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"url_config": schema.SingleNestedAttribute{
-				Optional:            true,
+		},
+		Blocks: map[string]schema.Block{
+			"url_config": schema.SingleNestedBlock{
 				MarkdownDescription: "Configuration for a URL builder. Required when `type` is `Url`.",
 				Attributes: map[string]schema.Attribute{
 					"address": schema.StringAttribute{
@@ -145,8 +146,7 @@ func (r *BuilderResource) Schema(ctx context.Context, req resource.SchemaRequest
 					},
 				},
 			},
-			"server_config": schema.SingleNestedAttribute{
-				Optional:            true,
+			"server_config": schema.SingleNestedBlock{
 				MarkdownDescription: "Configuration for a server builder. Required when `type` is `Server`.",
 				Attributes: map[string]schema.Attribute{
 					"server_id": schema.StringAttribute{
@@ -159,8 +159,7 @@ func (r *BuilderResource) Schema(ctx context.Context, req resource.SchemaRequest
 					},
 				},
 			},
-			"aws_config": schema.SingleNestedAttribute{
-				Optional:            true,
+			"aws_config": schema.SingleNestedBlock{
 				MarkdownDescription: "Configuration for an AWS builder. Required when `type` is `Aws`.",
 				Attributes: map[string]schema.Attribute{
 					"region": schema.StringAttribute{

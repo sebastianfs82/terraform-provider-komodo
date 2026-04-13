@@ -100,8 +100,31 @@ func (r *ActionResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"schedule": schema.SingleNestedAttribute{
+			"failure_alert_enabled": schema.BoolAttribute{
 				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether to send an alert when the action fails.",
+				Default:             booldefault.StaticBool(true),
+			},
+			"reload_dependencies_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether to reload Deno dependencies on each run.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"file_contents": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "TypeScript file contents using the Komodo client.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"schedule": schema.SingleNestedBlock{
 				MarkdownDescription: "Schedule configuration for the action.",
 				Attributes: map[string]schema.Attribute{
 					"format": schema.StringAttribute{
@@ -149,14 +172,7 @@ func (r *ActionResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					},
 				},
 			},
-			"failure_alert_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send an alert when the action fails.",
-				Default:             booldefault.StaticBool(true),
-			},
-			"webhook": schema.SingleNestedAttribute{
-				Optional:            true,
+			"webhook": schema.SingleNestedBlock{
 				MarkdownDescription: "Webhook configuration for the action.",
 				Attributes: map[string]schema.Attribute{
 					"enabled": schema.BoolAttribute{
@@ -170,24 +186,6 @@ func (r *ActionResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					},
 				},
 			},
-			"reload_dependencies_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to reload Deno dependencies on each run.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"file_contents": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "TypeScript file contents using the Komodo client.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-		},
-		Blocks: map[string]schema.Block{
 			"argument": schema.ListNestedBlock{
 				MarkdownDescription: "Key-value arguments passed to the action as the `ARGS` variable.",
 				NestedObject: schema.NestedBlockObject{
