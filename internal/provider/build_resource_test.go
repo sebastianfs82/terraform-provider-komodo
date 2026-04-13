@@ -36,7 +36,6 @@ func TestUnitBuildResource_trailingNewlineTrim(t *testing.T) {
 		{"only newline", "\n", ""},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := strings.TrimRight(tc.input, "\n\r")
 			if got != tc.want {
@@ -67,7 +66,6 @@ func TestUnitBuildResource_parseBuildArguments(t *testing.T) {
 		{"value with equals", "URL=http://x?a=1", false, []BuildArgumentModel{{Name: strVal("URL"), Value: strVal("http://x?a=1"), SecretEnabled: boolFalse}}},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := parseBuildArguments(tc.input, tc.secret)
 			if len(got) != len(tc.want) {
@@ -99,7 +97,6 @@ func TestUnitBuildResource_buildArgsToString(t *testing.T) {
 		}, "A=first\nZ=last"},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := buildArgsToString(tc.input)
 			if got != tc.want {

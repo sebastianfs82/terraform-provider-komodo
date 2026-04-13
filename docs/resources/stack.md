@@ -73,8 +73,6 @@ resource "komodo_stack" "from_git" {
 - `auto_update_scope` (String) How services are redeployed when `auto_update_enabled` is active. Allowed values: `"stack"`, `"service"`.
 - `build` (Block, Optional) Build configuration. When set, `docker compose build` is run before deploying. (see [below for nested schema](#nestedblock--build))
 - `compose` (Block, Optional) Compose file configuration. (see [below for nested schema](#nestedblock--compose))
-- `compose_cmd_wrapper` (String) A command prefix to wrap the compose command, e.g. for secrets management. Use `[[COMPOSE_COMMAND]]` as placeholder.
-- `compose_cmd_wrapper_include` (List of String) Which compose subcommands get wrapped by `compose_cmd_wrapper`.
 - `destroy_enforced` (Boolean) Whether to run `docker compose down` before `compose up`.
 - `environment` (Block, Optional) Environment variable configuration written to an env file before deploying. (see [below for nested schema](#nestedblock--environment))
 - `extra_arguments` (List of String) Extra arguments appended to `docker compose up -d` (Compose) or `docker stack deploy` (Swarm).
@@ -90,6 +88,7 @@ resource "komodo_stack" "from_git" {
 - `swarm_id` (String) The ID of the swarm to deploy the stack on (Swarm mode). Overrides `server_id`.
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
 - `webhook` (Block, Optional) Webhook configuration for the stack. (see [below for nested schema](#nestedblock--webhook))
+- `wrapper` (Block, Optional) Compose command wrapper configuration for secrets management or custom tooling. (see [below for nested schema](#nestedblock--wrapper))
 
 ### Read-Only
 
@@ -172,6 +171,15 @@ Optional:
 - `enabled` (Boolean) Whether incoming webhooks trigger a deployment.
 - `force_deploy` (Boolean) When true, always runs `DeployStack` instead of `DeployStackIfChanged`.
 - `secret` (String, Sensitive) Alternate webhook secret. Defaults to the global secret when empty.
+
+
+<a id="nestedblock--wrapper"></a>
+### Nested Schema for `wrapper`
+
+Optional:
+
+- `command` (String) A command prefix to wrap the compose command, e.g. for secrets management. Use `[[COMPOSE_COMMAND]]` as placeholder.
+- `include` (List of String) Which compose subcommands get wrapped by `command`.
 
 ## Import
 

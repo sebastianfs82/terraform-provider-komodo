@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -19,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
@@ -46,6 +49,11 @@ type StackWebhookModel struct {
 
 type RegistryConfigModel struct {
 	AccountID types.String `tfsdk:"account_id"`
+}
+
+type StackCmdWrapperModel struct {
+	Command types.String `tfsdk:"command"`
+	Include types.List   `tfsdk:"include"`
 }
 
 type StackSourceModel struct {
@@ -101,11 +109,12 @@ type StackResourceModel struct {
 	Registry *RegistryConfigModel `tfsdk:"registry"`
 
 	// Extra args
-	ExtraArguments           types.List   `tfsdk:"extra_arguments"`
-	ComposeCmdWrapper        types.String `tfsdk:"compose_cmd_wrapper"`
-	ComposeCmdWrapperInclude types.List   `tfsdk:"compose_cmd_wrapper_include"`
-	IgnoreServices           types.List   `tfsdk:"ignore_services"`
-	Links                    types.List   `tfsdk:"links"`
+	ExtraArguments types.List `tfsdk:"extra_arguments"`
+	IgnoreServices types.List `tfsdk:"ignore_services"`
+	Links          types.List `tfsdk:"links"`
+
+	// Wrapper block
+	Wrapper *StackCmdWrapperModel `tfsdk:"wrapper"`
 }
 
 func (r *StackResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -203,19 +212,6 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Computed:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "Extra arguments appended to `docker compose up -d` (Compose) or `docker stack deploy` (Swarm).",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"compose_cmd_wrapper": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "A command prefix to wrap the compose command, e.g. for secrets management. Use `[[COMPOSE_COMMAND]]` as placeholder.",
-			},
-			"compose_cmd_wrapper_include": schema.ListAttribute{
-				Optional:            true,
-				Computed:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "Which compose subcommands get wrapped by `compose_cmd_wrapper`.",
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.UseStateForUnknown(),
 				},
@@ -371,6 +367,29 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					"account_id": schema.StringAttribute{
 						Optional:            true,
 						MarkdownDescription: "The ID of a `komodo_registry_account` resource to authenticate with.",
+					},
+				},
+			},
+			"wrapper": schema.SingleNestedBlock{
+				MarkdownDescription: "Compose command wrapper configuration for secrets management or custom tooling.",
+				Attributes: map[string]schema.Attribute{
+					"command": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "A command prefix to wrap the compose command, e.g. for secrets management. Use `[[COMPOSE_COMMAND]]` as placeholder.",
+					},
+					"include": schema.ListAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Which compose subcommands get wrapped by `command`. Allowed values: `\"config\"`, `\"build\"`, `\"pull\"`, `\"up\"`, `\"run\"`.",
+						Validators: []validator.List{
+							listvalidator.ValueStringsAre(
+								stringvalidator.OneOf("config", "build", "pull", "up", "run"),
+							),
+						},
+						PlanModifiers: []planmodifier.List{
+							listplanmodifier.UseStateForUnknown(),
+						},
 					},
 				},
 			},
@@ -744,7 +763,12 @@ func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackReso
 			return ""
 		}(),
 
-		ComposeCmdWrapper: data.ComposeCmdWrapper.ValueString(),
+		ComposeCmdWrapper: func() string {
+			if data.Wrapper != nil {
+				return data.Wrapper.Command.ValueString()
+			}
+			return ""
+		}(),
 
 		WebhookEnabled: func() bool {
 			if data.Webhook != nil {
@@ -845,10 +869,12 @@ func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackReso
 			cfg.BuildExtraArgs = []string{}
 		}
 	}
-	if !data.ComposeCmdWrapperInclude.IsNull() && !data.ComposeCmdWrapperInclude.IsUnknown() {
-		var vals []string
-		data.ComposeCmdWrapperInclude.ElementsAs(ctx, &vals, false)
-		cfg.ComposeCmdWrapperInclude = vals
+	if data.Wrapper != nil {
+		if !data.Wrapper.Include.IsNull() && !data.Wrapper.Include.IsUnknown() {
+			var vals []string
+			data.Wrapper.Include.ElementsAs(ctx, &vals, false)
+			cfg.ComposeCmdWrapperInclude = vals
+		}
 	}
 	if !data.IgnoreServices.IsNull() && !data.IgnoreServices.IsUnknown() {
 		var vals []string
@@ -903,8 +929,6 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	} else {
 		data.Registry = nil
 	}
-	data.ComposeCmdWrapper = strOrNull(stack.Config.ComposeCmdWrapper)
-
 	// Git block: keep nil when all git fields are empty/default and caller didn't set it
 	if data.Source != nil || stack.Config.Repo != "" || stack.Config.Branch != "" ||
 		stack.Config.GitProvider != "" || stack.Config.GitAccount != "" || stack.Config.Commit != "" ||
@@ -1048,11 +1072,19 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 		data.Build = nil
 	}
 
-	wrapperInclude, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.ComposeCmdWrapperInclude)
-	data.ComposeCmdWrapperInclude = wrapperInclude
-
 	ignoreServices, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.IgnoreServices)
 	data.IgnoreServices = ignoreServices
+
+	// Wrapper block
+	if stack.Config.ComposeCmdWrapper != "" || len(stack.Config.ComposeCmdWrapperInclude) > 0 {
+		wrapperInclude, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.ComposeCmdWrapperInclude)
+		data.Wrapper = &StackCmdWrapperModel{
+			Command: strOrNull(stack.Config.ComposeCmdWrapper),
+			Include: wrapperInclude,
+		}
+	} else {
+		data.Wrapper = nil
+	}
 
 	links, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.Links)
 	data.Links = links
