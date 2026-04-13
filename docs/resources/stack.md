@@ -179,7 +179,7 @@ Optional:
 Optional:
 
 - `command` (String) A command prefix to wrap the compose command, e.g. for secrets management. Use `[[COMPOSE_COMMAND]]` as placeholder.
-- `include` (List of String) Which compose subcommands get wrapped by `command`.
+- `include` (List of String) Which compose subcommands get wrapped by `command`. Allowed values: `"config"`, `"build"`, `"pull"`, `"up"`, `"run"`.
 
 ## Import
 
