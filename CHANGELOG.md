@@ -34,6 +34,7 @@ BUG FIXES:
 * **`komodo_build`, `komodo_deployment` resources:** Removed incorrect text-based "not found" detection from `GetBuild` and `GetDeployment` API response parsing that could suppress real errors.
 * **`komodo_server` resource:** The `alerts` block is now only populated when it was already present in the plan, preventing spurious diffs for servers configured without an explicit `alerts` block.
 * **`komodo_stack`, `komodo_repo` resources:** `webhook.secret` is now correctly marked as `Sensitive`, preventing the value from appearing in plain text in plan output and logs.
+* **`komodo_build` acceptance tests:** Simplified `testAccBuildResourceWithSourceConfig` by removing the redundant `path` parameter (now hardcoded inside the helper), aligning call sites with the updated schema.
 
 ---
 
