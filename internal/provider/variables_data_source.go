@@ -42,6 +42,10 @@ func (d *VariablesDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 				MarkdownDescription: "The list of variables.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"id": schema.StringAttribute{
+							Computed:            true,
+							MarkdownDescription: "The variable identifier (same as name).",
+						},
 						"name": schema.StringAttribute{
 							Computed:            true,
 							MarkdownDescription: "The variable name.",
@@ -98,6 +102,7 @@ func (d *VariablesDataSource) Read(ctx context.Context, req datasource.ReadReque
 	items := make([]VariableDataSourceModel, 0, len(variables))
 	for _, v := range variables {
 		items = append(items, VariableDataSourceModel{
+			ID:            types.StringValue(v.Name),
 			Name:          types.StringValue(v.Name),
 			Value:         types.StringValue(v.Value),
 			Description:   types.StringValue(v.Description),

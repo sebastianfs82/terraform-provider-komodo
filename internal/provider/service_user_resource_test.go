@@ -132,7 +132,7 @@ func TestAccServiceUserResource_withApiKey(t *testing.T) {
 					resource.TestCheckResourceAttr("komodo_api_key.svc_key", "name", "svc-user-key"),
 					resource.TestCheckResourceAttrSet("komodo_api_key.svc_key", "key"),
 					resource.TestCheckResourceAttrSet("komodo_api_key.svc_key", "secret"),
-					resource.TestCheckResourceAttr("komodo_api_key.svc_key", "expires", "0"),
+					resource.TestCheckResourceAttr("komodo_api_key.svc_key", "expires_at", ""),
 					resource.TestCheckResourceAttrPair(
 						"komodo_api_key.svc_key", "service_user_id",
 						"komodo_service_user.test", "id",

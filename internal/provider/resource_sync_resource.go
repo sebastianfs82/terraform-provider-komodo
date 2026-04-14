@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -422,7 +423,7 @@ func resourceSyncToModel(ctx context.Context, rs *client.ResourceSync, m *Resour
 	m.Commit = types.StringValue(cfg.Commit)
 	m.GitAccount = types.StringValue(cfg.GitAccount)
 	m.FilesOnHost = types.BoolValue(cfg.FilesOnHost)
-	m.FileContents = types.StringValue(cfg.FileContents)
+	m.FileContents = types.StringValue(strings.TrimRight(cfg.FileContents, "\n"))
 	webhookSecret := types.StringNull()
 	if cfg.WebhookSecret != "" {
 		webhookSecret = types.StringValue(cfg.WebhookSecret)

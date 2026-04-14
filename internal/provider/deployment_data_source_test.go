@@ -35,7 +35,7 @@ func TestAccDeploymentDataSource_fields(t *testing.T) {
 				Config: testAccDeploymentDataSourceConfig_fields("tf-acc-deployment-ds-fields"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_deployment.test", "image.type", "Image"),
-					resource.TestCheckResourceAttr("data.komodo_deployment.test", "image.image", "nginx:latest"),
+					resource.TestCheckResourceAttr("data.komodo_deployment.test", "image.name", "nginx:latest"),
 				),
 			},
 		},
@@ -58,9 +58,9 @@ func testAccDeploymentDataSourceConfig_fields(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_deployment" "test" {
   name = %q
-  image = {
-    type  = "Image"
-    image = "nginx:latest"
+  image {
+    type = "Image"
+    name = "nginx:latest"
   }
 }
 

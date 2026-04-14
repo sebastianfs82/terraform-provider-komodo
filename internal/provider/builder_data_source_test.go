@@ -65,7 +65,7 @@ func testAccBuilderDataSourceConfig_byName(name, address string) string {
 resource "komodo_builder" "src" {
   name       = %q
   type       = "Url"
-  url_config = {
+  url_config {
     address = %q
   }
 }
@@ -81,7 +81,7 @@ func testAccBuilderDataSourceConfig_byID(name, address string) string {
 resource "komodo_builder" "src" {
   name       = %q
   type       = "Url"
-  url_config = {
+  url_config {
     address = %q
   }
 }

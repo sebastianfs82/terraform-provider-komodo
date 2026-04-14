@@ -156,9 +156,9 @@ func testAccBuilderDisappears(resourceName string) resource.TestCheckFunc {
 func testAccBuilderResourceUrlConfig(name, address string) string {
 	return fmt.Sprintf(`
 resource "komodo_builder" "test" {
-  name         = %q
-  builder_type = "Url"
-  url_config = {
+  name = %q
+  type = "Url"
+  url_config {
     address = %q
   }
 }
@@ -195,9 +195,9 @@ resource "komodo_tag" "test" {
 }
 
 resource "komodo_builder" "test" {
-  name         = %q
-  type         = "Url"
-  url_config = {
+  name = %q
+  type = "Url"
+  url_config {
     address = "http://localhost:8120"
   }
   tags = [komodo_tag.test.id]
@@ -208,9 +208,9 @@ resource "komodo_builder" "test" {
 func testAccBuilderClearTagsConfig(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_builder" "test" {
-  name         = %q
-  type         = "Url"
-  url_config = {
+  name = %q
+  type = "Url"
+  url_config {
     address = "http://localhost:8120"
   }
   tags = []

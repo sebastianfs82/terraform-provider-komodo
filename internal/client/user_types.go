@@ -3,14 +3,20 @@
 
 package client
 
+// UserConfig holds the discriminated user configuration returned by the API.
+type UserConfig struct {
+	Type string `json:"type"`
+}
+
 type User struct {
-	ID            OID    `json:"_id"`
-	Username      string `json:"username"`
-	Enabled       bool   `json:"enabled"`
-	Admin         bool   `json:"admin"`
-	CreateServers bool   `json:"create_server_permissions"`
-	CreateBuilds  bool   `json:"create_build_permissions"`
-	UpdatedAt     int64  `json:"updated_at"`
+	ID            OID        `json:"_id"`
+	Username      string     `json:"username"`
+	Enabled       bool       `json:"enabled"`
+	Admin         bool       `json:"admin"`
+	CreateServers bool       `json:"create_server_permissions"`
+	CreateBuilds  bool       `json:"create_build_permissions"`
+	UpdatedAt     int64      `json:"updated_at"`
+	Config        UserConfig `json:"config"`
 }
 
 type CreateLocalUserRequest struct {

@@ -58,6 +58,7 @@ func (r *TagResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 			},
 			"color": schema.StringAttribute{
 				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The tag color.",
 			},
 			"owner": schema.StringAttribute{

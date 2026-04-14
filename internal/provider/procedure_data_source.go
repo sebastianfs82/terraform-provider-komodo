@@ -189,13 +189,9 @@ func (d *ProcedureDataSource) Read(ctx context.Context, req datasource.ReadReque
 	if proc.Config.WebhookSecret != "" {
 		webhookSecret = types.StringValue(proc.Config.WebhookSecret)
 	}
-	if proc.Config.WebhookEnabled || proc.Config.WebhookSecret != "" {
-		data.Webhook = &WebhookModel{
-			Enabled: types.BoolValue(proc.Config.WebhookEnabled),
-			Secret:  webhookSecret,
-		}
-	} else {
-		data.Webhook = nil
+	data.Webhook = &WebhookModel{
+		Enabled: types.BoolValue(proc.Config.WebhookEnabled),
+		Secret:  webhookSecret,
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

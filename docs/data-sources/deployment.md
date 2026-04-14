@@ -28,36 +28,42 @@ data "komodo_deployment" "example" {
 
 ### Read-Only
 
-- `auto_update` (Boolean) Whether the deployment auto-updates when a newer image is found.
-- `command` (String) Command appended to `docker run`.
-- `environment` (String) Environment variables for the container.
-- `extra_args` (List of String) Extra arguments for `docker run`.
+- `alerts_enabled` (Boolean) Whether ContainerStateChange alerts are sent.
+- `auto_update_enabled` (Boolean) Whether the deployment auto-updates when a newer image is found.
+- `container` (Attributes) Docker container runtime configuration. (see [below for nested schema](#nestedatt--container))
 - `image` (Attributes) The image source for this deployment. (see [below for nested schema](#nestedatt--image))
-- `image_registry_account` (String) Account used to pull the image.
-- `labels` (String) Docker labels for the container.
-- `links` (List of String) Quick links for this deployment.
+- `poll_updates_enabled` (Boolean) Whether image updates are polled for.
+- `secret_interpolation_enabled` (Boolean) Whether secrets are interpolated into deployment environment variables.
+- `server_id` (String) The Server ID the deployment runs on (Container mode).
+- `swarm_id` (String) The Swarm ID the deployment runs on (Swarm mode).
+- `termination` (Attributes) Container termination behaviour. (see [below for nested schema](#nestedatt--termination))
+
+<a id="nestedatt--container"></a>
+### Nested Schema for `container`
+
+Read-Only:
+
+- `command` (String) Command appended to `docker run`.
+- `environment` (Map of String) Environment variables for the container.
+- `extra_arguments` (List of String) Extra arguments for `docker run`.
+- `labels` (List of String) Docker labels for the container as a list of `key=value` strings.
+- `links` (List of String) Quick links displayed in the resource header.
 - `network` (String) Network attached to the container.
-- `poll_for_updates` (Boolean) Whether image updates are polled for.
-- `ports` (String) Container port mapping.
-- `redeploy_on_build` (Boolean) Whether the deployment redeploys when its Build finishes.
+- `ports` (List of String) Container port mappings.
 - `replicas` (Number) Number of replicas (Swarm mode only).
 - `restart` (String) Restart mode for the container.
-- `send_alerts` (Boolean) Whether ContainerStateChange alerts are sent.
-- `server_id` (String) The Server ID the deployment runs on (Container mode).
-- `skip_secret_interp` (Boolean) Whether secret interpolation is skipped.
-- `swarm_id` (String) The Swarm ID the deployment runs on (Swarm mode).
-- `term_signal_labels` (String) Labels for termination signal options.
-- `termination_signal` (String) Default termination signal.
-- `termination_timeout` (Number) Termination timeout in seconds.
-- `volumes` (String) Container volume mapping.
+- `volumes` (List of String) Container volume mappings.
+
 
 <a id="nestedatt--image"></a>
 ### Nested Schema for `image`
 
 Read-Only:
 
+- `account_id` (String) Account used to pull the image.
 - `build_id` (String) Komodo Build ID. Set when `type` is `Build`.
-- `image` (String) Docker image. Set when `type` is `Image`.
+- `name` (String) Docker image. Set when `type` is `Image`.
+- `redeploy_enabled` (Boolean) Whether the deployment redeploys when its Build finishes.
 - `type` (String) Image type: `Image` or `Build`.
 - `version` (Attributes) Build version. Set when `type` is `Build`. (see [below for nested schema](#nestedatt--image--version))
 
@@ -69,3 +75,14 @@ Read-Only:
 - `major` (Number) Major version component.
 - `minor` (Number) Minor version component.
 - `patch` (Number) Patch version component.
+
+
+
+<a id="nestedatt--termination"></a>
+### Nested Schema for `termination`
+
+Read-Only:
+
+- `signal` (String) Default termination signal.
+- `signal_labels` (String) Labels for termination signal options.
+- `timeout` (Number) Termination timeout in seconds.

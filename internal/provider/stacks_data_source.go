@@ -27,7 +27,8 @@ type StacksDataSource struct {
 }
 
 type StacksDataSourceModel struct {
-	Stacks []StackDataSourceModel `tfsdk:"stacks"`
+	ServerID types.String           `tfsdk:"server_id"`
+	Stacks   []StackDataSourceModel `tfsdk:"stacks"`
 }
 
 func (d *StacksDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -49,6 +50,10 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo stacks visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"server_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "When set, only stacks deployed on this server ID are returned.",
+			},
 			"stacks": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of stacks.",
@@ -270,6 +275,12 @@ func (d *StacksDataSource) Configure(ctx context.Context, req datasource.Configu
 }
 
 func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data StacksDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	tflog.Debug(ctx, "Listing stacks")
 
 	stacks, err := d.client.ListStacks(ctx)
@@ -277,6 +288,8 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list stacks, got error: %s", err))
 		return
 	}
+
+	serverIDFilter := data.ServerID.ValueString()
 
 	strOrNull := func(s string) types.String {
 		if s != "" {
@@ -287,6 +300,9 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 
 	items := make([]StackDataSourceModel, 0, len(stacks))
 	for _, stack := range stacks {
+		if serverIDFilter != "" && stack.Config.ServerID != serverIDFilter {
+			continue
+		}
 		envVars := envStringToMap(strings.TrimRight(stack.Config.Environment, "\n"))
 		filePath := types.StringNull()
 		if stack.Config.EnvFilePath != "" {
@@ -384,7 +400,7 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		})
 	}
 
-	data := StacksDataSourceModel{Stacks: items}
+	data.Stacks = items
 	tflog.Trace(ctx, "Listed stacks", map[string]interface{}{"count": len(items)})
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

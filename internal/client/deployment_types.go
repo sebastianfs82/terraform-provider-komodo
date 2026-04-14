@@ -90,55 +90,55 @@ type Deployment struct {
 
 // DeploymentConfig is the Komodo deployment configuration (full, as returned by the API).
 type DeploymentConfig struct {
-	SwarmID              string          `json:"swarm_id"`
-	ServerID             string          `json:"server_id"`
-	Image                DeploymentImage `json:"image"`
-	ImageRegistryAccount string          `json:"image_registry_account"`
-	SkipSecretInterp     bool            `json:"skip_secret_interp"`
-	RedeployOnBuild      bool            `json:"redeploy_on_build"`
-	PollForUpdates       bool            `json:"poll_for_updates"`
-	AutoUpdate           bool            `json:"auto_update"`
-	SendAlerts           bool            `json:"send_alerts"`
-	Links                []string        `json:"links"`
-	Network              string          `json:"network"`
-	Restart              string          `json:"restart"`
-	Command              string          `json:"command"`
-	Replicas             int             `json:"replicas"`
-	TerminationSignal    string          `json:"termination_signal"`
-	TerminationTimeout   int             `json:"termination_timeout"`
-	ExtraArgs            []string        `json:"extra_args"`
-	TermSignalLabels     string          `json:"term_signal_labels"`
-	Ports                string          `json:"ports"`
-	Volumes              string          `json:"volumes"`
-	Environment          string          `json:"environment"`
-	Labels               string          `json:"labels"`
+	SwarmID                 string          `json:"swarm_id"`
+	ServerID                string          `json:"server_id"`
+	Image                   DeploymentImage `json:"image"`
+	ImageRegistryAccount    string          `json:"image_registry_account"`
+	SkipSecretInterpolation bool            `json:"skip_secret_interp"`
+	RedeployOnBuild         bool            `json:"redeploy_on_build"`
+	PollForUpdates          bool            `json:"poll_for_updates"`
+	AutoUpdate              bool            `json:"auto_update"`
+	SendAlerts              bool            `json:"send_alerts"`
+	Links                   []string        `json:"links"`
+	Network                 string          `json:"network"`
+	Restart                 string          `json:"restart"`
+	Command                 string          `json:"command"`
+	Replicas                int             `json:"replicas"`
+	TerminationSignal       string          `json:"termination_signal"`
+	TerminationTimeout      int             `json:"termination_timeout"`
+	ExtraArguments          []string        `json:"extra_args"`
+	TerminationSignalLabels string          `json:"term_signal_labels"`
+	Ports                   string          `json:"ports"`
+	Volumes                 string          `json:"volumes"`
+	Environment             string          `json:"environment"`
+	Labels                  string          `json:"labels"`
 }
 
 // PartialDeploymentConfig holds optional config fields for Create/Update.
 // Pointer-to-slice types allow sending an explicit empty list without omitempty suppression.
 type PartialDeploymentConfig struct {
-	SwarmID              *string          `json:"swarm_id,omitempty"`
-	ServerID             *string          `json:"server_id,omitempty"`
-	Image                *DeploymentImage `json:"image,omitempty"`
-	ImageRegistryAccount *string          `json:"image_registry_account,omitempty"`
-	SkipSecretInterp     *bool            `json:"skip_secret_interp,omitempty"`
-	RedeployOnBuild      *bool            `json:"redeploy_on_build,omitempty"`
-	PollForUpdates       *bool            `json:"poll_for_updates,omitempty"`
-	AutoUpdate           *bool            `json:"auto_update,omitempty"`
-	SendAlerts           *bool            `json:"send_alerts,omitempty"`
-	Links                *[]string        `json:"links,omitempty"`
-	Network              *string          `json:"network,omitempty"`
-	Restart              *string          `json:"restart,omitempty"`
-	Command              *string          `json:"command,omitempty"`
-	Replicas             *int             `json:"replicas,omitempty"`
-	TerminationSignal    *string          `json:"termination_signal,omitempty"`
-	TerminationTimeout   *int             `json:"termination_timeout,omitempty"`
-	ExtraArgs            *[]string        `json:"extra_args,omitempty"`
-	TermSignalLabels     *string          `json:"term_signal_labels,omitempty"`
-	Ports                *string          `json:"ports,omitempty"`
-	Volumes              *string          `json:"volumes,omitempty"`
-	Environment          *string          `json:"environment,omitempty"`
-	Labels               *string          `json:"labels,omitempty"`
+	SwarmID                 *string          `json:"swarm_id,omitempty"`
+	ServerID                *string          `json:"server_id,omitempty"`
+	Image                   *DeploymentImage `json:"image,omitempty"`
+	ImageRegistryAccount    *string          `json:"image_registry_account,omitempty"`
+	SkipSecretInterpolation *bool            `json:"skip_secret_interp,omitempty"`
+	RedeployOnBuild         *bool            `json:"redeploy_on_build,omitempty"`
+	PollForUpdates          *bool            `json:"poll_for_updates,omitempty"`
+	AutoUpdate              *bool            `json:"auto_update,omitempty"`
+	SendAlerts              *bool            `json:"send_alerts,omitempty"`
+	Links                   *[]string        `json:"links,omitempty"`
+	Network                 *string          `json:"network,omitempty"`
+	Restart                 *string          `json:"restart,omitempty"`
+	Command                 *string          `json:"command,omitempty"`
+	Replicas                *int             `json:"replicas,omitempty"`
+	TerminationSignal       *string          `json:"termination_signal,omitempty"`
+	TerminationTimeout      *int             `json:"termination_timeout,omitempty"`
+	ExtraArguments          *[]string        `json:"extra_args,omitempty"`
+	TerminationSignalLabels *string          `json:"term_signal_labels,omitempty"`
+	Ports                   *string          `json:"ports,omitempty"`
+	Volumes                 *string          `json:"volumes,omitempty"`
+	Environment             *string          `json:"environment,omitempty"`
+	Labels                  *string          `json:"labels,omitempty"`
 }
 
 // CreateDeploymentRequest is the payload for the CreateDeployment write API.

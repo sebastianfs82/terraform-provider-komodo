@@ -805,9 +805,18 @@ func (c *Client) ListTags(ctx context.Context) ([]Tag, error) {
 func (c *Client) UpdateTag(ctx context.Context, name string, req CreateTagRequest) (*Tag, error) {
 	// Rename if needed
 	if !strings.EqualFold(name, req.Name) {
+		// Look up tag ID by the old name so we can pass it to the RenameTag API.
+		existing, lookupErr := c.GetTag(ctx, name)
+		if lookupErr != nil {
+			return nil, fmt.Errorf("failed to look up tag %q before rename: %w", name, lookupErr)
+		}
 		renamePayload := map[string]interface{}{
-			"type":   "RenameTag",
-			"params": RenameTagRequest{OldName: name, NewName: req.Name},
+			"type": "RenameTag",
+			"params": RenameTagRequest{
+				ID:      existing.ID.OID,
+				OldName: name,
+				Name:    req.Name,
+			},
 		}
 		resp, err := c.doRequest(ctx, "/write", renamePayload)
 		if err != nil {
@@ -820,19 +829,21 @@ func (c *Client) UpdateTag(ctx context.Context, name string, req CreateTagReques
 		}
 		name = req.Name
 	}
-	// Update color
-	colorPayload := map[string]interface{}{
-		"type":   "UpdateTagColor",
-		"params": UpdateTagColorRequest{Tag: name, Color: req.Color},
-	}
-	resp2, err := c.doRequest(ctx, "/write", colorPayload)
-	if err != nil {
-		return nil, err
-	}
-	defer resp2.Body.Close()
-	if resp2.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp2.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp2.StatusCode, string(body))
+	// Update color only when one is provided.
+	if req.Color != "" {
+		colorPayload := map[string]interface{}{
+			"type":   "UpdateTagColor",
+			"params": UpdateTagColorRequest{Tag: name, Color: req.Color},
+		}
+		resp2, err := c.doRequest(ctx, "/write", colorPayload)
+		if err != nil {
+			return nil, err
+		}
+		defer resp2.Body.Close()
+		if resp2.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp2.Body)
+			return nil, fmt.Errorf("API request failed with status %d: %s", resp2.StatusCode, string(body))
+		}
 	}
 	return c.GetTag(ctx, name)
 }
@@ -1008,24 +1019,20 @@ func (c *Client) ListUsers(ctx context.Context) ([]User, error) {
 }
 
 func (c *Client) ListServiceUsers(ctx context.Context) ([]User, error) {
-	payload := map[string]interface{}{
-		"type":   "ListServiceUsers",
-		"params": map[string]interface{}{},
-	}
-	resp, err := c.doRequest(ctx, "/read", payload)
+	users, err := c.ListUsers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	var serviceUsers []User
+	for _, u := range users {
+		if u.Config.Type == "Service" {
+			serviceUsers = append(serviceUsers, u)
+		}
 	}
-	var users []User
-	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if serviceUsers == nil {
+		serviceUsers = []User{}
 	}
-	return users, nil
+	return serviceUsers, nil
 }
 
 func (c *Client) CreateServiceUser(ctx context.Context, req CreateServiceUserRequest) (*User, error) {
@@ -3402,6 +3409,134 @@ func (c *Client) DeleteResourceSync(ctx context.Context, id string) error {
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 	return nil
+}
+
+// Swarm CRUD
+
+func (c *Client) CreateSwarm(ctx context.Context, req CreateSwarmRequest) (*Swarm, error) {
+	payload := map[string]interface{}{
+		"type":   "CreateSwarm",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var swarm Swarm
+	if err := json.NewDecoder(resp.Body).Decode(&swarm); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &swarm, nil
+}
+
+func (c *Client) GetSwarm(ctx context.Context, nameOrID string) (*Swarm, error) {
+	payload := map[string]interface{}{
+		"type":   "GetSwarm",
+		"params": map[string]interface{}{"swarm": nameOrID},
+	}
+	resp, err := c.doRequest(ctx, "/read", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(bodyStr), "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
+	}
+	var swarm Swarm
+	if err := json.NewDecoder(resp.Body).Decode(&swarm); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &swarm, nil
+}
+
+func (c *Client) UpdateSwarm(ctx context.Context, req UpdateSwarmRequest) (*Swarm, error) {
+	payload := map[string]interface{}{
+		"type":   "UpdateSwarm",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var swarm Swarm
+	if err := json.NewDecoder(resp.Body).Decode(&swarm); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &swarm, nil
+}
+
+func (c *Client) RenameSwarm(ctx context.Context, req RenameSwarmRequest) error {
+	payload := map[string]interface{}{
+		"type":   "RenameSwarm",
+		"params": req,
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+func (c *Client) DeleteSwarm(ctx context.Context, id string) error {
+	payload := map[string]interface{}{
+		"type":   "DeleteSwarm",
+		"params": DeleteSwarmRequest{ID: id},
+	}
+	resp, err := c.doRequest(ctx, "/write", payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+		if strings.Contains(strings.ToLower(bodyStr), "did not find") || strings.Contains(strings.ToLower(bodyStr), "not found") {
+			return nil
+		}
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, bodyStr)
+	}
+	return nil
+}
+
+func (c *Client) ListSwarms(ctx context.Context) ([]Swarm, error) {
+	payload := map[string]interface{}{
+		"type":   "ListFullSwarms",
+		"params": map[string]interface{}{"query": map[string]interface{}{}},
+	}
+	resp, err := c.doRequest(ctx, "/read", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var swarms []Swarm
+	if err := json.NewDecoder(resp.Body).Decode(&swarms); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return swarms, nil
 }
 
 // RunSync executes a resource sync.

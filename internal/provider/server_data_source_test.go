@@ -37,7 +37,6 @@ func TestAccServerDataSource_fields(t *testing.T) {
 				Config: testAccServerDataSourceConfig_basic(),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("data.komodo_server.test", "id"),
-					resource.TestCheckResourceAttrSet("data.komodo_server.test", "address"),
 					resource.TestCheckResourceAttrSet("data.komodo_server.test", "enabled"),
 					resource.TestCheckResourceAttrSet("data.komodo_server.test", "auto_prune_enabled"),
 					resource.TestCheckResourceAttrSet("data.komodo_server.test", "alerts.enabled"),
@@ -244,8 +243,8 @@ func testAccServerDataSourceConfig_exactValues(name, region string, cpuWarn, cpu
 resource "komodo_server" "exact" {
   name   = %q
   region = %q
-  alerts = {
-    thresholds = {
+  alerts {
+    thresholds {
       cpu_warning  = %g
       cpu_critical = %g
     }

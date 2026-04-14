@@ -9,16 +9,22 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
@@ -27,6 +33,7 @@ import (
 
 var _ resource.Resource = &DeploymentResource{}
 var _ resource.ResourceWithImportState = &DeploymentResource{}
+var _ resource.ResourceWithConfigValidators = &DeploymentResource{}
 
 func NewDeploymentResource() resource.Resource {
 	return &DeploymentResource{}
@@ -38,39 +45,49 @@ type DeploymentResource struct {
 
 // DeploymentImageModel is the Terraform model for the image block.
 type DeploymentImageModel struct {
-	Type    types.String `tfsdk:"type"`
-	Image   types.String `tfsdk:"image"`
-	BuildID types.String `tfsdk:"build_id"`
-	Version types.String `tfsdk:"version"`
+	Type            types.String `tfsdk:"type"`
+	Image           types.String `tfsdk:"name"`
+	BuildID         types.String `tfsdk:"build_id"`
+	Version         types.String `tfsdk:"version"`
+	RegistryAccount types.String `tfsdk:"account_id"`
+	RedeployEnabled types.Bool   `tfsdk:"redeploy_enabled"`
+}
+
+// DeploymentContainerModel is the Terraform model for the container block.
+type DeploymentContainerModel struct {
+	Network        types.String `tfsdk:"network"`
+	Restart        types.String `tfsdk:"restart"`
+	Command        types.String `tfsdk:"command"`
+	Replicas       types.Int64  `tfsdk:"replicas"`
+	ExtraArguments types.List   `tfsdk:"extra_arguments"`
+	Ports          types.List   `tfsdk:"ports"`
+	Volumes        types.List   `tfsdk:"volumes"`
+	Environment    types.Map    `tfsdk:"environment"`
+	Labels         types.List   `tfsdk:"labels"`
+	Links          types.List   `tfsdk:"links"`
+}
+
+// DeploymentTerminationModel is the Terraform model for the termination block.
+type DeploymentTerminationModel struct {
+	Signal       types.String `tfsdk:"signal"`
+	Timeout      types.Int64  `tfsdk:"timeout"`
+	SignalLabels types.String `tfsdk:"signal_labels"`
 }
 
 // DeploymentResourceModel is the Terraform resource model for komodo_deployment.
 type DeploymentResourceModel struct {
-	ID                   types.String          `tfsdk:"id"`
-	Name                 types.String          `tfsdk:"name"`
-	Tags                 types.List            `tfsdk:"tags"`
-	SwarmID              types.String          `tfsdk:"swarm_id"`
-	ServerID             types.String          `tfsdk:"server_id"`
-	Image                *DeploymentImageModel `tfsdk:"image"`
-	ImageRegistryAccount types.String          `tfsdk:"image_registry_account"`
-	SkipSecretInterp     types.Bool            `tfsdk:"skip_secret_interp"`
-	RedeployOnBuild      types.Bool            `tfsdk:"redeploy_on_build"`
-	PollForUpdates       types.Bool            `tfsdk:"poll_for_updates"`
-	AutoUpdate           types.Bool            `tfsdk:"auto_update"`
-	SendAlerts           types.Bool            `tfsdk:"send_alerts"`
-	Links                types.List            `tfsdk:"links"`
-	Network              types.String          `tfsdk:"network"`
-	Restart              types.String          `tfsdk:"restart"`
-	Command              types.String          `tfsdk:"command"`
-	Replicas             types.Int64           `tfsdk:"replicas"`
-	TerminationSignal    types.String          `tfsdk:"termination_signal"`
-	TerminationTimeout   types.Int64           `tfsdk:"termination_timeout"`
-	ExtraArgs            types.List            `tfsdk:"extra_args"`
-	TermSignalLabels     types.String          `tfsdk:"term_signal_labels"`
-	Ports                types.String          `tfsdk:"ports"`
-	Volumes              types.String          `tfsdk:"volumes"`
-	Environment          types.String          `tfsdk:"environment"`
-	Labels               types.String          `tfsdk:"labels"`
+	ID                             types.String                `tfsdk:"id"`
+	Name                           types.String                `tfsdk:"name"`
+	Tags                           types.List                  `tfsdk:"tags"`
+	SwarmID                        types.String                `tfsdk:"swarm_id"`
+	ServerID                       types.String                `tfsdk:"server_id"`
+	Image                          *DeploymentImageModel       `tfsdk:"image"`
+	SkipSecretInterpolationEnabled types.Bool                  `tfsdk:"secret_interpolation_enabled"`
+	PollForUpdatesEnabled          types.Bool                  `tfsdk:"poll_updates_enabled"`
+	AutoUpdateEnabled              types.Bool                  `tfsdk:"auto_update_enabled"`
+	SendAlertsEnabled              types.Bool                  `tfsdk:"alerts_enabled"`
+	Container                      *DeploymentContainerModel   `tfsdk:"container"`
+	Termination                    *DeploymentTerminationModel `tfsdk:"termination"`
 }
 
 func (r *DeploymentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -117,15 +134,185 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"image": schema.SingleNestedAttribute{
+			"secret_interpolation_enabled": schema.BoolAttribute{
 				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether to interpolate secrets into deployment environment variables.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"poll_updates_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether to poll for image updates.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"auto_update_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether to automatically redeploy when a newer image is found. Implicitly enables `poll_updates_enabled`.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"alerts_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Whether to send ContainerStateChange alerts for this deployment.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"container": schema.SingleNestedAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Docker container runtime configuration.",
+				Default: objectdefault.StaticValue(types.ObjectValueMust(
+					map[string]attr.Type{
+						"network":         types.StringType,
+						"restart":         types.StringType,
+						"command":         types.StringType,
+						"replicas":        types.Int64Type,
+						"extra_arguments": types.ListType{ElemType: types.StringType},
+						"ports":           types.ListType{ElemType: types.StringType},
+						"volumes":         types.ListType{ElemType: types.StringType},
+						"environment":     types.MapType{ElemType: types.StringType},
+						"labels":          types.ListType{ElemType: types.StringType},
+						"links":           types.ListType{ElemType: types.StringType},
+					},
+					map[string]attr.Value{
+						"network":         types.StringValue("host"),
+						"restart":         types.StringValue("no"),
+						"command":         types.StringValue(""),
+						"replicas":        types.Int64Value(1),
+						"extra_arguments": types.ListValueMust(types.StringType, []attr.Value{}),
+						"ports":           types.ListValueMust(types.StringType, []attr.Value{}),
+						"volumes":         types.ListValueMust(types.StringType, []attr.Value{}),
+						"environment":     types.MapValueMust(types.StringType, map[string]attr.Value{}),
+						"labels":          types.ListValueMust(types.StringType, []attr.Value{}),
+						"links":           types.ListValueMust(types.StringType, []attr.Value{}),
+					},
+				)),
+				Attributes: map[string]schema.Attribute{
+					"network": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             stringdefault.StaticString("host"),
+						MarkdownDescription: "Network attached to the container. Defaults to `host`.",
+					},
+					"restart": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             stringdefault.StaticString("no"),
+						MarkdownDescription: "Restart mode for the container (e.g. `no`, `always`, `unless-stopped`, `on-failure`).",
+					},
+					"command": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             stringdefault.StaticString(""),
+						MarkdownDescription: "Command appended to `docker run`. Passed to the container process or replaces CMD.",
+					},
+					"replicas": schema.Int64Attribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             int64default.StaticInt64(1),
+						MarkdownDescription: "Number of replicas for the Service. Only used in Swarm mode.",
+					},
+					"extra_arguments": schema.ListAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
+						MarkdownDescription: "Extra arguments interpolated into the `docker run` / `docker service create` command.",
+					},
+					"ports": schema.ListAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
+						MarkdownDescription: "Container port mappings as a list of strings (e.g. `80:80`, `127.0.0.1:8080:8080`).",
+					},
+					"volumes": schema.ListAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
+						MarkdownDescription: "Container volume mappings as a list of strings (e.g. `/host/path:/container/path`).",
+					},
+					"environment": schema.MapAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						Default:             mapdefault.StaticValue(types.MapValueMust(types.StringType, map[string]attr.Value{})),
+						MarkdownDescription: "Environment variables for the container as a map of `KEY=value` pairs. Keys are automatically uppercased.",
+					},
+					"labels": schema.ListAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
+						MarkdownDescription: "Docker labels for the container as a list of `key=value` strings.",
+					}, "links": schema.ListAttribute{
+						Optional:            true,
+						Computed:            true,
+						ElementType:         types.StringType,
+						Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
+						MarkdownDescription: "Quick links displayed in the resource header.",
+					}},
+			},
+			"termination": schema.SingleNestedAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Container termination behaviour.",
+				Default: objectdefault.StaticValue(types.ObjectValueMust(
+					map[string]attr.Type{
+						"signal":        types.StringType,
+						"timeout":       types.Int64Type,
+						"signal_labels": types.StringType,
+					},
+					map[string]attr.Value{
+						"signal":        types.StringValue("SIGTERM"),
+						"timeout":       types.Int64Value(10),
+						"signal_labels": types.StringValue(""),
+					},
+				)),
+				Attributes: map[string]schema.Attribute{
+					"signal": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             stringdefault.StaticString("SIGTERM"),
+						MarkdownDescription: "Default termination signal (e.g. `SIGTERM`, `SIGKILL`). Defaults to `SIGTERM`.",
+					},
+					"timeout": schema.Int64Attribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             int64default.StaticInt64(10),
+						MarkdownDescription: "Termination timeout in seconds.",
+					},
+					"signal_labels": schema.StringAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             stringdefault.StaticString(""),
+						MarkdownDescription: "Labels for termination signal options (JSON/TOML string).",
+					},
+				},
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"image": schema.SingleNestedBlock{
 				MarkdownDescription: "The image source for this deployment.",
 				Attributes: map[string]schema.Attribute{
 					"type": schema.StringAttribute{
-						Required:            true,
+						Optional:            true,
 						MarkdownDescription: "Image type: `Image` for an external Docker image, `Build` for a Komodo Build.",
+						Validators: []validator.String{
+							stringvalidator.OneOf("Image", "Build"),
+						},
 					},
-					"image": schema.StringAttribute{
+					"name": schema.StringAttribute{
 						Optional:            true,
 						MarkdownDescription: "Docker image to deploy. Used when `type` is `Image`.",
 					},
@@ -137,158 +324,16 @@ func (r *DeploymentResource) Schema(ctx context.Context, req resource.SchemaRequ
 						Optional:            true,
 						MarkdownDescription: "Build version to deploy, e.g. `1.0.0`. Used when `type` is `Build`. Defaults to latest (0.0.0).",
 					},
-				},
-			},
-			"image_registry_account": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Account used to pull the image. Empty string uses the build/image default.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"skip_secret_interp": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to skip secret interpolation into deployment environment variables.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"redeploy_on_build": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to redeploy whenever the attached Build finishes.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"poll_for_updates": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to poll for image updates.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"auto_update": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to automatically redeploy when a newer image is found. Implicitly enables `poll_for_updates`.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"send_alerts": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to send ContainerStateChange alerts for this deployment.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"links": schema.ListAttribute{
-				Optional:            true,
-				Computed:            true,
-				ElementType:         types.StringType,
-				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
-				MarkdownDescription: "Quick links displayed in the resource header.",
-			},
-			"network": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Network attached to the container. Defaults to `host`.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"restart": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Restart mode for the container (e.g. `no`, `always`, `unless-stopped`, `on-failure`).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"command": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Command appended to `docker run`. Passed to the container process or replaces CMD.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"replicas": schema.Int64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Number of replicas for the Service. Only used in Swarm mode.",
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.UseStateForUnknown(),
-				},
-			},
-			"termination_signal": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Default termination signal (e.g. `SigTerm`, `SigKill`). Defaults to `SigTerm`.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"termination_timeout": schema.Int64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Termination timeout in seconds.",
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.UseStateForUnknown(),
-				},
-			},
-			"extra_args": schema.ListAttribute{
-				Optional:            true,
-				Computed:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "Extra arguments interpolated into the `docker run` / `docker service create` command.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"term_signal_labels": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Labels for termination signal options (JSON/TOML string).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"ports": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Container port mapping. Irrelevant when network is `host`.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"volumes": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Container volume mapping (host path → container path).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"environment": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Environment variables passed to the container.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"labels": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Docker labels for the container.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					"account_id": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "Account used to pull the image. Empty string uses the build/image default.",
+					},
+					"redeploy_enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(false),
+						MarkdownDescription: "Whether to redeploy whenever the attached Build finishes.",
+					},
 				},
 			},
 		},
@@ -320,7 +365,7 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 
 	createReq := client.CreateDeploymentRequest{
 		Name:   data.Name.ValueString(),
-		Config: partialDeploymentConfigFromModel(ctx, &data),
+		Config: partialDeploymentConfigFromModel(ctx, r.client, &data),
 	}
 	d, err := r.client.CreateDeployment(ctx, createReq)
 	if err != nil {
@@ -335,7 +380,7 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 	plannedTags := data.Tags
-	deploymentToModel(ctx, d, &data)
+	deploymentToModel(ctx, r.client, d, &data)
 	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
 		var tags []string
 		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
@@ -370,7 +415,7 @@ func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest,
 		resp.State.RemoveResource(ctx)
 		return
 	}
-	deploymentToModel(ctx, d, &data)
+	deploymentToModel(ctx, r.client, d, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -398,7 +443,7 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 
 	updateReq := client.UpdateDeploymentRequest{
 		ID:     data.ID.ValueString(),
-		Config: partialDeploymentConfigFromModel(ctx, &data),
+		Config: partialDeploymentConfigFromModel(ctx, r.client, &data),
 	}
 	d, err := r.client.UpdateDeployment(ctx, updateReq)
 	if err != nil {
@@ -406,7 +451,7 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	plannedTags := data.Tags
-	deploymentToModel(ctx, d, &data)
+	deploymentToModel(ctx, r.client, d, &data)
 	if !plannedTags.IsNull() && !plannedTags.IsUnknown() {
 		var tags []string
 		resp.Diagnostics.Append(plannedTags.ElementsAs(ctx, &tags, false)...)
@@ -443,8 +488,117 @@ func (r *DeploymentResource) ImportState(ctx context.Context, req resource.Impor
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+func (r *DeploymentResource) ConfigValidators(_ context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		deploymentImageValidator{},
+		deploymentAutoUpdateValidator{},
+	}
+}
+
+type deploymentImageValidator struct{}
+
+func (v deploymentImageValidator) Description(_ context.Context) string {
+	return "`image.name` is required when `image.type` is `Image`"
+}
+
+func (v deploymentImageValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v deploymentImageValidator) ValidateResource(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data DeploymentResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Image == nil {
+		return
+	}
+	if data.Image.Type.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("image").AtName("type"),
+			"image.type is required",
+			"`image.type` must be set when the `image` block is present.",
+		)
+		return
+	}
+	if data.Image.Type.IsUnknown() {
+		return
+	}
+	if data.Image.Type.ValueString() == "Image" && !data.Image.Image.IsUnknown() && (data.Image.Image.IsNull() || data.Image.Image.ValueString() == "") {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("image").AtName("name"),
+			"image.name is required",
+			"`image.name` must be set when `image.type` is `Image`.",
+		)
+	}
+	if data.Image.Type.ValueString() == "Image" && !data.Image.Version.IsNull() && !data.Image.Version.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("image").AtName("version"),
+			"image.version not allowed",
+			"`image.version` can only be set when `image.type` is `Build`.",
+		)
+	}
+	if data.Image.Type.ValueString() == "Image" && !data.Image.RedeployEnabled.IsNull() && !data.Image.RedeployEnabled.IsUnknown() && data.Image.RedeployEnabled.ValueBool() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("image").AtName("redeploy_enabled"),
+			"image.redeploy_enabled not allowed",
+			"`image.redeploy_enabled` can only be set when `image.type` is `Build`.",
+		)
+	}
+	if data.Image.Type.ValueString() == "Build" && !data.Image.BuildID.IsUnknown() && (data.Image.BuildID.IsNull() || data.Image.BuildID.ValueString() == "") {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("image").AtName("build_id"),
+			"image.build_id is required",
+			"`image.build_id` must be set when `image.type` is `Build`.",
+		)
+	}
+	if data.Image.Type.ValueString() == "Build" && !data.Image.Image.IsNull() && !data.Image.Image.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("image").AtName("name"),
+			"image.name not allowed",
+			"`image.name` can only be set when `image.type` is `Image`.",
+		)
+	}
+	if data.Image.Type.ValueString() == "Image" && !data.Image.BuildID.IsNull() && !data.Image.BuildID.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("image").AtName("build_id"),
+			"image.build_id not allowed",
+			"`image.build_id` can only be set when `image.type` is `Build`.",
+		)
+	}
+}
+
+type deploymentAutoUpdateValidator struct{}
+
+func (v deploymentAutoUpdateValidator) Description(_ context.Context) string {
+	return "`poll_updates_enabled` must be true when `auto_update_enabled` is true"
+}
+
+func (v deploymentAutoUpdateValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v deploymentAutoUpdateValidator) ValidateResource(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data DeploymentResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.AutoUpdateEnabled.IsUnknown() || data.PollForUpdatesEnabled.IsUnknown() {
+		return
+	}
+	if data.AutoUpdateEnabled.ValueBool() && !data.PollForUpdatesEnabled.IsNull() && !data.PollForUpdatesEnabled.ValueBool() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("poll_updates_enabled"),
+			"poll_updates_enabled required",
+			"`poll_updates_enabled` must be `true` when `auto_update_enabled` is `true`.",
+		)
+	}
+}
+
 // partialDeploymentConfigFromModel converts the Terraform model into a PartialDeploymentConfig.
-func partialDeploymentConfigFromModel(ctx context.Context, data *DeploymentResourceModel) client.PartialDeploymentConfig {
+func partialDeploymentConfigFromModel(ctx context.Context, c *client.Client, data *DeploymentResourceModel) client.PartialDeploymentConfig {
 	cfg := client.PartialDeploymentConfig{}
 
 	if !data.SwarmID.IsNull() && !data.SwarmID.IsUnknown() {
@@ -458,90 +612,120 @@ func partialDeploymentConfigFromModel(ctx context.Context, data *DeploymentResou
 	if data.Image != nil {
 		img := imageModelToClient(data.Image)
 		cfg.Image = &img
+		// Always send account — empty string clears a previously-set value.
+		username := ""
+		if !data.Image.RegistryAccount.IsNull() && !data.Image.RegistryAccount.IsUnknown() {
+			accountID := data.Image.RegistryAccount.ValueString()
+			if accountID != "" {
+				if acc, err := c.GetDockerRegistryAccount(ctx, accountID); err == nil && acc != nil {
+					username = acc.Username
+				} else {
+					username = accountID
+				}
+			}
+		}
+		cfg.ImageRegistryAccount = &username
+		if data.Image != nil && !data.Image.RedeployEnabled.IsNull() && !data.Image.RedeployEnabled.IsUnknown() {
+			v := data.Image.RedeployEnabled.ValueBool()
+			cfg.RedeployOnBuild = &v
+		}
 	}
-	if !data.ImageRegistryAccount.IsNull() && !data.ImageRegistryAccount.IsUnknown() {
-		v := data.ImageRegistryAccount.ValueString()
-		cfg.ImageRegistryAccount = &v
+	if !data.SkipSecretInterpolationEnabled.IsNull() && !data.SkipSecretInterpolationEnabled.IsUnknown() {
+		v := !data.SkipSecretInterpolationEnabled.ValueBool()
+		cfg.SkipSecretInterpolation = &v
 	}
-	if !data.SkipSecretInterp.IsNull() && !data.SkipSecretInterp.IsUnknown() {
-		v := data.SkipSecretInterp.ValueBool()
-		cfg.SkipSecretInterp = &v
-	}
-	if !data.RedeployOnBuild.IsNull() && !data.RedeployOnBuild.IsUnknown() {
-		v := data.RedeployOnBuild.ValueBool()
-		cfg.RedeployOnBuild = &v
-	}
-	if !data.PollForUpdates.IsNull() && !data.PollForUpdates.IsUnknown() {
-		v := data.PollForUpdates.ValueBool()
+	if !data.PollForUpdatesEnabled.IsNull() && !data.PollForUpdatesEnabled.IsUnknown() {
+		v := data.PollForUpdatesEnabled.ValueBool()
 		cfg.PollForUpdates = &v
 	}
-	if !data.AutoUpdate.IsNull() && !data.AutoUpdate.IsUnknown() {
-		v := data.AutoUpdate.ValueBool()
+	if !data.AutoUpdateEnabled.IsNull() && !data.AutoUpdateEnabled.IsUnknown() {
+		v := data.AutoUpdateEnabled.ValueBool()
 		cfg.AutoUpdate = &v
 	}
-	if !data.SendAlerts.IsNull() && !data.SendAlerts.IsUnknown() {
-		v := data.SendAlerts.ValueBool()
+	if !data.SendAlertsEnabled.IsNull() && !data.SendAlertsEnabled.IsUnknown() {
+		v := data.SendAlertsEnabled.ValueBool()
 		cfg.SendAlerts = &v
 	}
-	if !data.Links.IsNull() && !data.Links.IsUnknown() {
-		var links []string
-		data.Links.ElementsAs(ctx, &links, false)
-		if links == nil {
-			links = []string{}
+	if data.Container != nil {
+		c := data.Container
+		if !c.Network.IsNull() && !c.Network.IsUnknown() {
+			v := c.Network.ValueString()
+			cfg.Network = &v
 		}
-		cfg.Links = &links
-	}
-	if !data.Network.IsNull() && !data.Network.IsUnknown() {
-		v := data.Network.ValueString()
-		cfg.Network = &v
-	}
-	if !data.Restart.IsNull() && !data.Restart.IsUnknown() {
-		v := data.Restart.ValueString()
-		cfg.Restart = &v
-	}
-	if !data.Command.IsNull() && !data.Command.IsUnknown() {
-		v := data.Command.ValueString()
-		cfg.Command = &v
-	}
-	if !data.Replicas.IsNull() && !data.Replicas.IsUnknown() {
-		v := int(data.Replicas.ValueInt64())
-		cfg.Replicas = &v
-	}
-	if !data.TerminationSignal.IsNull() && !data.TerminationSignal.IsUnknown() {
-		v := data.TerminationSignal.ValueString()
-		cfg.TerminationSignal = &v
-	}
-	if !data.TerminationTimeout.IsNull() && !data.TerminationTimeout.IsUnknown() {
-		v := int(data.TerminationTimeout.ValueInt64())
-		cfg.TerminationTimeout = &v
-	}
-	if !data.ExtraArgs.IsNull() && !data.ExtraArgs.IsUnknown() {
-		var args []string
-		data.ExtraArgs.ElementsAs(ctx, &args, false)
-		if args == nil {
-			args = []string{}
+		if !c.Restart.IsNull() && !c.Restart.IsUnknown() {
+			v := c.Restart.ValueString()
+			cfg.Restart = &v
 		}
-		cfg.ExtraArgs = &args
+		if !c.Command.IsNull() && !c.Command.IsUnknown() {
+			v := c.Command.ValueString()
+			cfg.Command = &v
+		}
+		if !c.Replicas.IsNull() && !c.Replicas.IsUnknown() {
+			v := int(c.Replicas.ValueInt64())
+			cfg.Replicas = &v
+		}
+		if !c.ExtraArguments.IsNull() && !c.ExtraArguments.IsUnknown() {
+			var args []string
+			c.ExtraArguments.ElementsAs(ctx, &args, false)
+			if args == nil {
+				args = []string{}
+			}
+			cfg.ExtraArguments = &args
+		}
+		if !c.Ports.IsNull() && !c.Ports.IsUnknown() {
+			var items []string
+			c.Ports.ElementsAs(ctx, &items, false)
+			if items == nil {
+				items = []string{}
+			}
+			v := strings.Join(items, "\n")
+			cfg.Ports = &v
+		}
+		if !c.Volumes.IsNull() && !c.Volumes.IsUnknown() {
+			var items []string
+			c.Volumes.ElementsAs(ctx, &items, false)
+			if items == nil {
+				items = []string{}
+			}
+			v := strings.Join(items, "\n")
+			cfg.Volumes = &v
+		}
+		if !c.Environment.IsNull() && !c.Environment.IsUnknown() {
+			v := envMapToString(ctx, c.Environment)
+			cfg.Environment = &v
+		}
+		if !c.Labels.IsNull() && !c.Labels.IsUnknown() {
+			var labelItems []string
+			c.Labels.ElementsAs(ctx, &labelItems, false)
+			if labelItems == nil {
+				labelItems = []string{}
+			}
+			v := strings.Join(labelItems, "\n")
+			cfg.Labels = &v
+		}
+		if !c.Links.IsNull() && !c.Links.IsUnknown() {
+			var links []string
+			c.Links.ElementsAs(ctx, &links, false)
+			if links == nil {
+				links = []string{}
+			}
+			cfg.Links = &links
+		}
 	}
-	if !data.TermSignalLabels.IsNull() && !data.TermSignalLabels.IsUnknown() {
-		v := data.TermSignalLabels.ValueString()
-		cfg.TermSignalLabels = &v
-	}
-	if !data.Ports.IsNull() && !data.Ports.IsUnknown() {
-		v := data.Ports.ValueString()
-		cfg.Ports = &v
-	}
-	if !data.Volumes.IsNull() && !data.Volumes.IsUnknown() {
-		v := data.Volumes.ValueString()
-		cfg.Volumes = &v
-	}
-	if !data.Environment.IsNull() && !data.Environment.IsUnknown() {
-		v := data.Environment.ValueString()
-		cfg.Environment = &v
-	}
-	if !data.Labels.IsNull() && !data.Labels.IsUnknown() {
-		v := data.Labels.ValueString()
-		cfg.Labels = &v
+	if data.Termination != nil {
+		t := data.Termination
+		if !t.Signal.IsNull() && !t.Signal.IsUnknown() {
+			v := t.Signal.ValueString()
+			cfg.TerminationSignal = &v
+		}
+		if !t.Timeout.IsNull() && !t.Timeout.IsUnknown() {
+			v := int(t.Timeout.ValueInt64())
+			cfg.TerminationTimeout = &v
+		}
+		if !t.SignalLabels.IsNull() && !t.SignalLabels.IsUnknown() {
+			v := t.SignalLabels.ValueString()
+			cfg.TerminationSignalLabels = &v
+		}
 	}
 	return cfg
 }
@@ -575,7 +759,7 @@ func imageModelToClient(m *DeploymentImageModel) client.DeploymentImage {
 }
 
 // deploymentToModel populates the Terraform model from an API Deployment response.
-func deploymentToModel(ctx context.Context, d *client.Deployment, data *DeploymentResourceModel) {
+func deploymentToModel(ctx context.Context, c *client.Client, d *client.Deployment, data *DeploymentResourceModel) {
 	data.ID = types.StringValue(d.ID.OID)
 	data.Name = types.StringValue(d.Name)
 	tagsSlice := d.Tags
@@ -588,56 +772,116 @@ func deploymentToModel(ctx context.Context, d *client.Deployment, data *Deployme
 	data.ServerID = types.StringValue(d.Config.ServerID)
 
 	// image block: populate from the API response.
+	// The API stores and returns the registry account as a username; resolve it back to an ID for state.
+	registryAccountID := c.ResolveDockerRegistryAccountID(ctx, "", d.Config.ImageRegistryAccount)
+	if registryAccountID == "" {
+		registryAccountID = d.Config.ImageRegistryAccount
+	}
+	var registryAccountVal types.String
+	if registryAccountID == "" {
+		registryAccountVal = types.StringNull()
+	} else {
+		registryAccountVal = types.StringValue(registryAccountID)
+	}
 	if d.Config.Image.Build != nil {
-		ver := ""
-		if bv := d.Config.Image.Build.Version; !data.Image.Version.IsNull() || bv.Major != 0 || bv.Minor != 0 || bv.Patch != 0 {
-			ver = fmt.Sprintf("%d.%d.%d", bv.Major, bv.Minor, bv.Patch)
+		var verVal types.String
+		if bv := d.Config.Image.Build.Version; bv.Major != 0 || bv.Minor != 0 || bv.Patch != 0 {
+			verVal = types.StringValue(fmt.Sprintf("%d.%d.%d", bv.Major, bv.Minor, bv.Patch))
+		} else if !data.Image.Version.IsNull() && !data.Image.Version.IsUnknown() && data.Image.Version.ValueString() != "" {
+			// keep the user-supplied version string if it rounds to 0.0.0
+			verVal = data.Image.Version
+		} else {
+			verVal = types.StringNull()
 		}
 		data.Image = &DeploymentImageModel{
-			Type:    types.StringValue("Build"),
-			Image:   types.StringNull(),
-			BuildID: types.StringValue(d.Config.Image.Build.BuildID),
-			Version: types.StringValue(ver),
+			Type:            types.StringValue("Build"),
+			Image:           types.StringNull(),
+			BuildID:         types.StringValue(d.Config.Image.Build.BuildID),
+			Version:         verVal,
+			RegistryAccount: registryAccountVal,
+			RedeployEnabled: types.BoolValue(d.Config.RedeployOnBuild),
 		}
 	} else if d.Config.Image.Image != nil && (d.Config.Image.Image.Image != "" || data.Image != nil) {
 		// Only set image block when the API returned a real image value, or the user
 		// already had an image block configured (empty string is the default/zero value).
+		imageStr := types.StringNull()
+		if d.Config.Image.Image.Image != "" {
+			imageStr = types.StringValue(d.Config.Image.Image.Image)
+		}
 		data.Image = &DeploymentImageModel{
-			Type:    types.StringValue("Image"),
-			Image:   types.StringValue(d.Config.Image.Image.Image),
-			BuildID: types.StringNull(),
-			Version: types.StringNull(),
+			Type:            types.StringValue("Image"),
+			Image:           imageStr,
+			BuildID:         types.StringNull(),
+			Version:         types.StringNull(),
+			RegistryAccount: registryAccountVal,
+			RedeployEnabled: types.BoolValue(d.Config.RedeployOnBuild),
 		}
 	} else if data.Image != nil {
 		// preserve existing model if API returned neither variant (empty/default)
-		// do nothing
+		data.Image.RegistryAccount = registryAccountVal
+		data.Image.RedeployEnabled = types.BoolValue(d.Config.RedeployOnBuild)
 	} else {
 		data.Image = nil
 	}
 
-	data.ImageRegistryAccount = types.StringValue(d.Config.ImageRegistryAccount)
-	data.SkipSecretInterp = types.BoolValue(d.Config.SkipSecretInterp)
-	data.RedeployOnBuild = types.BoolValue(d.Config.RedeployOnBuild)
-	data.PollForUpdates = types.BoolValue(d.Config.PollForUpdates)
-	data.AutoUpdate = types.BoolValue(d.Config.AutoUpdate)
-	data.SendAlerts = types.BoolValue(d.Config.SendAlerts)
+	data.SkipSecretInterpolationEnabled = types.BoolValue(!d.Config.SkipSecretInterpolation)
+	data.PollForUpdatesEnabled = types.BoolValue(d.Config.PollForUpdates)
+	data.AutoUpdateEnabled = types.BoolValue(d.Config.AutoUpdate)
+	data.SendAlertsEnabled = types.BoolValue(d.Config.SendAlerts)
 
-	links, _ := types.ListValueFrom(ctx, types.StringType, d.Config.Links)
-	data.Links = links
+	extraArgs, _ := types.ListValueFrom(ctx, types.StringType, d.Config.ExtraArguments)
+	var labelList types.List
+	if rawLabels := strings.TrimRight(d.Config.Labels, "\n"); rawLabels != "" {
+		labelItems := strings.Split(rawLabels, "\n")
+		labelList, _ = types.ListValueFrom(ctx, types.StringType, labelItems)
+	} else {
+		labelList = types.ListValueMust(types.StringType, []attr.Value{})
+	}
+	if data.Container != nil || d.Config.Network != "" || d.Config.Restart != "" || d.Config.Command != "" ||
+		d.Config.Replicas != 0 || len(d.Config.ExtraArguments) > 0 || d.Config.Ports != "" ||
+		d.Config.Volumes != "" || d.Config.Environment != "" || d.Config.Labels != "" {
+		data.Container = &DeploymentContainerModel{
+			Network:        types.StringValue(d.Config.Network),
+			Restart:        types.StringValue(d.Config.Restart),
+			Command:        types.StringValue(d.Config.Command),
+			Replicas:       types.Int64Value(int64(d.Config.Replicas)),
+			ExtraArguments: extraArgs,
+			Ports: func() types.List {
+				if raw := strings.TrimRight(d.Config.Ports, "\n"); raw != "" {
+					items := strings.Split(raw, "\n")
+					v, _ := types.ListValueFrom(ctx, types.StringType, items)
+					return v
+				}
+				return types.ListValueMust(types.StringType, []attr.Value{})
+			}(),
+			Volumes: func() types.List {
+				if raw := strings.TrimRight(d.Config.Volumes, "\n"); raw != "" {
+					items := strings.Split(raw, "\n")
+					v, _ := types.ListValueFrom(ctx, types.StringType, items)
+					return v
+				}
+				return types.ListValueMust(types.StringType, []attr.Value{})
+			}(),
+			Environment: func() types.Map {
+				m := envStringToMap(strings.TrimRight(d.Config.Environment, "\n"))
+				if m.IsNull() {
+					return types.MapValueMust(types.StringType, map[string]attr.Value{})
+				}
+				return m
+			}(),
+			Labels: labelList,
+			Links: func() types.List {
+				v, _ := types.ListValueFrom(ctx, types.StringType, d.Config.Links)
+				return v
+			}(),
+		}
+	}
 
-	data.Network = types.StringValue(d.Config.Network)
-	data.Restart = types.StringValue(d.Config.Restart)
-	data.Command = types.StringValue(d.Config.Command)
-	data.Replicas = types.Int64Value(int64(d.Config.Replicas))
-	data.TerminationSignal = types.StringValue(d.Config.TerminationSignal)
-	data.TerminationTimeout = types.Int64Value(int64(d.Config.TerminationTimeout))
-
-	extraArgs, _ := types.ListValueFrom(ctx, types.StringType, d.Config.ExtraArgs)
-	data.ExtraArgs = extraArgs
-
-	data.TermSignalLabels = types.StringValue(d.Config.TermSignalLabels)
-	data.Ports = types.StringValue(d.Config.Ports)
-	data.Volumes = types.StringValue(d.Config.Volumes)
-	data.Environment = types.StringValue(d.Config.Environment)
-	data.Labels = types.StringValue(d.Config.Labels)
+	if data.Termination != nil || d.Config.TerminationSignal != "" || d.Config.TerminationTimeout != 0 || d.Config.TerminationSignalLabels != "" {
+		data.Termination = &DeploymentTerminationModel{
+			Signal:       types.StringValue(d.Config.TerminationSignal),
+			Timeout:      types.Int64Value(int64(d.Config.TerminationTimeout)),
+			SignalLabels: types.StringValue(d.Config.TerminationSignalLabels),
+		}
+	}
 }

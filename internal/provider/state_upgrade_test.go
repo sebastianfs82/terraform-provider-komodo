@@ -45,13 +45,13 @@ func TestActionSchema_scheduleAlertEnabled(t *testing.T) {
 	var resp resource.SchemaResponse
 	r.Schema(ctx, resource.SchemaRequest{}, &resp)
 
-	scheduleAttr, ok := resp.Schema.Attributes["schedule"]
+	scheduleBlock, ok := resp.Schema.Blocks["schedule"]
 	if !ok {
-		t.Fatal("current action schema missing schedule attribute")
+		t.Fatal("current action schema missing schedule block")
 	}
-	nested, ok := scheduleAttr.(schema.SingleNestedAttribute)
+	nested, ok := scheduleBlock.(schema.SingleNestedBlock)
 	if !ok {
-		t.Fatal("schedule is not SingleNestedAttribute")
+		t.Fatal("schedule is not SingleNestedBlock")
 	}
 	if _, ok := nested.Attributes["alert_enabled"]; !ok {
 		t.Error("current action schema schedule missing alert_enabled")
@@ -69,13 +69,13 @@ func TestProcedureSchema_scheduleAlertEnabled(t *testing.T) {
 	var resp resource.SchemaResponse
 	r.Schema(ctx, resource.SchemaRequest{}, &resp)
 
-	scheduleAttr, ok := resp.Schema.Attributes["schedule"]
+	scheduleBlock, ok := resp.Schema.Blocks["schedule"]
 	if !ok {
-		t.Fatal("current procedure schema missing schedule attribute")
+		t.Fatal("current procedure schema missing schedule block")
 	}
-	nested, ok := scheduleAttr.(schema.SingleNestedAttribute)
+	nested, ok := scheduleBlock.(schema.SingleNestedBlock)
 	if !ok {
-		t.Fatal("schedule is not SingleNestedAttribute")
+		t.Fatal("schedule is not SingleNestedBlock")
 	}
 	if _, ok := nested.Attributes["alert_enabled"]; !ok {
 		t.Error("current procedure schema schedule missing alert_enabled")

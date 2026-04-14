@@ -26,6 +26,7 @@ type NetworksDataSource struct {
 }
 
 type NetworksDataSourceModel struct {
+	ServerID types.String             `tfsdk:"server_id"`
 	Networks []NetworkDataSourceModel `tfsdk:"networks"`
 }
 
@@ -94,8 +95,12 @@ func (d *NetworksDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 	}
 
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Lists all docker networks across all Komodo-managed servers.",
+		MarkdownDescription: "Lists docker networks on Komodo-managed servers. Optionally filter by a single server.",
 		Attributes: map[string]schema.Attribute{
+			"server_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter networks by server ID or name. If omitted, all servers are queried.",
+			},
 			"networks": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of docker networks on the server.",
@@ -123,17 +128,31 @@ func (d *NetworksDataSource) Configure(ctx context.Context, req datasource.Confi
 }
 
 func (d *NetworksDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	tflog.Debug(ctx, "Listing docker networks across all servers")
-
-	servers, err := d.client.ListServers(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list servers, got error: %s", err))
+	var data NetworksDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
+	// Determine which servers to query.
+	var serverIDs []string
+	if !data.ServerID.IsNull() && !data.ServerID.IsUnknown() && data.ServerID.ValueString() != "" {
+		serverIDs = []string{data.ServerID.ValueString()}
+		tflog.Debug(ctx, "Listing docker networks for specific server", map[string]interface{}{"server_id": data.ServerID.ValueString()})
+	} else {
+		servers, err := d.client.ListServers(ctx)
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list servers, got error: %s", err))
+			return
+		}
+		for _, s := range servers {
+			serverIDs = append(serverIDs, s.ID.OID)
+		}
+		tflog.Debug(ctx, "Listing docker networks across all servers")
+	}
+
 	var allNetworks []NetworkDataSourceModel
-	for _, server := range servers {
-		serverID := server.ID.OID
+	for _, serverID := range serverIDs {
 		tflog.Debug(ctx, "Listing docker networks", map[string]interface{}{"server_id": serverID})
 		networks, err := d.client.ListDockerNetworks(ctx, serverID)
 		if err != nil {
@@ -208,7 +227,7 @@ func (d *NetworksDataSource) Read(ctx context.Context, req datasource.ReadReques
 		}
 	}
 
-	data := NetworksDataSourceModel{Networks: allNetworks}
+	data.Networks = allNetworks
 	tflog.Trace(ctx, "Listed docker networks", map[string]interface{}{"count": len(allNetworks)})
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

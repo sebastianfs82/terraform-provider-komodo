@@ -27,6 +27,8 @@ type ReposDataSource struct {
 }
 
 type ReposDataSourceModel struct {
+	ServerID     types.String          `tfsdk:"server_id"`
+	BuilderID    types.String          `tfsdk:"builder_id"`
 	Repositories []RepoDataSourceModel `tfsdk:"repositories"`
 }
 
@@ -49,6 +51,14 @@ func (d *ReposDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo git repositories visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"server_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "When set, only repositories cloned on this server ID are returned.",
+			},
+			"builder_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "When set, only repositories attached to this builder ID are returned.",
+			},
 			"repositories": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of git repositories.",
@@ -181,6 +191,12 @@ func (d *ReposDataSource) Configure(ctx context.Context, req datasource.Configur
 }
 
 func (d *ReposDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data ReposDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	tflog.Debug(ctx, "Listing git repositories")
 
 	repos, err := d.client.ListGitRepositories(ctx)
@@ -189,8 +205,17 @@ func (d *ReposDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		return
 	}
 
+	serverIDFilter := data.ServerID.ValueString()
+	builderIDFilter := data.BuilderID.ValueString()
+
 	items := make([]RepoDataSourceModel, 0, len(repos))
 	for _, repo := range repos {
+		if serverIDFilter != "" && repo.Config.ServerID != serverIDFilter {
+			continue
+		}
+		if builderIDFilter != "" && repo.Config.BuilderID != builderIDFilter {
+			continue
+		}
 		gitAccount := types.StringNull()
 		if repo.Config.GitAccount != "" {
 			gitAccount = types.StringValue(repo.Config.GitAccount)
@@ -263,7 +288,7 @@ func (d *ReposDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		})
 	}
 
-	data := ReposDataSourceModel{Repositories: items}
+	data.Repositories = items
 	tflog.Trace(ctx, "Listed git repositories", map[string]interface{}{"count": len(items)})
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

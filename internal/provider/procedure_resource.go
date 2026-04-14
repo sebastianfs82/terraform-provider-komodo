@@ -362,6 +362,7 @@ func partialProcedureConfigFromModel(data *ProcedureResourceModel) (client.Parti
 	var diags diag.Diagnostics
 	cfg := client.PartialProcedureConfig{}
 
+	// Always set stages so a removal (empty list) is sent to the API and clears them.
 	if len(data.Stages) > 0 {
 		stages := make([]client.ProcedureStage, len(data.Stages))
 		for i, s := range data.Stages {
@@ -415,6 +416,8 @@ func partialProcedureConfigFromModel(data *ProcedureResourceModel) (client.Parti
 			}
 		}
 		cfg.Stages = stages
+	} else {
+		cfg.Stages = []client.ProcedureStage{}
 	}
 	if data.Schedule != nil {
 		if !data.Schedule.Format.IsNull() && !data.Schedule.Format.IsUnknown() {
@@ -511,7 +514,17 @@ func procedureToModel(proc *client.Procedure, data *ProcedureResourceModel) {
 						parameters, _ = types.MapValue(types.StringType, elems)
 					}
 				} else {
-					parameters = types.MapNull(types.StringType)
+					// No existing state (import or newly added stage) — read all params from API.
+					var apiParams map[string]interface{}
+					if err := json.Unmarshal(e.Execution.Params, &apiParams); err == nil && len(apiParams) > 0 {
+						elems := make(map[string]attr.Value, len(apiParams))
+						for k, v := range apiParams {
+							elems[k] = types.StringValue(fmt.Sprintf("%v", v))
+						}
+						parameters, _ = types.MapValue(types.StringType, elems)
+					} else {
+						parameters = types.MapNull(types.StringType)
+					}
 				}
 				execs[j] = ProcedureExecutionModel{
 					Enabled:    types.BoolValue(e.Enabled),

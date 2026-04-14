@@ -571,13 +571,17 @@ func repoToModel(ctx context.Context, c *client.Client, repo *client.GitReposito
 	gitAccountID := ""
 	if repo.Config.GitAccount != "" {
 		gitAccountID = c.ResolveGitAccountID(ctx, repo.Config.GitProvider, repo.Config.GitAccount)
+		if gitAccountID == "" {
+			// Unknown account (not in provider accounts list): store the raw username
+			// returned by the API so the state does not silently drop the value.
+			gitAccountID = repo.Config.GitAccount
+		}
 	}
 	gitAccount := types.StringNull()
 	if gitAccountID != "" {
 		gitAccount = types.StringValue(gitAccountID)
 	}
-	if data.Source != nil || repo.Config.Repo != "" || repo.Config.Branch != "" ||
-		repo.Config.GitProvider != "" || repo.Config.GitAccount != "" || repo.Config.Commit != "" {
+	if data.Source != nil || repo.Config.Repo != "" || repo.Config.GitAccount != "" {
 		gitPath := types.StringNull()
 		if repo.Config.Repo != "" {
 			gitPath = types.StringValue(repo.Config.Repo)

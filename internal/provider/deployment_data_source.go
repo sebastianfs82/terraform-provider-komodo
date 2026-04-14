@@ -6,7 +6,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -28,30 +30,17 @@ type DeploymentDataSource struct {
 
 // DeploymentDataSourceModel is the Terraform data source model for komodo_deployment.
 type DeploymentDataSourceModel struct {
-	ID                   types.String          `tfsdk:"id"`
-	Name                 types.String          `tfsdk:"name"`
-	SwarmID              types.String          `tfsdk:"swarm_id"`
-	ServerID             types.String          `tfsdk:"server_id"`
-	Image                *DeploymentImageModel `tfsdk:"image"`
-	ImageRegistryAccount types.String          `tfsdk:"image_registry_account"`
-	SkipSecretInterp     types.Bool            `tfsdk:"skip_secret_interp"`
-	RedeployOnBuild      types.Bool            `tfsdk:"redeploy_on_build"`
-	PollForUpdates       types.Bool            `tfsdk:"poll_for_updates"`
-	AutoUpdate           types.Bool            `tfsdk:"auto_update"`
-	SendAlerts           types.Bool            `tfsdk:"send_alerts"`
-	Links                types.List            `tfsdk:"links"`
-	Network              types.String          `tfsdk:"network"`
-	Restart              types.String          `tfsdk:"restart"`
-	Command              types.String          `tfsdk:"command"`
-	Replicas             types.Int64           `tfsdk:"replicas"`
-	TerminationSignal    types.String          `tfsdk:"termination_signal"`
-	TerminationTimeout   types.Int64           `tfsdk:"termination_timeout"`
-	ExtraArgs            types.List            `tfsdk:"extra_args"`
-	TermSignalLabels     types.String          `tfsdk:"term_signal_labels"`
-	Ports                types.String          `tfsdk:"ports"`
-	Volumes              types.String          `tfsdk:"volumes"`
-	Environment          types.String          `tfsdk:"environment"`
-	Labels               types.String          `tfsdk:"labels"`
+	ID                             types.String                `tfsdk:"id"`
+	Name                           types.String                `tfsdk:"name"`
+	SwarmID                        types.String                `tfsdk:"swarm_id"`
+	ServerID                       types.String                `tfsdk:"server_id"`
+	Image                          *DeploymentImageModel       `tfsdk:"image"`
+	SkipSecretInterpolationEnabled types.Bool                  `tfsdk:"secret_interpolation_enabled"`
+	PollForUpdatesEnabled          types.Bool                  `tfsdk:"poll_updates_enabled"`
+	AutoUpdateEnabled              types.Bool                  `tfsdk:"auto_update_enabled"`
+	SendAlertsEnabled              types.Bool                  `tfsdk:"alerts_enabled"`
+	Container                      *DeploymentContainerModel   `tfsdk:"container"`
+	Termination                    *DeploymentTerminationModel `tfsdk:"termination"`
 }
 
 func (d *DeploymentDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -88,7 +77,7 @@ func (d *DeploymentDataSource) Schema(ctx context.Context, req datasource.Schema
 						Computed:            true,
 						MarkdownDescription: "Image type: `Image` or `Build`.",
 					},
-					"image": schema.StringAttribute{
+					"name": schema.StringAttribute{
 						Computed:            true,
 						MarkdownDescription: "Docker image. Set when `type` is `Image`.",
 					},
@@ -96,103 +85,103 @@ func (d *DeploymentDataSource) Schema(ctx context.Context, req datasource.Schema
 						Computed:            true,
 						MarkdownDescription: "Komodo Build ID. Set when `type` is `Build`.",
 					},
-					"version": schema.SingleNestedAttribute{
+					"version": schema.StringAttribute{
 						Computed:            true,
-						MarkdownDescription: "Build version. Set when `type` is `Build`.",
-						Attributes: map[string]schema.Attribute{
-							"major": schema.Int64Attribute{
-								Computed:            true,
-								MarkdownDescription: "Major version component.",
-							},
-							"minor": schema.Int64Attribute{
-								Computed:            true,
-								MarkdownDescription: "Minor version component.",
-							},
-							"patch": schema.Int64Attribute{
-								Computed:            true,
-								MarkdownDescription: "Patch version component.",
-							},
-						},
+						MarkdownDescription: "Build version string (e.g. `1.0.0`). Set when `type` is `Build`.",
+					},
+					"account_id": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Account used to pull the image.",
+					},
+					"redeploy_enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether the deployment redeploys when its Build finishes.",
 					},
 				},
 			},
-			"image_registry_account": schema.StringAttribute{
+			"secret_interpolation_enabled": schema.BoolAttribute{
 				Computed:            true,
-				MarkdownDescription: "Account used to pull the image.",
+				MarkdownDescription: "Whether secrets are interpolated into deployment environment variables.",
 			},
-			"skip_secret_interp": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether secret interpolation is skipped.",
-			},
-			"redeploy_on_build": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether the deployment redeploys when its Build finishes.",
-			},
-			"poll_for_updates": schema.BoolAttribute{
+			"poll_updates_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether image updates are polled for.",
 			},
-			"auto_update": schema.BoolAttribute{
+			"auto_update_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether the deployment auto-updates when a newer image is found.",
 			},
-			"send_alerts": schema.BoolAttribute{
+			"alerts_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether ContainerStateChange alerts are sent.",
 			},
-			"links": schema.ListAttribute{
+			"container": schema.SingleNestedAttribute{
 				Computed:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "Quick links for this deployment.",
+				MarkdownDescription: "Docker container runtime configuration.",
+				Attributes: map[string]schema.Attribute{
+					"network": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Network attached to the container.",
+					},
+					"restart": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Restart mode for the container.",
+					},
+					"command": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Command appended to `docker run`.",
+					},
+					"replicas": schema.Int64Attribute{
+						Computed:            true,
+						MarkdownDescription: "Number of replicas (Swarm mode only).",
+					},
+					"extra_arguments": schema.ListAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Extra arguments for `docker run`.",
+					},
+					"ports": schema.ListAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Container port mappings.",
+					},
+					"volumes": schema.ListAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Container volume mappings.",
+					},
+					"environment": schema.MapAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Environment variables for the container.",
+					},
+					"labels": schema.ListAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Docker labels for the container as a list of `key=value` strings.",
+					}, "links": schema.ListAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Quick links displayed in the resource header.",
+					}},
 			},
-			"network": schema.StringAttribute{
+			"termination": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Network attached to the container.",
-			},
-			"restart": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Restart mode for the container.",
-			},
-			"command": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Command appended to `docker run`.",
-			},
-			"replicas": schema.Int64Attribute{
-				Computed:            true,
-				MarkdownDescription: "Number of replicas (Swarm mode only).",
-			},
-			"termination_signal": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Default termination signal.",
-			},
-			"termination_timeout": schema.Int64Attribute{
-				Computed:            true,
-				MarkdownDescription: "Termination timeout in seconds.",
-			},
-			"extra_args": schema.ListAttribute{
-				Computed:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "Extra arguments for `docker run`.",
-			},
-			"term_signal_labels": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Labels for termination signal options.",
-			},
-			"ports": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Container port mapping.",
-			},
-			"volumes": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Container volume mapping.",
-			},
-			"environment": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Environment variables for the container.",
-			},
-			"labels": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Docker labels for the container.",
+				MarkdownDescription: "Container termination behaviour.",
+				Attributes: map[string]schema.Attribute{
+					"signal": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Default termination signal.",
+					},
+					"timeout": schema.Int64Attribute{
+						Computed:            true,
+						MarkdownDescription: "Termination timeout in seconds.",
+					},
+					"signal_labels": schema.StringAttribute{
+						Computed:            true,
+						MarkdownDescription: "Labels for termination signal options.",
+					},
+				},
 			},
 		},
 	}
@@ -279,32 +268,65 @@ func (d *DeploymentDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	} else {
 		data.Image = nil
 	}
+	if data.Image != nil {
+		data.Image.RegistryAccount = types.StringValue(dep.Config.ImageRegistryAccount)
+		data.Image.RedeployEnabled = types.BoolValue(dep.Config.RedeployOnBuild)
+	}
 
-	data.ImageRegistryAccount = types.StringValue(dep.Config.ImageRegistryAccount)
-	data.SkipSecretInterp = types.BoolValue(dep.Config.SkipSecretInterp)
-	data.RedeployOnBuild = types.BoolValue(dep.Config.RedeployOnBuild)
-	data.PollForUpdates = types.BoolValue(dep.Config.PollForUpdates)
-	data.AutoUpdate = types.BoolValue(dep.Config.AutoUpdate)
-	data.SendAlerts = types.BoolValue(dep.Config.SendAlerts)
+	data.SkipSecretInterpolationEnabled = types.BoolValue(!dep.Config.SkipSecretInterpolation)
+	data.PollForUpdatesEnabled = types.BoolValue(dep.Config.PollForUpdates)
+	data.AutoUpdateEnabled = types.BoolValue(dep.Config.AutoUpdate)
+	data.SendAlertsEnabled = types.BoolValue(dep.Config.SendAlerts)
 
-	links, _ := types.ListValueFrom(ctx, types.StringType, dep.Config.Links)
-	data.Links = links
+	extraArgs, _ := types.ListValueFrom(ctx, types.StringType, dep.Config.ExtraArguments)
+	data.Container = &DeploymentContainerModel{
+		Network:        types.StringValue(dep.Config.Network),
+		Restart:        types.StringValue(dep.Config.Restart),
+		Command:        types.StringValue(dep.Config.Command),
+		Replicas:       types.Int64Value(int64(dep.Config.Replicas)),
+		ExtraArguments: extraArgs,
+		Ports: func() types.List {
+			if raw := strings.TrimRight(dep.Config.Ports, "\n"); raw != "" {
+				items := strings.Split(raw, "\n")
+				v, _ := types.ListValueFrom(ctx, types.StringType, items)
+				return v
+			}
+			return types.ListValueMust(types.StringType, []attr.Value{})
+		}(),
+		Volumes: func() types.List {
+			if raw := strings.TrimRight(dep.Config.Volumes, "\n"); raw != "" {
+				items := strings.Split(raw, "\n")
+				v, _ := types.ListValueFrom(ctx, types.StringType, items)
+				return v
+			}
+			return types.ListValueMust(types.StringType, []attr.Value{})
+		}(),
+		Environment: func() types.Map {
+			m := envStringToMap(strings.TrimRight(dep.Config.Environment, "\n"))
+			if m.IsNull() {
+				return types.MapValueMust(types.StringType, map[string]attr.Value{})
+			}
+			return m
+		}(),
+		Labels: func() types.List {
+			if rawLabels := strings.TrimRight(dep.Config.Labels, "\n"); rawLabels != "" {
+				items := strings.Split(rawLabels, "\n")
+				v, _ := types.ListValueFrom(ctx, types.StringType, items)
+				return v
+			}
+			return types.ListValueMust(types.StringType, []attr.Value{})
+		}(),
+		Links: func() types.List {
+			v, _ := types.ListValueFrom(ctx, types.StringType, dep.Config.Links)
+			return v
+		}(),
+	}
 
-	data.Network = types.StringValue(dep.Config.Network)
-	data.Restart = types.StringValue(dep.Config.Restart)
-	data.Command = types.StringValue(dep.Config.Command)
-	data.Replicas = types.Int64Value(int64(dep.Config.Replicas))
-	data.TerminationSignal = types.StringValue(dep.Config.TerminationSignal)
-	data.TerminationTimeout = types.Int64Value(int64(dep.Config.TerminationTimeout))
-
-	extraArgs, _ := types.ListValueFrom(ctx, types.StringType, dep.Config.ExtraArgs)
-	data.ExtraArgs = extraArgs
-
-	data.TermSignalLabels = types.StringValue(dep.Config.TermSignalLabels)
-	data.Ports = types.StringValue(dep.Config.Ports)
-	data.Volumes = types.StringValue(dep.Config.Volumes)
-	data.Environment = types.StringValue(dep.Config.Environment)
-	data.Labels = types.StringValue(dep.Config.Labels)
+	data.Termination = &DeploymentTerminationModel{
+		Signal:       types.StringValue(dep.Config.TerminationSignal),
+		Timeout:      types.Int64Value(int64(dep.Config.TerminationTimeout)),
+		SignalLabels: types.StringValue(dep.Config.TerminationSignalLabels),
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

@@ -95,7 +95,7 @@ func testAccRepoDataSourceConfig_withSource(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_repo" "src" {
   name = %q
-  source = {
+  source {
     domain        = "github.com"
     https_enabled = true
     path          = "owner/repo"

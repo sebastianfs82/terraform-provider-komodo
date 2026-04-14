@@ -157,7 +157,7 @@ func testAccAlerterResourceCustomConfig(name, url string) string {
 	return fmt.Sprintf(`
 resource "komodo_alerter" "test" {
   name = %q
-  endpoint = {
+  endpoint {
     type = "Custom"
     url  = %q
   }
@@ -196,7 +196,7 @@ resource "komodo_tag" "test" {
 
 resource "komodo_alerter" "test" {
   name = %q
-  endpoint = {
+  endpoint {
     type = "Custom"
     url  = "http://localhost:7000"
   }
@@ -209,7 +209,7 @@ func testAccAlerterClearTagsConfig(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_alerter" "test" {
   name = %q
-  endpoint = {
+  endpoint {
     type = "Custom"
     url  = "http://localhost:7000"
   }

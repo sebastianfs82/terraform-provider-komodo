@@ -157,9 +157,19 @@ func (r *UserGroupMembershipResource) Read(ctx context.Context, req resource.Rea
 		return
 	}
 
+	// Resolve the user identifier to both its username and OID so we can match
+	// against whatever format the API stores in group.Users.
+	resolvedUser, resolveErr := r.client.FindUser(ctx, user)
+	userOID := ""
+	userName := user
+	if resolveErr == nil && resolvedUser != nil {
+		userOID = resolvedUser.ID.OID
+		userName = resolvedUser.Username
+	}
+
 	found := false
 	for _, u := range group.Users {
-		if strings.EqualFold(u, user) {
+		if strings.EqualFold(u, user) || strings.EqualFold(u, userOID) || strings.EqualFold(u, userName) {
 			found = true
 			break
 		}

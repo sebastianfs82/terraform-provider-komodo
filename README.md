@@ -39,7 +39,7 @@ provider "komodo" {
 ```
 
 | Environment variable  | Description      |
-|-----------------------|------------------|
+| --------------------- | ---------------- |
 | `KOMODO_ENDPOINT`     | API endpoint URL |
 | `KOMODO_API_KEY`      | API key value    |
 | `KOMODO_API_SECRET`   | API key secret   |
@@ -57,7 +57,7 @@ provider "komodo" {
 ```
 
 | Environment variable | Description      |
-|----------------------|------------------|
+| -------------------- | ---------------- |
 | `KOMODO_ENDPOINT`    | API endpoint URL |
 | `KOMODO_USERNAME`    | Komodo username  |
 | `KOMODO_PASSWORD`    | Komodo password  |
@@ -203,7 +203,7 @@ resource "komodo_stack" "app" {
 ## Resources
 
 | Resource | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | [`komodo_action`](docs/resources/action.md) | Custom executable action |
 | [`komodo_alerter`](docs/resources/alerter.md) | Alert channel (Slack, webhook, etc.) |
 | [`komodo_api_key`](docs/resources/api_key.md) | User or service-user API key |
@@ -219,6 +219,7 @@ resource "komodo_stack" "app" {
 | [`komodo_resource_sync`](docs/resources/resource_sync.md) | Syncs Komodo resources from a git repo |
 | [`komodo_service_user`](docs/resources/service_user.md) | Non-human service account |
 | [`komodo_stack`](docs/resources/stack.md) | Docker Compose stack |
+| [`komodo_swarm`](docs/resources/swarm.md) | Docker Swarm cluster |
 | [`komodo_tag`](docs/resources/tag.md) | Label for grouping resources |
 | [`komodo_terminal`](docs/resources/terminal.md) | Terminal session on a target resource |
 | [`komodo_user`](docs/resources/user.md) | Human user account |
@@ -234,7 +235,7 @@ Plural data sources return a filtered list.
 ### Singular
 
 | Data Source | Description |
-|-------------|-------------|
+| ------------- | ------------- |
 | [`komodo_action`](docs/data-sources/action.md) | Look up an action |
 | [`komodo_alerter`](docs/data-sources/alerter.md) | Look up an alerter |
 | [`komodo_build`](docs/data-sources/build.md) | Look up a build |
@@ -250,6 +251,7 @@ Plural data sources return a filtered list.
 | [`komodo_server`](docs/data-sources/server.md) | Look up a server |
 | [`komodo_service_user`](docs/data-sources/service_user.md) | Look up a service user |
 | [`komodo_stack`](docs/data-sources/stack.md) | Look up a stack |
+| [`komodo_swarm`](docs/data-sources/swarm.md) | Look up a Docker Swarm |
 | [`komodo_tag`](docs/data-sources/tag.md) | Look up a tag |
 | [`komodo_terminal`](docs/data-sources/terminal.md) | Look up a terminal session |
 | [`komodo_user`](docs/data-sources/user.md) | Look up a user |
@@ -259,7 +261,7 @@ Plural data sources return a filtered list.
 ### Plural
 
 | Data Source | Description |
-|-------------|-------------|
+| ------------- | ------------- |
 | [`komodo_actions`](docs/data-sources/actions.md) | List / filter actions |
 | [`komodo_alerters`](docs/data-sources/alerters.md) | List / filter alerters |
 | [`komodo_builds`](docs/data-sources/builds.md) | List / filter builds |
@@ -274,6 +276,7 @@ Plural data sources return a filtered list.
 | [`komodo_servers`](docs/data-sources/servers.md) | List / filter servers |
 | [`komodo_service_users`](docs/data-sources/service_users.md) | List / filter service users |
 | [`komodo_stacks`](docs/data-sources/stacks.md) | List / filter stacks |
+| [`komodo_swarms`](docs/data-sources/swarms.md) | List / filter Docker Swarms |
 | [`komodo_tags`](docs/data-sources/tags.md) | List / filter tags |
 | [`komodo_terminals`](docs/data-sources/terminals.md) | List terminal sessions |
 | [`komodo_users`](docs/data-sources/users.md) | List / filter users |
@@ -285,7 +288,7 @@ Plural data sources return a filtered list.
 Terraform actions let you trigger imperative Komodo operations as part of a plan/apply cycle.
 
 | Action | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `komodo_repo_clone` | Clone a registered repository |
 | `komodo_repo_pull` | Pull latest changes for a repository |
 | `komodo_repo_build` | Trigger a repository build |

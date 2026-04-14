@@ -5,8 +5,8 @@ package client
 
 type CreateTagRequest struct {
 	Name  string `json:"name"`
-	Color string `json:"color"`
-	Owner string `json:"owner"`
+	Color string `json:"color,omitempty"`
+	Owner string `json:"owner,omitempty"`
 }
 
 type DeleteTagRequest struct {
@@ -14,8 +14,9 @@ type DeleteTagRequest struct {
 }
 
 type RenameTagRequest struct {
-	OldName string `json:"old_name"`
-	NewName string `json:"new_name"`
+	ID      string `json:"id"`
+	OldName string `json:"old_name,omitempty"`
+	Name    string `json:"name"`
 }
 
 type UpdateTagColorRequest struct {

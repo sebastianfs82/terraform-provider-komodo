@@ -452,17 +452,17 @@ func TestAccProcedureResource_executionParameters(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccProcedureResourceConfigWithParameters(name, "my-proc"),
+				Config: testAccProcedureResourceConfigWithParametersV1(name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.parameters.%", "1"),
-					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.parameters.id", "my-proc"),
+					resource.TestCheckResourceAttrSet("komodo_procedure.test", "stage.0.execution.0.parameters.procedure"),
 				),
 			},
 			// Update parameter value — should be detected as a change (drift detection)
 			{
-				Config: testAccProcedureResourceConfigWithParameters(name, "other-proc"),
+				Config: testAccProcedureResourceConfigWithParametersV2(name),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("komodo_procedure.test", "stage.0.execution.0.parameters.id", "other-proc"),
+					resource.TestCheckResourceAttrSet("komodo_procedure.test", "stage.0.execution.0.parameters.procedure"),
 				),
 			},
 		},
@@ -475,6 +475,10 @@ func TestAccProcedureResource_executionParameters(t *testing.T) {
 
 func testAccProcedureResourceConfigWithStage(name string) string {
 	return fmt.Sprintf(`
+resource "komodo_procedure" "child" {
+  name = "%s-child"
+}
+
 resource "komodo_procedure" "test" {
   name = %q
 
@@ -484,16 +488,20 @@ resource "komodo_procedure" "test" {
     execution {
       type = "RunProcedure"
       parameters = {
-        id = "some-procedure-id"
+        procedure = komodo_procedure.child.id
       }
     }
   }
 }
-`, name)
+`, name, name)
 }
 
 func testAccProcedureResourceConfigWithTwoStages(name string) string {
 	return fmt.Sprintf(`
+resource "komodo_procedure" "child" {
+  name = "%s-child"
+}
+
 resource "komodo_procedure" "test" {
   name = %q
 
@@ -503,7 +511,7 @@ resource "komodo_procedure" "test" {
     execution {
       type = "RunProcedure"
       parameters = {
-        id = "proc-1"
+        procedure = komodo_procedure.child.id
       }
     }
   }
@@ -514,16 +522,20 @@ resource "komodo_procedure" "test" {
     execution {
       type = "RunProcedure"
       parameters = {
-        id = "proc-2"
+        procedure = komodo_procedure.child.id
       }
     }
   }
 }
-`, name)
+`, name, name)
 }
 
 func testAccProcedureResourceConfigWithDisabledExecution(name string) string {
 	return fmt.Sprintf(`
+resource "komodo_procedure" "child" {
+  name = "%s-child"
+}
+
 resource "komodo_procedure" "test" {
   name = %q
 
@@ -534,12 +546,12 @@ resource "komodo_procedure" "test" {
       type    = "RunProcedure"
       enabled = false
       parameters = {
-        id = "proc-1"
+        procedure = komodo_procedure.child.id
       }
     }
   }
 }
-`, name)
+`, name, name)
 }
 
 func testAccProcedureResourceConfigWithParameters(name, procID string) string {
@@ -553,10 +565,64 @@ resource "komodo_procedure" "test" {
     execution {
       type = "RunProcedure"
       parameters = {
-        id = %q
+        procedure = %q
       }
     }
   }
 }
 `, name, procID)
+}
+
+func testAccProcedureResourceConfigWithParametersV1(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "child1" {
+  name = "%s-child1"
+}
+
+resource "komodo_procedure" "child2" {
+  name = "%s-child2"
+}
+
+resource "komodo_procedure" "test" {
+  name = %q
+
+  stage {
+    name = "Run"
+
+    execution {
+      type = "RunProcedure"
+      parameters = {
+        procedure = komodo_procedure.child1.id
+      }
+    }
+  }
+}
+`, name, name, name)
+}
+
+func testAccProcedureResourceConfigWithParametersV2(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_procedure" "child1" {
+  name = "%s-child1"
+}
+
+resource "komodo_procedure" "child2" {
+  name = "%s-child2"
+}
+
+resource "komodo_procedure" "test" {
+  name = %q
+
+  stage {
+    name = "Run"
+
+    execution {
+      type = "RunProcedure"
+      parameters = {
+        procedure = komodo_procedure.child2.id
+      }
+    }
+  }
+}
+`, name, name, name)
 }

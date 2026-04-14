@@ -62,7 +62,7 @@ func testAccStackDataSourceConfig_withGit(name string) string {
 resource "komodo_stack" "test" {
   name = "` + name + `"
 
-  source = {
+  source {
     url    = "https://github.com"
     path   = "owner/my-stack-repo"
     branch = "main"

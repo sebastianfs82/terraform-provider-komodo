@@ -92,7 +92,6 @@ func testAccBuildsDataSourceConfig(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_build" "test" {
   name       = %q
-  image_name = "test-image"
 }
 
 data "komodo_builds" "all" {
@@ -105,8 +104,8 @@ func testAccBuildsDataSourceConfig_filteredByBuilderID(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_builder" "test" {
   name         = %q
-  builder_type = "Url"
-  url_config = {
+  type         = "Url"
+  url_config {
     address = "https://builder.example.com"
   }
 }
@@ -131,11 +130,13 @@ resource "komodo_repo" "test" {
 
 resource "komodo_build" "test" {
   name        = %q
-  linked_repo = komodo_repo.test.name
+  source {
+    repo_id = komodo_repo.test.id
+  }
 }
 
 data "komodo_builds" "filtered" {
-  repo_id    = komodo_repo.test.name
+  repo_id    = komodo_repo.test.id
   depends_on = [komodo_build.test]
 }
 `, name, name)

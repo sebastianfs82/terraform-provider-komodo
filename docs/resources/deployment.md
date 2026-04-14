@@ -43,35 +43,39 @@ resource "komodo_deployment" "from_build" {
 
 ### Optional
 
-- `auto_update` (Boolean) Whether to automatically redeploy when a newer image is found. Implicitly enables `poll_for_updates`.
-- `command` (String) Command appended to `docker run`. Passed to the container process or replaces CMD.
-- `environment` (String) Environment variables passed to the container.
-- `extra_args` (List of String) Extra arguments interpolated into the `docker run` / `docker service create` command.
-- `image` (Attributes) The image source for this deployment. (see [below for nested schema](#nestedatt--image))
-- `image_registry_account` (String) Account used to pull the image. Empty string uses the build/image default.
-- `labels` (String) Docker labels for the container.
-- `links` (List of String) Quick links displayed in the resource header.
-- `network` (String) Network attached to the container. Defaults to `host`.
-- `poll_for_updates` (Boolean) Whether to poll for image updates.
-- `ports` (String) Container port mapping. Irrelevant when network is `host`.
-- `redeploy_on_build` (Boolean) Whether to redeploy whenever the attached Build finishes.
-- `replicas` (Number) Number of replicas for the Service. Only used in Swarm mode.
-- `restart` (String) Restart mode for the container (e.g. `no`, `always`, `unless-stopped`, `on-failure`).
-- `send_alerts` (Boolean) Whether to send ContainerStateChange alerts for this deployment.
+- `alerts_enabled` (Boolean) Whether to send ContainerStateChange alerts for this deployment.
+- `auto_update_enabled` (Boolean) Whether to automatically redeploy when a newer image is found. Implicitly enables `poll_updates_enabled`.
+- `container` (Attributes) Docker container runtime configuration. (see [below for nested schema](#nestedatt--container))
+- `image` (Block, Optional) The image source for this deployment. (see [below for nested schema](#nestedblock--image))
+- `poll_updates_enabled` (Boolean) Whether to poll for image updates.
+- `secret_interpolation_enabled` (Boolean) Whether to interpolate secrets into deployment environment variables.
 - `server_id` (String) The Server to deploy on (Container mode).
-- `skip_secret_interp` (Boolean) Whether to skip secret interpolation into deployment environment variables.
 - `swarm_id` (String) The Swarm to deploy on (Swarm mode). Overrides `server_id` when set.
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
-- `term_signal_labels` (String) Labels for termination signal options (JSON/TOML string).
-- `termination_signal` (String) Default termination signal (e.g. `SigTerm`, `SigKill`). Defaults to `SigTerm`.
-- `termination_timeout` (Number) Termination timeout in seconds.
-- `volumes` (String) Container volume mapping (host path → container path).
+- `termination` (Attributes) Container termination behaviour. (see [below for nested schema](#nestedatt--termination))
 
 ### Read-Only
 
 - `id` (String) The deployment identifier (ObjectId).
 
-<a id="nestedatt--image"></a>
+<a id="nestedatt--container"></a>
+### Nested Schema for `container`
+
+Optional:
+
+- `command` (String) Command appended to `docker run`. Passed to the container process or replaces CMD.
+- `environment` (Map of String) Environment variables for the container as a map of `KEY=value` pairs. Keys are automatically uppercased.
+- `extra_arguments` (List of String) Extra arguments interpolated into the `docker run` / `docker service create` command.
+- `labels` (List of String) Docker labels for the container as a list of `key=value` strings.
+- `links` (List of String) Quick links displayed in the resource header.
+- `network` (String) Network attached to the container. Defaults to `host`.
+- `ports` (List of String) Container port mappings as a list of strings (e.g. `80:80`, `127.0.0.1:8080:8080`).
+- `replicas` (Number) Number of replicas for the Service. Only used in Swarm mode.
+- `restart` (String) Restart mode for the container (e.g. `no`, `always`, `unless-stopped`, `on-failure`).
+- `volumes` (List of String) Container volume mappings as a list of strings (e.g. `/host/path:/container/path`).
+
+
+<a id="nestedblock--image"></a>
 ### Nested Schema for `image`
 
 Required:
@@ -80,9 +84,21 @@ Required:
 
 Optional:
 
+- `account_id` (String) Account used to pull the image. Empty string uses the build/image default.
 - `build_id` (String) ID of the Komodo Build to deploy. Used when `type` is `Build`.
-- `image` (String) Docker image to deploy. Used when `type` is `Image`.
+- `name` (String) Docker image to deploy. Used when `type` is `Image`.
+- `redeploy_enabled` (Boolean) Whether to redeploy whenever the attached Build finishes.
 - `version` (String) Build version to deploy, e.g. `1.0.0`. Used when `type` is `Build`. Defaults to latest (0.0.0).
+
+
+<a id="nestedatt--termination"></a>
+### Nested Schema for `termination`
+
+Optional:
+
+- `signal` (String) Default termination signal (e.g. `SIGTERM`, `SIGKILL`). Defaults to `SIGTERM`.
+- `signal_labels` (String) Labels for termination signal options (JSON/TOML string).
+- `timeout` (Number) Termination timeout in seconds.
 
 ## Import
 

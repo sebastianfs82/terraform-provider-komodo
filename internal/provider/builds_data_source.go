@@ -26,7 +26,9 @@ type BuildsDataSource struct {
 }
 
 type BuildsDataSourceModel struct {
-	Builds []BuildListItemModel `tfsdk:"builds"`
+	BuilderID types.String         `tfsdk:"builder_id"`
+	RepoID    types.String         `tfsdk:"repo_id"`
+	Builds    []BuildListItemModel `tfsdk:"builds"`
 }
 
 type BuildListItemModel struct {
@@ -48,6 +50,14 @@ func (d *BuildsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo builds visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"builder_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter builds to only those using this builder ID.",
+			},
+			"repo_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter builds to only those linked to this repo ID.",
+			},
 			"builds": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of builds.",
@@ -108,6 +118,11 @@ func (d *BuildsDataSource) Configure(_ context.Context, req datasource.Configure
 }
 
 func (d *BuildsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var filter BuildsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &filter)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	tflog.Debug(ctx, "Listing builds")
 
 	builds, err := d.client.ListBuilds(ctx)
@@ -116,8 +131,17 @@ func (d *BuildsDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
+	builderIDFilter := filter.BuilderID.ValueString()
+	repoIDFilter := filter.RepoID.ValueString()
+
 	items := make([]BuildListItemModel, 0, len(builds))
 	for _, b := range builds {
+		if builderIDFilter != "" && b.Config.BuilderID != builderIDFilter {
+			continue
+		}
+		if repoIDFilter != "" && b.Config.LinkedRepo != repoIDFilter {
+			continue
+		}
 		items = append(items, BuildListItemModel{
 			ID:             types.StringValue(b.ID.OID),
 			Name:           types.StringValue(b.Name),
@@ -129,6 +153,10 @@ func (d *BuildsDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 			WebhookEnabled: types.BoolValue(b.Config.WebhookEnabled),
 		})
 	}
-	data := BuildsDataSourceModel{Builds: items}
+	data := BuildsDataSourceModel{
+		BuilderID: filter.BuilderID,
+		RepoID:    filter.RepoID,
+		Builds:    items,
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

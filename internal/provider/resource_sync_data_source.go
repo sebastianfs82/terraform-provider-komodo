@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -239,7 +240,7 @@ func (d *ResourceSyncDataSource) Read(ctx context.Context, req datasource.ReadRe
 	data.Commit = types.StringValue(cfg.Commit)
 	data.GitAccount = types.StringValue(cfg.GitAccount)
 	data.FilesOnHost = types.BoolValue(cfg.FilesOnHost)
-	data.FileContents = types.StringValue(cfg.FileContents)
+	data.FileContents = types.StringValue(strings.TrimRight(cfg.FileContents, "\n"))
 	webhookSecret := types.StringNull()
 	if cfg.WebhookSecret != "" {
 		webhookSecret = types.StringValue(cfg.WebhookSecret)

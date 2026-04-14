@@ -50,7 +50,7 @@ func testAccAlertersDataSourceConfig(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_alerter" "test" {
   name = %q
-  endpoint = {
+  endpoint {
     type = "Custom"
     url  = "https://example.com/hook"
   }

@@ -36,6 +36,7 @@ type ApiKeyResource struct {
 
 // ApiKeyResourceModel describes the resource data model.
 type ApiKeyResourceModel struct {
+	ID            types.String `tfsdk:"id"`
 	Key           types.String `tfsdk:"key"`
 	Secret        types.String `tfsdk:"secret"`
 	Name          types.String `tfsdk:"name"`
@@ -54,6 +55,13 @@ func (r *ApiKeyResource) Schema(ctx context.Context, req resource.SchemaRequest,
 		MarkdownDescription: "Manages a Komodo API key.",
 
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Same as `key`. Included so Terraform's import verify can compare resources.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"key": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The API key identifier.",
@@ -190,6 +198,7 @@ func (r *ApiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	data.Key = types.StringValue(key.Key)
+	data.ID = types.StringValue(key.Key)
 	data.Secret = types.StringValue(key.Secret)
 	data.UserID = types.StringValue(key.UserID)
 	data.Name = types.StringValue(key.Name)
@@ -211,6 +220,9 @@ func (r *ApiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	}
 
 	keyID := data.Key.ValueString()
+	if keyID == "" {
+		keyID = data.ID.ValueString()
+	}
 	var key *client.ApiKey
 	var err error
 
@@ -230,6 +242,7 @@ func (r *ApiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 	}
 
 	data.Key = types.StringValue(key.Key)
+	data.ID = types.StringValue(key.Key)
 	data.UserID = types.StringValue(key.UserID)
 	data.Name = types.StringValue(key.Name)
 	data.CreatedAt = types.StringValue(msToRFC3339(key.CreatedAt))
@@ -279,5 +292,5 @@ func (r *ApiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 }
 
 func (r *ApiKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("key"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

@@ -74,8 +74,9 @@ data "komodo_servers" "all" {}
 resource "komodo_deployment" "test" {
   name      = %q
   server_id = data.komodo_servers.all.servers[0].id
-  image = {
-    image = "nginx:latest"
+  image {
+    type = "Image"
+    name = "nginx:latest"
   }
 }
 
@@ -92,8 +93,9 @@ data "komodo_servers" "all" {}
 resource "komodo_deployment" "test" {
   name      = %q
   server_id = data.komodo_servers.all.servers[0].id
-  image = {
-    image = "nginx:latest"
+  image {
+    type = "Image"
+    name = "nginx:latest"
   }
 }
 

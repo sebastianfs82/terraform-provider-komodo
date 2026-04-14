@@ -682,6 +682,17 @@ func partialBuildConfigFromModel(ctx context.Context, c *client.Client, data *Bu
 		cfg.Branch = &b
 		co := data.Source.Commit.ValueString()
 		cfg.Commit = &co
+	} else {
+		// Explicitly clear all git source fields when source block is removed.
+		empty := ""
+		f := false
+		cfg.LinkedRepo = &empty
+		cfg.GitProvider = &empty
+		cfg.GitHttps = &f
+		cfg.GitAccount = &empty
+		cfg.Repo = &empty
+		cfg.Branch = &empty
+		cfg.Commit = &empty
 	}
 	if data.Webhook != nil {
 		if !data.Webhook.Enabled.IsNull() && !data.Webhook.Enabled.IsUnknown() {
@@ -822,9 +833,7 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 	}
 
 	// Source block: keep nil when all git fields are empty/default and caller didn't set it.
-	if data.Source != nil || b.Config.Repo != "" || b.Config.Branch != "" ||
-		b.Config.GitProvider != "" || b.Config.GitAccount != "" || b.Config.Commit != "" ||
-		b.Config.LinkedRepo != "" {
+	if data.Source != nil || b.Config.Repo != "" || b.Config.LinkedRepo != "" {
 		// When repo_id is set, URL/account_id/path/branch/commit are derived from the
 		// linked repo by the API and must not be persisted, to avoid permanent diffs.
 		var urlVal types.String
@@ -870,7 +879,7 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 	if b.Config.WebhookSecret != "" {
 		webhookSecret = types.StringValue(b.Config.WebhookSecret)
 	}
-	if b.Config.WebhookEnabled || b.Config.WebhookSecret != "" {
+	if b.Config.WebhookEnabled || b.Config.WebhookSecret != "" || data.Webhook != nil {
 		data.Webhook = &WebhookModel{
 			Enabled: types.BoolValue(b.Config.WebhookEnabled),
 			Secret:  webhookSecret,

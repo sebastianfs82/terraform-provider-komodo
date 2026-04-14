@@ -111,6 +111,10 @@ func TestAccProcedureDataSource_failureAlertEnabled(t *testing.T) {
 
 func testAccProcedureDataSourceConfig_withStages(name string) string {
 	return fmt.Sprintf(`
+resource "komodo_procedure" "child" {
+  name = "%s-child"
+}
+
 resource "komodo_procedure" "src" {
   name = %q
 
@@ -120,7 +124,7 @@ resource "komodo_procedure" "src" {
     execution {
       type = "RunProcedure"
       parameters = {
-        id = "some-id"
+        procedure = komodo_procedure.child.id
       }
     }
   }
@@ -130,7 +134,7 @@ data "komodo_procedure" "test" {
   id         = komodo_procedure.src.id
   depends_on = [komodo_procedure.src]
 }
-`, name)
+`, name, name)
 }
 
 func testAccProcedureDataSourceConfig_withFailureAlert(name string) string {

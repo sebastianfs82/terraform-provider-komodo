@@ -217,7 +217,7 @@ func testAccRepoResourceConfig_withHttps(name, domain, repo, branch string, http
 	return fmt.Sprintf(`
 resource "komodo_repo" "test" {
   name = "%s"
-  source = {
+  source {
     domain        = "%s"
     https_enabled = %t
     path          = "%s"
@@ -241,7 +241,7 @@ func testAccRepoResourceConfig_withConfig(name, repo, branch string) string {
 	return fmt.Sprintf(`
 resource "komodo_repo" "test" {
   name = "%s"
-  source = {
+  source {
     domain        = "github.com"
     https_enabled = true
     path          = "%s"
@@ -256,7 +256,7 @@ func testAccRepoResourceConfig_withOnClone(name string) string {
 resource "komodo_repo" "test" {
   name = "%s"
 
-  on_clone = {
+  on_clone {
     command = "echo cloned"
   }
 }
@@ -364,7 +364,7 @@ func testAccRepoResourceConfig_withGitAccount(name, gitAccount string) string {
 	return fmt.Sprintf(`
 resource "komodo_repo" "test" {
   name = "%s"
-  source = {
+  source {
     account_id = "%s"
   }
 }

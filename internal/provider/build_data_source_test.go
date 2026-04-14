@@ -58,8 +58,8 @@ func TestAccBuildDataSource_sourceBlock(t *testing.T) {
 			{
 				Config: testAccBuildDataSourceConfig_source("tf-acc-build-ds-source", "myorg/myrepo", "main"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.komodo_build.test", "source.path", "myorg/myrepo"),
-					resource.TestCheckResourceAttr("data.komodo_build.test", "source.branch", "main"),
+					resource.TestCheckResourceAttr("data.komodo_build.test", "repo", "myorg/myrepo"),
+					resource.TestCheckResourceAttr("data.komodo_build.test", "branch", "main"),
 				),
 			},
 		},

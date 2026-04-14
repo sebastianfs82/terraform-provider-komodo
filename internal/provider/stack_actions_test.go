@@ -159,7 +159,7 @@ func testAccStackWithComposeConfig(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  compose = {
+  compose {
     contents = <<-EOT
       services:
         web:

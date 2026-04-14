@@ -292,8 +292,8 @@ func testAccServerResourceConfigWithThresholds(name string, cpuWarn, cpuCrit flo
 	return fmt.Sprintf(`
 resource "komodo_server" "test" {
   name = %q
-  alerts = {
-    thresholds = {
+  alerts {
+    thresholds {
       cpu_warning  = %g
       cpu_critical = %g
     }

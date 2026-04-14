@@ -26,6 +26,7 @@ type ResourceSyncsDataSource struct {
 }
 
 type ResourceSyncsDataSourceModel struct {
+	RepoID        types.String                `tfsdk:"repo_id"`
 	ResourceSyncs []ResourceSyncListItemModel `tfsdk:"resource_syncs"`
 }
 
@@ -46,6 +47,10 @@ func (d *ResourceSyncsDataSource) Schema(_ context.Context, _ datasource.SchemaR
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo resource syncs visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"repo_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Filter resource syncs by linked Komodo Repo name or ID.",
+			},
 			"resource_syncs": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of resource syncs.",
@@ -98,6 +103,12 @@ func (d *ResourceSyncsDataSource) Configure(_ context.Context, req datasource.Co
 }
 
 func (d *ResourceSyncsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data ResourceSyncsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	tflog.Debug(ctx, "Listing resource syncs")
 
 	syncs, err := d.client.ListResourceSyncs(ctx)
@@ -106,8 +117,21 @@ func (d *ResourceSyncsDataSource) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
+	repoIDFilter := data.RepoID.ValueString()
+	// The API may store linked_repo as either a name or an ID. Resolve the filter
+	// value so we can match against both representations.
+	repoNameFilter := ""
+	if repoIDFilter != "" {
+		if r, err := d.client.GetGitRepository(ctx, repoIDFilter); err == nil && r != nil {
+			repoNameFilter = r.Name
+		}
+	}
+
 	items := make([]ResourceSyncListItemModel, 0, len(syncs))
 	for _, s := range syncs {
+		if repoIDFilter != "" && s.Config.LinkedRepo != repoIDFilter && (repoNameFilter == "" || s.Config.LinkedRepo != repoNameFilter) {
+			continue
+		}
 		items = append(items, ResourceSyncListItemModel{
 			ID:             types.StringValue(s.ID.OID),
 			Name:           types.StringValue(s.Name),
@@ -117,6 +141,6 @@ func (d *ResourceSyncsDataSource) Read(ctx context.Context, req datasource.ReadR
 			Managed:        types.BoolValue(s.Config.Managed),
 		})
 	}
-	data := ResourceSyncsDataSourceModel{ResourceSyncs: items}
+	data.ResourceSyncs = items
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

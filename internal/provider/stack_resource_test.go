@@ -42,7 +42,7 @@ func TestAccStackResource_withFileContents(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_stack.test", "name", "tf-test-stack-inline"),
 					resource.TestCheckResourceAttrSet("komodo_stack.test", "id"),
-					resource.TestCheckResourceAttrSet("komodo_stack.test", "files.contents"),
+					resource.TestCheckResourceAttrSet("komodo_stack.test", "compose.contents"),
 				),
 			},
 		},
@@ -282,7 +282,7 @@ func testAccStackResourceConfig_withFileContents(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  compose = {
+  compose {
     contents = <<-EOT
       services:
         web:
@@ -298,7 +298,7 @@ func testAccStackResourceConfig_withGit(name, repo, branch string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  source = {
+  source {
     url    = "https://github.com"
     path   = "%s"
     branch = "%s"
@@ -312,7 +312,7 @@ func testAccStackResourceConfig_withPreDeploy(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  pre_deploy = {
+  pre_deploy {
     command = "echo pre"
   }
 }
@@ -359,7 +359,7 @@ func TestAccStackResource_gitRepoConflicts(t *testing.T) {
 			config: `
 resource "komodo_stack" "test" {
   name = "tf-test-conflict"
-  source = {
+  source {
     repo_id = "my-git-repo"
     url  = "https://github.com"
   }
@@ -370,7 +370,7 @@ resource "komodo_stack" "test" {
 			config: `
 resource "komodo_stack" "test" {
   name = "tf-test-conflict"
-  source = {
+  source {
     repo_id = "my-git-repo"
     path = "owner/repo"
   }
@@ -381,7 +381,7 @@ resource "komodo_stack" "test" {
 			config: `
 resource "komodo_stack" "test" {
   name = "tf-test-conflict"
-  source = {
+  source {
     repo_id = "my-git-repo"
     branch = "main"
   }
@@ -408,7 +408,7 @@ func testAccStackResourceConfig_preDeployPathOnly(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  pre_deploy = {
+  pre_deploy {
     path = "/opt/app"
   }
 }
@@ -420,7 +420,7 @@ func testAccStackResourceConfig_postDeployPathOnly(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  post_deploy = {
+  post_deploy {
     path = "/opt/app"
   }
 }
@@ -503,7 +503,7 @@ func testAccStackResourceConfig_preDeployBothFields(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  pre_deploy = {
+  pre_deploy {
     path    = "/opt/app"
     command = "echo pre"
   }
@@ -516,7 +516,7 @@ func testAccStackResourceConfig_preDeployCommandOnly(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  pre_deploy = {
+  pre_deploy {
     command = "echo pre"
   }
 }
@@ -528,7 +528,7 @@ func testAccStackResourceConfig_postDeployBothFields(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  post_deploy = {
+  post_deploy {
     path    = "/opt/app"
     command = "echo post"
   }
@@ -541,7 +541,7 @@ func testAccStackResourceConfig_postDeployCommandOnly(name string) string {
 resource "komodo_stack" "test" {
   name = "%s"
 
-  post_deploy = {
+  post_deploy {
     command = "echo post"
   }
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
@@ -55,12 +56,12 @@ type MaintenanceWindowModel struct {
 
 // ServerAlertsThresholdsModel holds alert threshold percentages.
 type ServerAlertsThresholdsModel struct {
-	CPUCritical    types.Int64 `tfsdk:"cpu_critical"`
-	CPUWarning     types.Int64 `tfsdk:"cpu_warning"`
-	DiskCritical   types.Int64 `tfsdk:"disk_critical"`
-	DiskWarning    types.Int64 `tfsdk:"disk_warning"`
-	MemoryCritical types.Int64 `tfsdk:"memory_critical"`
-	MemoryWarning  types.Int64 `tfsdk:"memory_warning"`
+	CPUCritical    types.Float64 `tfsdk:"cpu_critical"`
+	CPUWarning     types.Float64 `tfsdk:"cpu_warning"`
+	DiskCritical   types.Float64 `tfsdk:"disk_critical"`
+	DiskWarning    types.Float64 `tfsdk:"disk_warning"`
+	MemoryCritical types.Float64 `tfsdk:"memory_critical"`
+	MemoryWarning  types.Float64 `tfsdk:"memory_warning"`
 }
 
 // ServerAlertsModel holds the alert configuration for a server.
@@ -248,46 +249,46 @@ func (r *ServerResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					"thresholds": schema.SingleNestedBlock{
 						MarkdownDescription: "Alert threshold percentages.",
 						Attributes: map[string]schema.Attribute{
-							"cpu_critical": schema.Int64Attribute{
+							"cpu_critical": schema.Float64Attribute{
 								Optional:            true,
 								Computed:            true,
-								Default:             int64default.StaticInt64(99),
-								Validators:          []validator.Int64{int64PercentValidator{}},
+								Default:             float64default.StaticFloat64(99),
+								Validators:          []validator.Float64{float64PercentValidator{}},
 								MarkdownDescription: "CPU percentage threshold for CRITICAL state. Must be between 0 and 100. Defaults to `99`.",
 							},
-							"cpu_warning": schema.Int64Attribute{
+							"cpu_warning": schema.Float64Attribute{
 								Optional:            true,
 								Computed:            true,
-								Default:             int64default.StaticInt64(90),
-								Validators:          []validator.Int64{int64PercentValidator{}},
+								Default:             float64default.StaticFloat64(90),
+								Validators:          []validator.Float64{float64PercentValidator{}},
 								MarkdownDescription: "CPU percentage threshold for WARNING state. Must be between 0 and 100. Defaults to `90`.",
 							},
-							"disk_critical": schema.Int64Attribute{
+							"disk_critical": schema.Float64Attribute{
 								Optional:            true,
 								Computed:            true,
-								Default:             int64default.StaticInt64(95),
-								Validators:          []validator.Int64{int64PercentValidator{}},
+								Default:             float64default.StaticFloat64(95),
+								Validators:          []validator.Float64{float64PercentValidator{}},
 								MarkdownDescription: "Disk percentage threshold for CRITICAL state. Must be between 0 and 100. Defaults to `95`.",
 							},
-							"disk_warning": schema.Int64Attribute{
+							"disk_warning": schema.Float64Attribute{
 								Optional:            true,
 								Computed:            true,
-								Default:             int64default.StaticInt64(75),
-								Validators:          []validator.Int64{int64PercentValidator{}},
+								Default:             float64default.StaticFloat64(75),
+								Validators:          []validator.Float64{float64PercentValidator{}},
 								MarkdownDescription: "Disk percentage threshold for WARNING state. Must be between 0 and 100. Defaults to `75`.",
 							},
-							"memory_critical": schema.Int64Attribute{
+							"memory_critical": schema.Float64Attribute{
 								Optional:            true,
 								Computed:            true,
-								Default:             int64default.StaticInt64(95),
-								Validators:          []validator.Int64{int64PercentValidator{}},
+								Default:             float64default.StaticFloat64(95),
+								Validators:          []validator.Float64{float64PercentValidator{}},
 								MarkdownDescription: "Memory percentage threshold for CRITICAL state. Must be between 0 and 100. Defaults to `95`.",
 							},
-							"memory_warning": schema.Int64Attribute{
+							"memory_warning": schema.Float64Attribute{
 								Optional:            true,
 								Computed:            true,
-								Default:             int64default.StaticInt64(75),
-								Validators:          []validator.Int64{int64PercentValidator{}},
+								Default:             float64default.StaticFloat64(75),
+								Validators:          []validator.Float64{float64PercentValidator{}},
 								MarkdownDescription: "Memory percentage threshold for WARNING state. Must be between 0 and 100. Defaults to `75`.",
 							},
 						},
@@ -592,6 +593,8 @@ func serverConfigFromModel(ctx context.Context, data *ServerResourceModel) (clie
 
 	if data.Alerts != nil {
 		if !data.Alerts.Enabled.IsNull() && !data.Alerts.Enabled.IsUnknown() {
+			// alerts.enabled maps to both StatsMonitoring and the individual send_* flags.
+			cfg.StatsMonitoring = client.BoolPtr(data.Alerts.Enabled.ValueBool())
 			if !data.Alerts.Enabled.ValueBool() {
 				// alerts.enabled = false → disable all send_*_alerts, ignore types
 				cfg.SendCPUAlerts = client.BoolPtr(false)
@@ -628,22 +631,22 @@ func serverConfigFromModel(ctx context.Context, data *ServerResourceModel) (clie
 		if data.Alerts.Thresholds != nil {
 			th := data.Alerts.Thresholds
 			if !th.CPUCritical.IsNull() && !th.CPUCritical.IsUnknown() {
-				cfg.CPUCritical = client.Float64Ptr(float64(th.CPUCritical.ValueInt64()))
+				cfg.CPUCritical = client.Float64Ptr(th.CPUCritical.ValueFloat64())
 			}
 			if !th.CPUWarning.IsNull() && !th.CPUWarning.IsUnknown() {
-				cfg.CPUWarning = client.Float64Ptr(float64(th.CPUWarning.ValueInt64()))
+				cfg.CPUWarning = client.Float64Ptr(th.CPUWarning.ValueFloat64())
 			}
 			if !th.DiskCritical.IsNull() && !th.DiskCritical.IsUnknown() {
-				cfg.DiskCritical = client.Float64Ptr(float64(th.DiskCritical.ValueInt64()))
+				cfg.DiskCritical = client.Float64Ptr(th.DiskCritical.ValueFloat64())
 			}
 			if !th.DiskWarning.IsNull() && !th.DiskWarning.IsUnknown() {
-				cfg.DiskWarning = client.Float64Ptr(float64(th.DiskWarning.ValueInt64()))
+				cfg.DiskWarning = client.Float64Ptr(th.DiskWarning.ValueFloat64())
 			}
 			if !th.MemoryCritical.IsNull() && !th.MemoryCritical.IsUnknown() {
-				cfg.MemCritical = client.Float64Ptr(float64(th.MemoryCritical.ValueInt64()))
+				cfg.MemCritical = client.Float64Ptr(th.MemoryCritical.ValueFloat64())
 			}
 			if !th.MemoryWarning.IsNull() && !th.MemoryWarning.IsUnknown() {
-				cfg.MemWarning = client.Float64Ptr(float64(th.MemoryWarning.ValueInt64()))
+				cfg.MemWarning = client.Float64Ptr(th.MemoryWarning.ValueFloat64())
 			}
 		}
 	}
@@ -758,15 +761,15 @@ func serverToResourceModel(ctx context.Context, s *client.Server, data *ServerRe
 	}
 	if data.Alerts != nil {
 		data.Alerts = &ServerAlertsModel{
-			Enabled: types.BoolValue(anyAlertEnabled),
+			Enabled: types.BoolValue(cfg.StatsMonitoring),
 			Types:   typesSet,
 			Thresholds: &ServerAlertsThresholdsModel{
-				CPUCritical:    types.Int64Value(int64(cfg.CPUCritical)),
-				CPUWarning:     types.Int64Value(int64(cfg.CPUWarning)),
-				DiskCritical:   types.Int64Value(int64(cfg.DiskCritical)),
-				DiskWarning:    types.Int64Value(int64(cfg.DiskWarning)),
-				MemoryCritical: types.Int64Value(int64(cfg.MemCritical)),
-				MemoryWarning:  types.Int64Value(int64(cfg.MemWarning)),
+				CPUCritical:    types.Float64Value(cfg.CPUCritical),
+				CPUWarning:     types.Float64Value(cfg.CPUWarning),
+				DiskCritical:   types.Float64Value(cfg.DiskCritical),
+				DiskWarning:    types.Float64Value(cfg.DiskWarning),
+				MemoryCritical: types.Float64Value(cfg.MemCritical),
+				MemoryWarning:  types.Float64Value(cfg.MemWarning),
 			},
 		}
 	}
@@ -808,27 +811,27 @@ func serverToResourceModel(ctx context.Context, s *client.Server, data *ServerRe
 	return diags
 }
 
-// int64PercentValidator enforces that an int64 attribute value is between 0 and 100 inclusive.
-type int64PercentValidator struct{}
+// float64PercentValidator enforces that a float64 attribute value is between 0 and 100 inclusive.
+type float64PercentValidator struct{}
 
-func (v int64PercentValidator) Description(_ context.Context) string {
-	return "Value must be an integer between 0 and 100."
+func (v float64PercentValidator) Description(_ context.Context) string {
+	return "Value must be a number between 0 and 100."
 }
 
-func (v int64PercentValidator) MarkdownDescription(ctx context.Context) string {
+func (v float64PercentValidator) MarkdownDescription(ctx context.Context) string {
 	return v.Description(ctx)
 }
 
-func (v int64PercentValidator) ValidateInt64(_ context.Context, req validator.Int64Request, resp *validator.Int64Response) {
+func (v float64PercentValidator) ValidateFloat64(_ context.Context, req validator.Float64Request, resp *validator.Float64Response) {
 	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
 		return
 	}
-	val := req.ConfigValue.ValueInt64()
+	val := req.ConfigValue.ValueFloat64()
 	if val < 0 || val > 100 {
 		resp.Diagnostics.AddAttributeError(
 			req.Path,
 			"Invalid percentage value",
-			fmt.Sprintf("Expected a value between 0 and 100, got: %d.", val),
+			fmt.Sprintf("Expected a value between 0 and 100, got: %g.", val),
 		)
 	}
 }

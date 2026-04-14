@@ -115,7 +115,7 @@ resource "komodo_variable" "test2" {
 // TestAccVariableResource_update verifies that updating value does not mark
 // secret_enabled as unknown — it must remain at its known state value.
 func TestAccVariableResource_update(t *testing.T) {
-	const name = "tf-acc-variable-update"
+	const name = "tf_acc_variable_update"
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -142,7 +142,7 @@ func TestAccVariableResource_update(t *testing.T) {
 // TestAccVariableResource_descriptionDefault verifies that omitting description
 // from config results in an empty string (not unknown after apply).
 func TestAccVariableResource_descriptionDefault(t *testing.T) {
-	const name = "tf-acc-variable-desc-default"
+	const name = "tf_acc_variable_desc_default"
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -162,7 +162,7 @@ func TestAccVariableResource_descriptionDefault(t *testing.T) {
 // TestAccVariableResource_descriptionUpdate verifies that changing the description
 // value is applied and reflected in state correctly.
 func TestAccVariableResource_descriptionUpdate(t *testing.T) {
-	const name = "tf-acc-variable-desc-update"
+	const name = "tf_acc_variable_desc_update"
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

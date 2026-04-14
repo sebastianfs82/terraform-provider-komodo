@@ -107,6 +107,18 @@ func (r *UserGroupResource) Create(ctx context.Context, req resource.CreateReque
 
 	groupID := group.ID.OID
 
+	// CreateUserGroup does not honour the everyone field — set it explicitly.
+	if data.EveryoneEnabled.ValueBool() {
+		_, err := r.client.SetEveryoneUserGroup(ctx, client.SetEveryoneUserGroupRequest{
+			UserGroup: groupID,
+			Everyone:  true,
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to set everyone on user group, got error: %s", err))
+			return
+		}
+	}
+
 	// Add users individually — CreateUserGroup does not populate the user list
 	for _, u := range users {
 		_, err := r.client.AddUserToUserGroup(ctx, client.AddUserToUserGroupRequest{UserGroup: groupID, User: u})

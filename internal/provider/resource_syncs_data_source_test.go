@@ -88,11 +88,11 @@ resource "komodo_repo" "test" {
 
 resource "komodo_resource_sync" "test" {
   name        = %q
-  linked_repo = komodo_repo.test.name
+  linked_repo = komodo_repo.test.id
 }
 
 data "komodo_resource_syncs" "filtered" {
-  repo_id    = komodo_repo.test.name
+  repo_id    = komodo_repo.test.id
   depends_on = [komodo_resource_sync.test]
 }
 `, name, name)

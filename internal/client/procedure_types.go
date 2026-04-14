@@ -48,7 +48,7 @@ type ProcedureConfig struct {
 
 // PartialProcedureConfig holds optional config fields for Create/Update.
 type PartialProcedureConfig struct {
-	Stages           []ProcedureStage `json:"stages,omitempty"`
+	Stages           []ProcedureStage `json:"stages"`
 	ScheduleFormat   *string          `json:"schedule_format,omitempty"`
 	Schedule         *string          `json:"schedule,omitempty"`
 	ScheduleEnabled  *bool            `json:"schedule_enabled,omitempty"`
