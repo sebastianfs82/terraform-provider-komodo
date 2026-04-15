@@ -303,25 +303,6 @@ func testAccUserGroupAddUserFromState(groupResourceName, userResourceName string
 	}
 }
 
-func testAccUserGroupAddUser(resourceName, userID string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource not found in state: %s", resourceName)
-		}
-		c := client.NewClient(
-			os.Getenv("KOMODO_ENDPOINT"),
-			os.Getenv("KOMODO_USERNAME"),
-			os.Getenv("KOMODO_PASSWORD"),
-		)
-		_, err := c.AddUserToUserGroup(context.Background(), client.AddUserToUserGroupRequest{
-			UserGroup: rs.Primary.ID,
-			User:      userID,
-		})
-		return err
-	}
-}
-
 // testAccUserGroupNotHasMemberID checks directly without wrapping in TestCheckFunc.
 func testAccUserGroupNotHasMemberID(s *terraform.State, groupResourceName, userID string) error {
 	rs, ok := s.RootModule().Resources[groupResourceName]
@@ -345,54 +326,12 @@ func testAccUserGroupNotHasMemberID(s *terraform.State, groupResourceName, userI
 	return nil
 }
 
-func testAccUserGroupNotHasMember(resourceName, userID string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource not found in state: %s", resourceName)
-		}
-		c := client.NewClient(
-			os.Getenv("KOMODO_ENDPOINT"),
-			os.Getenv("KOMODO_USERNAME"),
-			os.Getenv("KOMODO_PASSWORD"),
-		)
-		group, err := c.GetUserGroup(context.Background(), rs.Primary.ID)
-		if err != nil {
-			return fmt.Errorf("unable to fetch group: %s", err)
-		}
-		for _, u := range group.Users {
-			if u == userID {
-				return fmt.Errorf("expected user %s to NOT be a member of group %s, but was", userID, rs.Primary.ID)
-			}
-		}
-		return nil
-	}
-}
-
 // Config helpers
 
 func testAccUserGroupResourceConfig_basic(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_user_group" "test" {
   name = %q
-}
-`, name)
-}
-
-func testAccUserGroupResourceConfig_withUser(name, userID string) string {
-	return fmt.Sprintf(`
-resource "komodo_user_group" "test" {
-  name  = %q
-  users = [%q]
-}
-`, name, userID)
-}
-
-func testAccUserGroupResourceConfig_emptyUsers(name string) string {
-	return fmt.Sprintf(`
-resource "komodo_user_group" "test" {
-  name  = %q
-  users = []
 }
 `, name)
 }

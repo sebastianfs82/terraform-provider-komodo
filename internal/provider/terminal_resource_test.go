@@ -387,40 +387,6 @@ resource "komodo_terminal" "test" {
 `, serverID, name)
 }
 
-func testAccTerminalResourceContainerConfig(serverID, containerName, name string) string {
-	return fmt.Sprintf(`
-resource "komodo_terminal" "test" {
-  target_type = "Container"
-  target_id   = %q
-  container   = %q
-  name        = %q
-}
-`, serverID, containerName, name)
-}
-
-func testAccTerminalResourceContainerModeConfig(serverID, containerName, name, mode string) string {
-	return fmt.Sprintf(`
-resource "komodo_terminal" "test" {
-  target_type = "Container"
-  target_id   = %q
-  container   = %q
-  name        = %q
-  mode        = %q
-}
-`, serverID, containerName, name, mode)
-}
-
-func testAccTerminalResourceStackConfig(stackID, service, name string) string {
-	return fmt.Sprintf(`
-resource "komodo_terminal" "test" {
-  target_type = "Stack"
-  target_id   = %q
-  service     = %q
-  name        = %q
-}
-`, stackID, service, name)
-}
-
 func testAccTerminalDataSourceConfig(serverID, name string) string {
 	return fmt.Sprintf(`
 resource "komodo_terminal" "test" {

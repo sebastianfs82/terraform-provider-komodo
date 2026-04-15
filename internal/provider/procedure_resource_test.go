@@ -554,25 +554,6 @@ resource "komodo_procedure" "test" {
 `, name, name)
 }
 
-func testAccProcedureResourceConfigWithParameters(name, procID string) string {
-	return fmt.Sprintf(`
-resource "komodo_procedure" "test" {
-  name = %q
-
-  stage {
-    name = "Run"
-
-    execution {
-      type = "RunProcedure"
-      parameters = {
-        procedure = %q
-      }
-    }
-  }
-}
-`, name, procID)
-}
-
 func testAccProcedureResourceConfigWithParametersV1(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_procedure" "child1" {
