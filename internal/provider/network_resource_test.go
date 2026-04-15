@@ -5,21 +5,16 @@ package provider
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// testAccNetworkServerID returns the server ID/name to use for network acceptance tests.
-// Set KOMODO_TEST_SERVER_ID to the name or ID of an available server in your Komodo instance.
+// testAccNetworkServerID returns the ID of the first available server in the Komodo instance.
+// Falls back to KOMODO_TEST_SERVER_ID if set. Skips the test if no servers are found.
 func testAccNetworkServerID(t *testing.T) string {
 	t.Helper()
-	v := os.Getenv("KOMODO_TEST_SERVER_ID")
-	if v == "" {
-		t.Skip("KOMODO_TEST_SERVER_ID must be set for network acceptance tests")
-	}
-	return v
+	return testAccLookupServerID(t, "network acceptance tests")
 }
 
 // --- Resource tests ---

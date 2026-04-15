@@ -44,6 +44,7 @@ resource "komodo_api_key" "svc" {
 ### Read-Only
 
 - `created_at` (String) Creation timestamp in RFC3339 format.
+- `id` (String) Same as `key`. Included so Terraform's import verify can compare resources.
 - `key` (String) The API key identifier.
 - `secret` (String, Sensitive) The API key secret (only available on creation).
 - `user_id` (String) The ID of the user who owns this key.

@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -16,39 +15,33 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-// testAccTerminalServerID returns the server ID/name to use for terminal acceptance tests.
-// Set KOMODO_TEST_SERVER_ID to the name or ID of an available server in your Komodo instance.
+// testAccTerminalServerID returns the ID of the first available server in the Komodo instance.
+// Falls back to KOMODO_TEST_SERVER_ID if set. Skips the test if no servers are found.
 func testAccTerminalServerID(t *testing.T) string {
 	t.Helper()
-	v := os.Getenv("KOMODO_TEST_SERVER_ID")
-	if v == "" {
-		t.Skip("KOMODO_TEST_SERVER_ID must be set for terminal acceptance tests")
-	}
-	return v
+	return testAccLookupServerID(t, "terminal acceptance tests")
 }
 
-// testAccTerminalContainerServer returns the server ID that hosts the container for container-terminal tests.
-// Set KOMODO_TEST_CONTAINER_SERVER_ID and KOMODO_TEST_CONTAINER_NAME for container acceptance tests.
-func testAccTerminalContainerEnv(t *testing.T) (serverID, containerName string) {
-	t.Helper()
-	serverID = os.Getenv("KOMODO_TEST_CONTAINER_SERVER_ID")
-	containerName = os.Getenv("KOMODO_TEST_CONTAINER_NAME")
-	if serverID == "" || containerName == "" {
-		t.Skip("KOMODO_TEST_CONTAINER_SERVER_ID and KOMODO_TEST_CONTAINER_NAME must be set for container terminal tests")
-	}
-	return
-}
+// testAccTerminalNginxStackConfig returns a Terraform config that creates a
+// komodo_stack hosting a single nginx service. Used for container and stack
+// terminal tests that need a real target (without requiring env vars).
+func testAccTerminalNginxStackConfig(name string) string {
+	return fmt.Sprintf(`
+data "komodo_servers" "all" {}
 
-// testAccTerminalStackEnv returns the stack ID and service name for stack-terminal tests.
-// Set KOMODO_TEST_STACK_ID and KOMODO_TEST_STACK_SERVICE for stack acceptance tests.
-func testAccTerminalStackEnv(t *testing.T) (stackID, service string) {
-	t.Helper()
-	stackID = os.Getenv("KOMODO_TEST_STACK_ID")
-	service = os.Getenv("KOMODO_TEST_STACK_SERVICE")
-	if stackID == "" || service == "" {
-		t.Skip("KOMODO_TEST_STACK_ID and KOMODO_TEST_STACK_SERVICE must be set for stack terminal tests")
-	}
-	return
+resource "komodo_stack" "nginx" {
+  name      = %q
+  server_id = data.komodo_servers.all.servers[0].id
+
+  compose {
+    contents = <<-EOT
+      services:
+        web:
+          image: nginx:latest
+    EOT
+  }
+}
+`, name)
 }
 
 // --- Unit tests (no live API required) ---
@@ -197,7 +190,7 @@ func TestAccTerminalResource_importState_twopart(t *testing.T) {
 				ResourceName:            "komodo_terminal.test",
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"mode", "command"},
+				ImportStateVerifyIgnore: []string{"mode", "command", "stored_size_kb"},
 			},
 		},
 	})
@@ -222,25 +215,38 @@ func TestAccTerminalResource_importState_threepart(t *testing.T) {
 				ImportState:             true,
 				ImportStateIdFunc:       testAccTerminalImportID3Part("komodo_terminal.test"),
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"mode", "command"},
+				ImportStateVerifyIgnore: []string{"mode", "command", "stored_size_kb"},
 			},
 		},
 	})
 }
 
 // TestAccTerminalResource_container tests creating a terminal against a container target.
+// Uses a self-contained komodo_stack with an nginx compose service so no env vars are needed.
 func TestAccTerminalResource_container(t *testing.T) {
-	serverID, containerName := testAccTerminalContainerEnv(t)
 	tftest.Test(t, tftest.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []tftest.TestStep{
 			{
-				Config: testAccTerminalResourceContainerConfig(serverID, containerName, "tf-container-terminal"),
+				Config: testAccTerminalNginxStackConfig("tf-nginx-container-stack") + `
+action "komodo_stack_deploy" "deploy" {
+  config {
+    id = komodo_stack.nginx.name
+  }
+}
+
+resource "komodo_terminal" "test" {
+  target_type = "Container"
+  target_id   = data.komodo_servers.all.servers[0].id
+  container   = "tf-nginx-container-stack-web-1"
+  name        = "tf-container-terminal"
+  depends_on  = [action.komodo_stack_deploy.deploy]
+}
+`,
 				Check: tftest.ComposeAggregateTestCheckFunc(
 					tftest.TestCheckResourceAttr("komodo_terminal.test", "target_type", "Container"),
-					tftest.TestCheckResourceAttr("komodo_terminal.test", "target_id", serverID),
-					tftest.TestCheckResourceAttr("komodo_terminal.test", "container", containerName),
+					tftest.TestCheckResourceAttr("komodo_terminal.test", "container", "tf-nginx-container-stack-web-1"),
 					tftest.TestCheckResourceAttr("komodo_terminal.test", "name", "tf-container-terminal"),
 					tftest.TestCheckResourceAttrSet("komodo_terminal.test", "id"),
 					tftest.TestCheckResourceAttrSet("komodo_terminal.test", "created_at"),
@@ -251,18 +257,32 @@ func TestAccTerminalResource_container(t *testing.T) {
 }
 
 // TestAccTerminalResource_stack tests creating a terminal against a stack service target.
+// Uses a self-contained komodo_stack with an nginx compose service so no env vars are needed.
 func TestAccTerminalResource_stack(t *testing.T) {
-	stackID, service := testAccTerminalStackEnv(t)
 	tftest.Test(t, tftest.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []tftest.TestStep{
 			{
-				Config: testAccTerminalResourceStackConfig(stackID, service, "tf-stack-terminal"),
+				Config: testAccTerminalNginxStackConfig("tf-nginx-stack-terminal") + `
+action "komodo_stack_deploy" "deploy" {
+  config {
+    id = komodo_stack.nginx.name
+  }
+}
+
+resource "komodo_terminal" "test" {
+  target_type = "Stack"
+  target_id   = komodo_stack.nginx.id
+  service     = "web"
+  name        = "tf-stack-terminal"
+  depends_on  = [action.komodo_stack_deploy.deploy]
+}
+`,
 				Check: tftest.ComposeAggregateTestCheckFunc(
 					tftest.TestCheckResourceAttr("komodo_terminal.test", "target_type", "Stack"),
-					tftest.TestCheckResourceAttr("komodo_terminal.test", "target_id", stackID),
-					tftest.TestCheckResourceAttr("komodo_terminal.test", "service", service),
+					tftest.TestCheckResourceAttrPair("komodo_terminal.test", "target_id", "komodo_stack.nginx", "id"),
+					tftest.TestCheckResourceAttr("komodo_terminal.test", "service", "web"),
 					tftest.TestCheckResourceAttr("komodo_terminal.test", "name", "tf-stack-terminal"),
 					tftest.TestCheckResourceAttrSet("komodo_terminal.test", "id"),
 				),
@@ -272,14 +292,29 @@ func TestAccTerminalResource_stack(t *testing.T) {
 }
 
 // TestAccTerminalResource_attachMode tests that mode="attach" is accepted for a container target.
+// Uses a self-contained komodo_stack with an nginx compose service so no env vars are needed.
 func TestAccTerminalResource_attachMode(t *testing.T) {
-	serverID, containerName := testAccTerminalContainerEnv(t)
 	tftest.Test(t, tftest.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []tftest.TestStep{
 			{
-				Config: testAccTerminalResourceContainerModeConfig(serverID, containerName, "tf-attach-terminal", "attach"),
+				Config: testAccTerminalNginxStackConfig("tf-nginx-attach-stack") + `
+action "komodo_stack_deploy" "deploy" {
+  config {
+    id = komodo_stack.nginx.name
+  }
+}
+
+resource "komodo_terminal" "test" {
+  target_type = "Container"
+  target_id   = data.komodo_servers.all.servers[0].id
+  container   = "tf-nginx-attach-stack-web-1"
+  name        = "tf-attach-terminal"
+  mode        = "attach"
+  depends_on  = [action.komodo_stack_deploy.deploy]
+}
+`,
 				Check: tftest.ComposeAggregateTestCheckFunc(
 					tftest.TestCheckResourceAttr("komodo_terminal.test", "mode", "attach"),
 					tftest.TestCheckResourceAttr("komodo_terminal.test", "target_type", "Container"),

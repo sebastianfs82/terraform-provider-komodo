@@ -5,21 +5,16 @@ package provider
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// testAccServerActionServerID returns the server ID/name to use for server action acceptance tests.
-// Set KOMODO_TEST_SERVER_ID to the name or ID of an available server in your Komodo instance.
+// testAccServerActionServerID returns the ID of the first available server in the Komodo instance.
+// Falls back to KOMODO_TEST_SERVER_ID if set. Skips the test if no servers are found.
 func testAccServerActionServerID(t *testing.T) string {
 	t.Helper()
-	v := os.Getenv("KOMODO_TEST_SERVER_ID")
-	if v == "" {
-		t.Skip("KOMODO_TEST_SERVER_ID must be set for server action acceptance tests")
-	}
-	return v
+	return testAccLookupServerID(t, "server action acceptance tests")
 }
 
 // ─── PruneBuildx ─────────────────────────────────────────────────────────────

@@ -26,6 +26,7 @@ type DeploymentsDataSource struct {
 }
 
 type DeploymentsDataSourceModel struct {
+	ServerID    types.String              `tfsdk:"server_id"`
 	Deployments []DeploymentListItemModel `tfsdk:"deployments"`
 }
 
@@ -45,6 +46,10 @@ func (d *DeploymentsDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists all Komodo deployments visible to the authenticated user.",
 		Attributes: map[string]schema.Attribute{
+			"server_id": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "When set, only deployments running on this server ID are returned.",
+			},
 			"deployments": schema.ListNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "The list of deployments.",
@@ -93,16 +98,27 @@ func (d *DeploymentsDataSource) Configure(_ context.Context, req datasource.Conf
 }
 
 func (d *DeploymentsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data DeploymentsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	tflog.Debug(ctx, "Listing deployments")
 
-	deployments, err := d.client.ListDeployments(ctx)
+	deployments, err := d.client.ListFullDeployments(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list deployments, got error: %s", err))
 		return
 	}
 
+	serverIDFilter := data.ServerID.ValueString()
+
 	items := make([]DeploymentListItemModel, 0, len(deployments))
 	for _, dep := range deployments {
+		if serverIDFilter != "" && dep.Config.ServerID != serverIDFilter {
+			continue
+		}
 		imageStr := ""
 		if dep.Config.Image.Image != nil {
 			imageStr = dep.Config.Image.Image.Image
@@ -117,6 +133,6 @@ func (d *DeploymentsDataSource) Read(ctx context.Context, req datasource.ReadReq
 			SendAlerts: types.BoolValue(dep.Config.SendAlerts),
 		})
 	}
-	data := DeploymentsDataSourceModel{Deployments: items}
+	data.Deployments = items
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

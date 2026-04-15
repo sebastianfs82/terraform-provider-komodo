@@ -29,6 +29,7 @@ data "komodo_variables" "all" {}
 Read-Only:
 
 - `description` (String) An optional description of the variable.
+- `id` (String) The variable identifier (same as name).
 - `name` (String) The variable name.
 - `secret_enabled` (Boolean) Whether the variable is treated as a secret.
 - `value` (String) The variable value (empty string for secret variables).

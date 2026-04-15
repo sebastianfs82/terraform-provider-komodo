@@ -57,20 +57,16 @@ func TestAccUserGroupResource_rename(t *testing.T) {
 }
 
 func TestAccUserGroupResource_withUsers(t *testing.T) {
-	userID := os.Getenv("KOMODO_TEST_USER_ID")
-	if userID == "" {
-		t.Skip("KOMODO_TEST_USER_ID must be set to run user membership tests")
-	}
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccUserGroupResourceConfig_withUser("tf-test-group-users", userID),
+				Config: testAccUserGroupResourceConfig_withNewUser("tf-test-group-users"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_user_group.test", "name", "tf-test-group-users"),
 					resource.TestCheckResourceAttr("komodo_user_group.test", "users.#", "1"),
-					resource.TestCheckResourceAttr("komodo_user_group.test", "users.0", userID),
+					resource.TestCheckResourceAttrPair("komodo_user_group.test", "users.0", "komodo_user.test", "id"),
 				),
 			},
 		},
@@ -78,17 +74,13 @@ func TestAccUserGroupResource_withUsers(t *testing.T) {
 }
 
 func TestAccUserGroupResource_addRemoveUser(t *testing.T) {
-	userID := os.Getenv("KOMODO_TEST_USER_ID")
-	if userID == "" {
-		t.Skip("KOMODO_TEST_USER_ID must be set to run user membership tests")
-	}
 	var groupID string
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccUserGroupResourceConfig_withUser("tf-test-group-add-remove", userID),
+				Config: testAccUserGroupResourceConfig_withNewUser("tf-test-group-add-remove"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_user_group.test", "users.#", "1"),
 					func(s *terraform.State) error {
@@ -101,9 +93,9 @@ func TestAccUserGroupResource_addRemoveUser(t *testing.T) {
 					},
 				),
 			},
-			// Remove the user
+			// Remove the user (user resource still present, but removed from group)
 			{
-				Config: testAccUserGroupResourceConfig_basic("tf-test-group-add-remove"),
+				Config: testAccUserGroupResourceConfig_withNewUserOnly("tf-test-group-add-remove"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckNoResourceAttr("komodo_user_group.test", "users"),
 					func(s *terraform.State) error {
@@ -171,28 +163,24 @@ func TestAccUserGroupResource_everyoneConflictsWithUsers(t *testing.T) {
 // TestAccUserGroupResource_unmanagedUsersNoDrift verifies that when users is
 // not configured, externally-added users do not cause a non-empty plan (no drift).
 func TestAccUserGroupResource_unmanagedUsersNoDrift(t *testing.T) {
-	userID := os.Getenv("KOMODO_TEST_USER_ID")
-	if userID == "" {
-		t.Skip("KOMODO_TEST_USER_ID must be set to run user membership tests")
-	}
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// Create the group without specifying users
-				Config: testAccUserGroupResourceConfig_basic("tf-test-group-unmanaged"),
+				// Create the group and a user; add user out-of-band
+				Config: testAccUserGroupResourceConfig_withUserResOnly("tf-test-group-unmanaged"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("komodo_user_group.test", "id"),
-					// Add a user out-of-band via the API
-					testAccUserGroupAddUser("komodo_user_group.test", userID),
+					// Add the provisioned user out-of-band via the API
+					testAccUserGroupAddUserFromState("komodo_user_group.test", "komodo_user.test"),
 				),
 				// No diff should be produced despite the external user addition
 				ExpectNonEmptyPlan: false,
 			},
 			{
 				// Re-apply the same config — must produce an empty plan
-				Config:   testAccUserGroupResourceConfig_basic("tf-test-group-unmanaged"),
+				Config:   testAccUserGroupResourceConfig_withUserResOnly("tf-test-group-unmanaged"),
 				PlanOnly: true,
 			},
 		},
@@ -203,43 +191,50 @@ func TestAccUserGroupResource_unmanagedUsersNoDrift(t *testing.T) {
 // a managed users list back to no users config removes the previously-managed users
 // once, then stops tracking the list (future manual additions are not touched).
 func TestAccUserGroupResource_unmanagedUsersNotRemoved(t *testing.T) {
-	userID := os.Getenv("KOMODO_TEST_USER_ID")
-	if userID == "" {
-		t.Skip("KOMODO_TEST_USER_ID must be set to run user membership tests")
-	}
+	var savedUserID string
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				// Start with managed user list
-				Config: testAccUserGroupResourceConfig_withUser("tf-test-group-unmanage-transition", userID),
+				Config: testAccUserGroupResourceConfig_withNewUser("tf-test-group-unmanage-transition"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_user_group.test", "users.#", "1"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["komodo_user.test"]
+						if !ok {
+							return fmt.Errorf("komodo_user.test not found in state")
+						}
+						savedUserID = rs.Primary.ID
+						return nil
+					},
 				),
 			},
 			{
 				// Remove users from config — Terraform should remove the previously-managed
 				// user once, then stop managing the list.
-				Config: testAccUserGroupResourceConfig_basic("tf-test-group-unmanage-transition"),
+				Config: testAccUserGroupResourceConfig_withNewUserOnly("tf-test-group-unmanage-transition"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					// users attribute is now null in state (unmanaged)
 					resource.TestCheckNoResourceAttr("komodo_user_group.test", "users"),
 					// The previously-managed user has been removed from the group
-					testAccUserGroupNotHasMember("komodo_user_group.test", userID),
+					func(s *terraform.State) error {
+						return testAccUserGroupNotHasMemberID(s, "komodo_user_group.test", savedUserID)
+					},
 				),
 			},
 			{
 				// Add the user back out-of-band — should produce no plan diff (truly unmanaged now)
-				Config: testAccUserGroupResourceConfig_basic("tf-test-group-unmanage-transition"),
+				Config: testAccUserGroupResourceConfig_withUserResOnly("tf-test-group-unmanage-transition"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					testAccUserGroupAddUser("komodo_user_group.test", userID),
+					testAccUserGroupAddUserFromState("komodo_user_group.test", "komodo_user.test"),
 				),
 				ExpectNonEmptyPlan: false,
 			},
 			{
 				// Re-apply the same config — must produce an empty plan (out-of-band user ignored)
-				Config:   testAccUserGroupResourceConfig_basic("tf-test-group-unmanage-transition"),
+				Config:   testAccUserGroupResourceConfig_withUserResOnly("tf-test-group-unmanage-transition"),
 				PlanOnly: true,
 			},
 		},
@@ -249,31 +244,63 @@ func TestAccUserGroupResource_unmanagedUsersNotRemoved(t *testing.T) {
 // TestAccUserGroupResource_managedUsersFullControl verifies that when users is
 // specified, Terraform enforces the exact list and removes unlisted members.
 func TestAccUserGroupResource_managedUsersFullControl(t *testing.T) {
-	userID := os.Getenv("KOMODO_TEST_USER_ID")
-	if userID == "" {
-		t.Skip("KOMODO_TEST_USER_ID must be set to run user membership tests")
-	}
+	var savedUserID string
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				// Start with managed user
-				Config: testAccUserGroupResourceConfig_withUser("tf-test-group-full-control", userID),
+				Config: testAccUserGroupResourceConfig_withNewUser("tf-test-group-full-control"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_user_group.test", "users.#", "1"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["komodo_user.test"]
+						if !ok {
+							return fmt.Errorf("komodo_user.test not found in state")
+						}
+						savedUserID = rs.Primary.ID
+						return nil
+					},
 				),
 			},
 			{
 				// Manage with empty list — user must be removed
-				Config: testAccUserGroupResourceConfig_emptyUsers("tf-test-group-full-control"),
+				Config: testAccUserGroupResourceConfig_emptyUsersWithNewUser("tf-test-group-full-control"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_user_group.test", "users.#", "0"),
-					testAccUserGroupNotHasMember("komodo_user_group.test", userID),
+					func(s *terraform.State) error {
+						return testAccUserGroupNotHasMemberID(s, "komodo_user_group.test", savedUserID)
+					},
 				),
 			},
 		},
 	})
+}
+
+// testAccUserGroupAddUserFromState adds the user identified by userResourceName to the group
+// identified by groupResourceName, using IDs looked up from Terraform state.
+func testAccUserGroupAddUserFromState(groupResourceName, userResourceName string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		groupRS, ok := s.RootModule().Resources[groupResourceName]
+		if !ok {
+			return fmt.Errorf("resource not found in state: %s", groupResourceName)
+		}
+		userRS, ok := s.RootModule().Resources[userResourceName]
+		if !ok {
+			return fmt.Errorf("resource not found in state: %s", userResourceName)
+		}
+		c := client.NewClient(
+			os.Getenv("KOMODO_ENDPOINT"),
+			os.Getenv("KOMODO_USERNAME"),
+			os.Getenv("KOMODO_PASSWORD"),
+		)
+		_, err := c.AddUserToUserGroup(context.Background(), client.AddUserToUserGroupRequest{
+			UserGroup: groupRS.Primary.ID,
+			User:      userRS.Primary.ID,
+		})
+		return err
+	}
 }
 
 func testAccUserGroupAddUser(resourceName, userID string) resource.TestCheckFunc {
@@ -293,6 +320,29 @@ func testAccUserGroupAddUser(resourceName, userID string) resource.TestCheckFunc
 		})
 		return err
 	}
+}
+
+// testAccUserGroupNotHasMemberID checks directly without wrapping in TestCheckFunc.
+func testAccUserGroupNotHasMemberID(s *terraform.State, groupResourceName, userID string) error {
+	rs, ok := s.RootModule().Resources[groupResourceName]
+	if !ok {
+		return fmt.Errorf("resource not found in state: %s", groupResourceName)
+	}
+	c := client.NewClient(
+		os.Getenv("KOMODO_ENDPOINT"),
+		os.Getenv("KOMODO_USERNAME"),
+		os.Getenv("KOMODO_PASSWORD"),
+	)
+	group, err := c.GetUserGroup(context.Background(), rs.Primary.ID)
+	if err != nil {
+		return fmt.Errorf("unable to fetch group: %s", err)
+	}
+	for _, u := range group.Users {
+		if u == userID {
+			return fmt.Errorf("expected user %s to NOT be a member of group %s, but was", userID, rs.Primary.ID)
+		}
+	}
+	return nil
 }
 
 func testAccUserGroupNotHasMember(resourceName, userID string) resource.TestCheckFunc {
@@ -340,6 +390,58 @@ resource "komodo_user_group" "test" {
 
 func testAccUserGroupResourceConfig_emptyUsers(name string) string {
 	return fmt.Sprintf(`
+resource "komodo_user_group" "test" {
+  name  = %q
+  users = []
+}
+`, name)
+}
+
+// testAccUserGroupResourceConfig_withNewUser creates a komodo_user and a group that includes it.
+func testAccUserGroupResourceConfig_withNewUser(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username = "tf-test-grp-res-user"
+  password = "Password1!"
+}
+
+resource "komodo_user_group" "test" {
+  name  = %q
+  users = [komodo_user.test.id]
+}
+`, name)
+}
+
+// testAccUserGroupResourceConfig_withNewUserOnly creates the same komodo_user but
+// without adding it to the group (group has no managed users list).
+func testAccUserGroupResourceConfig_withNewUserOnly(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username = "tf-test-grp-res-user"
+  password = "Password1!"
+}
+
+resource "komodo_user_group" "test" {
+  name = %q
+}
+`, name)
+}
+
+// testAccUserGroupResourceConfig_withUserResOnly creates the user and the group
+// (without the user in the group's managed list) — for out-of-band membership tests.
+func testAccUserGroupResourceConfig_withUserResOnly(name string) string {
+	return testAccUserGroupResourceConfig_withNewUserOnly(name)
+}
+
+// testAccUserGroupResourceConfig_emptyUsersWithNewUser creates the user and a group
+// with an explicit empty users list.
+func testAccUserGroupResourceConfig_emptyUsersWithNewUser(name string) string {
+	return fmt.Sprintf(`
+resource "komodo_user" "test" {
+  username = "tf-test-grp-res-user"
+  password = "Password1!"
+}
+
 resource "komodo_user_group" "test" {
   name  = %q
   users = []

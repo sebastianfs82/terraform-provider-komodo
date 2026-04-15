@@ -78,16 +78,13 @@ Optional:
 <a id="nestedblock--image"></a>
 ### Nested Schema for `image`
 
-Required:
-
-- `type` (String) Image type: `Image` for an external Docker image, `Build` for a Komodo Build.
-
 Optional:
 
 - `account_id` (String) Account used to pull the image. Empty string uses the build/image default.
 - `build_id` (String) ID of the Komodo Build to deploy. Used when `type` is `Build`.
 - `name` (String) Docker image to deploy. Used when `type` is `Image`.
 - `redeploy_enabled` (Boolean) Whether to redeploy whenever the attached Build finishes.
+- `type` (String) Image type: `Image` for an external Docker image, `Build` for a Komodo Build.
 - `version` (String) Build version to deploy, e.g. `1.0.0`. Used when `type` is `Build`. Defaults to latest (0.0.0).
 
 

@@ -65,17 +65,7 @@ Read-Only:
 - `name` (String) Docker image. Set when `type` is `Image`.
 - `redeploy_enabled` (Boolean) Whether the deployment redeploys when its Build finishes.
 - `type` (String) Image type: `Image` or `Build`.
-- `version` (Attributes) Build version. Set when `type` is `Build`. (see [below for nested schema](#nestedatt--image--version))
-
-<a id="nestedatt--image--version"></a>
-### Nested Schema for `image.version`
-
-Read-Only:
-
-- `major` (Number) Major version component.
-- `minor` (Number) Minor version component.
-- `patch` (Number) Patch version component.
-
+- `version` (String) Build version string (e.g. `1.0.0`). Set when `type` is `Build`.
 
 
 <a id="nestedatt--termination"></a>

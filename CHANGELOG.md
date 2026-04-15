@@ -1,3 +1,37 @@
+## 0.9.0 (April 15, 2026)
+
+BREAKING CHANGES:
+
+* **`komodo_deployment` resource / data source:** Major schema overhaul:
+  * `image.image` renamed to `image.name`.
+  * `image_registry_account` removed; the registry account is now set via the new `image.account_id` attribute.
+  * `redeploy_on_build` moved to `image.redeploy_enabled` (inside the `image` block).
+  * `skip_secret_interp` renamed to `secret_interpolation_enabled` (semantics inverted: `true` now means interpolation **is** enabled).
+  * `poll_for_updates` renamed to `poll_updates_enabled`.
+  * `auto_update` renamed to `auto_update_enabled`.
+  * `send_alerts` renamed to `alerts_enabled`.
+  * Flat container attributes (`network`, `restart`, `command`, `replicas`, `extra_args`, `ports`, `volumes`, `environment`, `labels`, `links`) have been moved into a `container` block.
+  * Termination attributes (`termination_signal`, `termination_timeout`, `term_signal_labels`) have been moved into a `termination` block with sub-attributes `signal`, `timeout`, and `signal_labels`.
+* **`komodo_stack` resource:** Two changes:
+  * The flat `compose_cmd_wrapper` (string) and `compose_cmd_wrapper_include` (list) attributes have been replaced by a `wrapper` block with `command` (string) and `include` (list) sub-attributes.
+  * `registry.provider` and `registry.account` have been replaced by `registry.account_id` (the ID of a `komodo_registry_account` resource).
+* **`komodo_server` resource:** `alerts.thresholds` has been converted from a `SingleNestedAttribute` (attribute-assignment style: `thresholds = { ... }`) to a `SingleNestedBlock` (HCL block style: `thresholds { ... }`). Existing configurations using the `=` assignment form must be updated.
+
+FEATURES:
+
+* **`komodo_swarm` resource:** New resource for managing Komodo Docker Swarm resources.
+* **`komodo_swarm` data source:** Reads an existing Komodo Swarm by name.
+* **`komodo_swarms` data source:** Lists all Komodo Swarm resources visible to the authenticated user.
+
+BUG FIXES:
+
+* **`komodo_api_key` resource:** Added a computed `id` attribute (equal to `key`) so that `terraform import` works with the standard resource address.
+* **`komodo_user_group` resource:** `everyone_enabled = true` is now correctly applied at creation time; previously it was silently ignored because the API does not honour the field in the `CreateUserGroup` call.
+* **`komodo_variables` data source:** Each item in the `variables` list now exposes an `id` attribute (equal to `name`) for use as a stable reference in `for_each` expressions.
+* **`komodo_server` resource:** Alert threshold attributes now carry percentage validators (0–100). Additionally, `StatsMonitoring` is now set correctly when `alerts.enabled` is `true`, ensuring the server statistics are collected even when individual alert types are configured.
+
+---
+
 ## 0.8.0 (April 13, 2026)
 
 BREAKING CHANGES:

@@ -125,7 +125,7 @@ func (d *BuildsDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	}
 	tflog.Debug(ctx, "Listing builds")
 
-	builds, err := d.client.ListBuilds(ctx)
+	builds, err := d.client.ListFullBuilds(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list builds, got error: %s", err))
 		return
@@ -134,12 +134,29 @@ func (d *BuildsDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	builderIDFilter := filter.BuilderID.ValueString()
 	repoIDFilter := filter.RepoID.ValueString()
 
+	// linked_repo stores the repo name, not the ID. Resolve the filter value so
+	// we can match against the name stored by the API.
+	repoNameFilter := ""
+	if repoIDFilter != "" {
+		if repos, err := d.client.ListGitRepositories(ctx); err == nil {
+			for _, r := range repos {
+				if r.ID.OID == repoIDFilter {
+					repoNameFilter = r.Name
+					break
+				}
+			}
+		}
+		if repoNameFilter == "" {
+			repoNameFilter = repoIDFilter
+		}
+	}
+
 	items := make([]BuildListItemModel, 0, len(builds))
 	for _, b := range builds {
 		if builderIDFilter != "" && b.Config.BuilderID != builderIDFilter {
 			continue
 		}
-		if repoIDFilter != "" && b.Config.LinkedRepo != repoIDFilter {
+		if repoIDFilter != "" && b.Config.LinkedRepo != repoIDFilter && b.Config.LinkedRepo != repoNameFilter {
 			continue
 		}
 		items = append(items, BuildListItemModel{

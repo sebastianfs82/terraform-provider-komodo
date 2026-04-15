@@ -275,10 +275,7 @@ resource "komodo_repo" "test" {
 // TestAccRepoResource_serverIDDrift verifies that if server_id is changed
 // out-of-band (e.g. via the Komodo portal) Terraform detects the drift and corrects it.
 func TestAccRepoResource_serverIDDrift(t *testing.T) {
-	serverID := os.Getenv("KOMODO_TEST_SERVER_ID")
-	if serverID == "" {
-		t.Skip("KOMODO_TEST_SERVER_ID must be set to run server_id drift tests")
-	}
+	serverID := testAccLookupServerID(t, "server_id drift tests")
 	const repoName = "tf-drift-repo"
 
 	resource.Test(t, resource.TestCase{
@@ -332,10 +329,7 @@ func TestAccRepoResource_serverIDDrift(t *testing.T) {
 // TestAccRepoResource_serverIDRemove verifies that removing server_id from
 // config sends an empty string to the API and clears the value.
 func TestAccRepoResource_serverIDRemove(t *testing.T) {
-	serverID := os.Getenv("KOMODO_TEST_SERVER_ID")
-	if serverID == "" {
-		t.Skip("KOMODO_TEST_SERVER_ID must be set to run server_id remove tests")
-	}
+	serverID := testAccLookupServerID(t, "server_id remove tests")
 	const repoName = "tf-remove-serverid-repo"
 
 	resource.Test(t, resource.TestCase{

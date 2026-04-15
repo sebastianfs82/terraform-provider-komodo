@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -104,6 +105,36 @@ func (r *NetworkResource) Create(ctx context.Context, req resource.CreateRequest
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create network, got error: %s", err))
+		return
+	}
+
+	// CreateNetwork is dispatched asynchronously through the Komodo Periphery agent.
+	// Poll until the network appears in ListDockerNetworks to avoid a race where the
+	// post-apply refresh sees an empty list and removes the resource from state.
+	const maxRetries = 15
+	networkFound := false
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			time.Sleep(time.Second)
+		}
+		networks, listErr := r.client.ListDockerNetworks(ctx, data.ServerID.ValueString())
+		if listErr == nil {
+			for _, n := range networks {
+				if n.Name != nil && *n.Name == data.Name.ValueString() {
+					networkFound = true
+					break
+				}
+			}
+		}
+		if networkFound {
+			break
+		}
+	}
+	if !networkFound {
+		resp.Diagnostics.AddError(
+			"Network Creation Timeout",
+			fmt.Sprintf("Network %q was not visible on server %q after creation; it may take longer to provision", data.Name.ValueString(), data.ServerID.ValueString()),
+		)
 		return
 	}
 

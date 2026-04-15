@@ -4,12 +4,15 @@
 package provider
 
 import (
+	"context"
 	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/echoprovider"
+
+	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 )
 
 // testAccProtoV6ProviderFactories is used to instantiate a provider during acceptance testing.
@@ -41,4 +44,26 @@ func testAccPreCheck(t *testing.T) {
 	if v := os.Getenv("KOMODO_PASSWORD"); v == "" {
 		t.Fatal("KOMODO_PASSWORD must be set for acceptance tests")
 	}
+}
+
+// testAccLookupServerID returns the ID of the first available server in the Komodo instance.
+// Falls back to KOMODO_TEST_SERVER_ID if set. Skips the test if no servers are found.
+func testAccLookupServerID(t *testing.T, skipMsg string) string {
+	t.Helper()
+	if v := os.Getenv("KOMODO_TEST_SERVER_ID"); v != "" {
+		return v
+	}
+	c := client.NewClient(
+		os.Getenv("KOMODO_ENDPOINT"),
+		os.Getenv("KOMODO_USERNAME"),
+		os.Getenv("KOMODO_PASSWORD"),
+	)
+	servers, err := c.ListServers(context.Background())
+	if err != nil {
+		t.Skipf("skipping %s: unable to list servers: %v", skipMsg, err)
+	}
+	if len(servers) == 0 {
+		t.Skipf("skipping %s: no servers found in Komodo instance", skipMsg)
+	}
+	return servers[0].ID.OID
 }

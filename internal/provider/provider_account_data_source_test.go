@@ -47,33 +47,21 @@ data "komodo_provider_account" "test" {
 `, domain, https, username, token)
 }
 
-// testAccProviderAccountDataSourceConfig_byIDStr is a helper returning a config
-// where the data source looks up a known ID (useful when the resource already exists).
-func testAccProviderAccountDataSourceConfig_byIDStr(id string) string {
-	return fmt.Sprintf(`
-data "komodo_provider_account" "test" {
-  id = %q
-}
-`, id)
-}
-
 // TestAccProviderAccountDataSource_existingAccount reads an account that was
-// created externally (requires the user to set KOMODO_GIT_PROVIDER_ACCOUNT_ID).
+// created via the komodo_provider_account resource and verifies the data source
+// returns the expected attributes.
 func TestAccProviderAccountDataSource_existingAccount(t *testing.T) {
-	id := ""
-	// Only run if the env var is set
 	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-			if id == "" {
-				t.Skip("KOMODO_GIT_PROVIDER_ACCOUNT_ID not set, skipping test")
-			}
-		},
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccProviderAccountDataSourceConfig_byIDStr(id),
+				Config: testAccProviderAccountDataSourceConfig_existingAccount(),
 				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"data.komodo_provider_account.test", "id",
+						"komodo_provider_account.test", "id",
+					),
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources["data.komodo_provider_account.test"]
 						if !ok {
@@ -88,4 +76,19 @@ func TestAccProviderAccountDataSource_existingAccount(t *testing.T) {
 			},
 		},
 	})
+}
+
+func testAccProviderAccountDataSourceConfig_existingAccount() string {
+	return `
+resource "komodo_provider_account" "test" {
+  domain        = "github.com"
+  https_enabled = true
+  username      = "tf-acc-existing-account"
+  token         = "acc-test-token"
+}
+
+data "komodo_provider_account" "test" {
+  id = komodo_provider_account.test.id
+}
+`
 }

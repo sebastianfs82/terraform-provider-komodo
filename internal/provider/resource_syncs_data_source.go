@@ -111,25 +111,33 @@ func (d *ResourceSyncsDataSource) Read(ctx context.Context, req datasource.ReadR
 
 	tflog.Debug(ctx, "Listing resource syncs")
 
-	syncs, err := d.client.ListResourceSyncs(ctx)
+	syncs, err := d.client.ListFullResourceSyncs(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list resource syncs, got error: %s", err))
 		return
 	}
 
 	repoIDFilter := data.RepoID.ValueString()
-	// The API may store linked_repo as either a name or an ID. Resolve the filter
-	// value so we can match against both representations.
+	// linked_repo stores the repo name, not the ID. Resolve the filter value to
+	// the repo name so we can match against what the API returns.
 	repoNameFilter := ""
 	if repoIDFilter != "" {
-		if r, err := d.client.GetGitRepository(ctx, repoIDFilter); err == nil && r != nil {
-			repoNameFilter = r.Name
+		if repos, err := d.client.ListGitRepositories(ctx); err == nil {
+			for _, r := range repos {
+				if r.ID.OID == repoIDFilter {
+					repoNameFilter = r.Name
+					break
+				}
+			}
+		}
+		if repoNameFilter == "" {
+			repoNameFilter = repoIDFilter
 		}
 	}
 
 	items := make([]ResourceSyncListItemModel, 0, len(syncs))
 	for _, s := range syncs {
-		if repoIDFilter != "" && s.Config.LinkedRepo != repoIDFilter && (repoNameFilter == "" || s.Config.LinkedRepo != repoNameFilter) {
+		if repoIDFilter != "" && s.Config.LinkedRepo != repoIDFilter && s.Config.LinkedRepo != repoNameFilter {
 			continue
 		}
 		items = append(items, ResourceSyncListItemModel{

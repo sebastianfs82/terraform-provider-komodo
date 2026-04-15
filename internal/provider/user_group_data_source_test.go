@@ -5,7 +5,6 @@ package provider
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -31,20 +30,16 @@ func TestAccUserGroupDataSource_basic(t *testing.T) {
 }
 
 func TestAccUserGroupDataSource_withUsers(t *testing.T) {
-	userID := os.Getenv("KOMODO_TEST_USER_ID")
-	if userID == "" {
-		t.Skip("KOMODO_TEST_USER_ID must be set to run user membership tests")
-	}
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccUserGroupDataSourceConfig_withUser("tf-test-ds-group-users", userID),
+				Config: testAccUserGroupDataSourceConfig_withUser("tf-test-ds-group-users", "tf-acc-ugds-user", "Password1!"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.komodo_user_group.test", "name", "tf-test-ds-group-users"),
 					resource.TestCheckResourceAttr("data.komodo_user_group.test", "users.#", "1"),
-					resource.TestCheckResourceAttr("data.komodo_user_group.test", "users.0", userID),
+					resource.TestCheckResourceAttrPair("data.komodo_user_group.test", "users.0", "komodo_user.member", "id"),
 				),
 			},
 		},
@@ -63,15 +58,20 @@ data "komodo_user_group" "test" {
 `, name)
 }
 
-func testAccUserGroupDataSourceConfig_withUser(name, userID string) string {
+func testAccUserGroupDataSourceConfig_withUser(name, username, password string) string {
 	return fmt.Sprintf(`
+resource "komodo_user" "member" {
+  username = %[2]q
+  password = %[3]q
+}
+
 resource "komodo_user_group" "test" {
-  name  = %q
-  users = [%q]
+  name  = %[1]q
+  users = [komodo_user.member.id]
 }
 
 data "komodo_user_group" "test" {
   name = komodo_user_group.test.name
 }
-`, name, userID)
+`, name, username, password)
 }

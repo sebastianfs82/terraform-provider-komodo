@@ -108,17 +108,14 @@ func TestAccDeploymentResource_disappears(t *testing.T) {
 }
 
 func TestAccDeploymentResource_rename(t *testing.T) {
-	serverID := os.Getenv("KOMODO_TEST_SERVER_ID")
-	if serverID == "" {
-		t.Skip("KOMODO_TEST_SERVER_ID must be set for deployment rename tests (rename requires a known container state)")
-	}
+	serverID := testAccLookupServerID(t, "deployment rename tests (rename requires a known container state)")
 	var savedID string
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDeploymentResourceConfig("tf-acc-deployment-rename-orig"),
+				Config: testAccDeploymentResourceConfigWithServer("tf-acc-deployment-rename-orig", serverID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_deployment.test", "name", "tf-acc-deployment-rename-orig"),
 					resource.TestCheckResourceAttrSet("komodo_deployment.test", "id"),
@@ -130,7 +127,7 @@ func TestAccDeploymentResource_rename(t *testing.T) {
 				),
 			},
 			{
-				Config: testAccDeploymentResourceConfig("tf-acc-deployment-rename-new"),
+				Config: testAccDeploymentResourceConfigWithServer("tf-acc-deployment-rename-new", serverID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("komodo_deployment.test", "name", "tf-acc-deployment-rename-new"),
 					func(s *terraform.State) error {
@@ -167,6 +164,15 @@ resource "komodo_deployment" "test" {
   name = %q
 }
 `, name)
+}
+
+func testAccDeploymentResourceConfigWithServer(name, serverID string) string {
+	return fmt.Sprintf(`
+resource "komodo_deployment" "test" {
+  name      = %q
+  server_id = %q
+}
+`, name, serverID)
 }
 
 func testAccDeploymentResourceConfigWithImage(name, image string) string {

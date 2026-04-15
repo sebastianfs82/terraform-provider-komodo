@@ -2998,6 +2998,28 @@ func (c *Client) ListBuilds(ctx context.Context) ([]Build, error) {
 	return builds, nil
 }
 
+// ListFullBuilds returns all builds with full config (builder_id, linked_repo, etc.).
+func (c *Client) ListFullBuilds(ctx context.Context) ([]Build, error) {
+	payload := map[string]interface{}{
+		"type":   "ListFullBuilds",
+		"params": map[string]interface{}{"query": map[string]interface{}{}},
+	}
+	resp, err := c.doRequest(ctx, "/read", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var builds []Build
+	if err := json.NewDecoder(resp.Body).Decode(&builds); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return builds, nil
+}
+
 // CreateDeployment creates a new deployment and returns the created deployment.
 func (c *Client) CreateDeployment(ctx context.Context, req CreateDeploymentRequest) (*Deployment, error) {
 	payload := map[string]interface{}{
@@ -3121,6 +3143,28 @@ func (c *Client) ListDeployments(ctx context.Context) ([]Deployment, error) {
 	payload := map[string]interface{}{
 		"type":   "ListDeployments",
 		"params": map[string]interface{}{},
+	}
+	resp, err := c.doRequest(ctx, "/read", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var deployments []Deployment
+	if err := json.NewDecoder(resp.Body).Decode(&deployments); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return deployments, nil
+}
+
+// ListFullDeployments returns all deployments with full config (server_id, etc.).
+func (c *Client) ListFullDeployments(ctx context.Context) ([]Deployment, error) {
+	payload := map[string]interface{}{
+		"type":   "ListFullDeployments",
+		"params": map[string]interface{}{"query": map[string]interface{}{}},
 	}
 	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {
@@ -3332,6 +3376,28 @@ func (c *Client) ListResourceSyncs(ctx context.Context) ([]ResourceSync, error) 
 	payload := map[string]interface{}{
 		"type":   "ListResourceSyncs",
 		"params": map[string]interface{}{},
+	}
+	resp, err := c.doRequest(ctx, "/read", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var syncs []ResourceSync
+	if err := json.NewDecoder(resp.Body).Decode(&syncs); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return syncs, nil
+}
+
+// ListFullResourceSyncs returns all resource syncs with full config details (linked_repo, etc.).
+func (c *Client) ListFullResourceSyncs(ctx context.Context) ([]ResourceSync, error) {
+	payload := map[string]interface{}{
+		"type":   "ListFullResourceSyncs",
+		"params": map[string]interface{}{"query": map[string]interface{}{}},
 	}
 	resp, err := c.doRequest(ctx, "/read", payload)
 	if err != nil {

@@ -5,17 +5,13 @@ package provider
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestAccReposDataSource_filteredByServerID(t *testing.T) {
-	serverID := os.Getenv("KOMODO_TEST_SERVER_ID")
-	if serverID == "" {
-		t.Skip("KOMODO_TEST_SERVER_ID must be set to run server_id filter tests")
-	}
+	serverID := testAccLookupServerID(t, "server_id filter tests")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
