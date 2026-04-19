@@ -4,12 +4,12 @@
 package provider
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"regexp"
 	"testing"
-	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
@@ -64,12 +64,12 @@ data "komodo_alerter" "test" {
 }
 
 func TestUnitAlerterDataSource_configure(t *testing.T) {
-d := &AlerterDataSource{}
-resp := &datasource.ConfigureResponse{}
-d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
-if !resp.Diagnostics.HasError() {
-t.Fatal("expected diagnostic error for wrong provider data type")
-}
+	d := &AlerterDataSource{}
+	resp := &datasource.ConfigureResponse{}
+	d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for wrong provider data type")
+	}
 }
 
 func TestAccAlerterDataSource_bothSet_isError(t *testing.T) {
