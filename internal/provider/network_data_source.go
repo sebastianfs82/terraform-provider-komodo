@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -29,10 +30,10 @@ type NetworkDataSourceModel struct {
 	ServerID    types.String `tfsdk:"server_id"`
 	Name        types.String `tfsdk:"name"`
 	NetworkID   types.String `tfsdk:"network_id"`
-	Created     types.String `tfsdk:"created"`
+	CreatedAt   types.String `tfsdk:"created_at"`
 	Scope       types.String `tfsdk:"scope"`
 	Driver      types.String `tfsdk:"driver"`
-	EnableIPv6  types.Bool   `tfsdk:"enable_ipv6"`
+	IPv6Enabled types.Bool   `tfsdk:"ipv6_enabled"`
 	IPAMDriver  types.String `tfsdk:"ipam_driver"`
 	IPAMSubnet  types.String `tfsdk:"ipam_subnet"`
 	IPAMGateway types.String `tfsdk:"ipam_gateway"`
@@ -62,9 +63,9 @@ func (d *NetworkDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed:            true,
 				MarkdownDescription: "The docker-assigned network ID.",
 			},
-			"created": schema.StringAttribute{
+			"created_at": schema.StringAttribute{
 				Computed:            true,
-				MarkdownDescription: "The timestamp when the network was created.",
+				MarkdownDescription: "The timestamp when the network was created (RFC3339 format, e.g. `2006-01-02T15:04:05Z`).",
 			},
 			"scope": schema.StringAttribute{
 				Computed:            true,
@@ -74,7 +75,7 @@ func (d *NetworkDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed:            true,
 				MarkdownDescription: "The network driver (e.g. `bridge`, `overlay`).",
 			},
-			"enable_ipv6": schema.BoolAttribute{
+			"ipv6_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether IPv6 is enabled on the network.",
 			},
@@ -165,9 +166,13 @@ func (d *NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		data.NetworkID = types.StringValue("")
 	}
 	if found.Created != nil {
-		data.Created = types.StringValue(*found.Created)
+		if t, err := time.Parse(time.RFC3339Nano, *found.Created); err == nil {
+			data.CreatedAt = types.StringValue(t.UTC().Format(time.RFC3339))
+		} else {
+			data.CreatedAt = types.StringValue(*found.Created)
+		}
 	} else {
-		data.Created = types.StringValue("")
+		data.CreatedAt = types.StringValue("")
 	}
 	if found.Scope != nil {
 		data.Scope = types.StringValue(*found.Scope)
@@ -180,9 +185,9 @@ func (d *NetworkDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		data.Driver = types.StringValue("")
 	}
 	if found.EnableIPv6 != nil {
-		data.EnableIPv6 = types.BoolValue(*found.EnableIPv6)
+		data.IPv6Enabled = types.BoolValue(*found.EnableIPv6)
 	} else {
-		data.EnableIPv6 = types.BoolValue(false)
+		data.IPv6Enabled = types.BoolValue(false)
 	}
 	if found.IPAMDriver != nil {
 		data.IPAMDriver = types.StringValue(*found.IPAMDriver)

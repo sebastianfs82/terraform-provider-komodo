@@ -53,6 +53,7 @@ type BuildImageModel struct {
 	IncludeVersionTags types.Bool                 `tfsdk:"include_version_tags_enabled"`
 	IncludeCommitTag   types.Bool                 `tfsdk:"include_commit_tag_enabled"`
 	Registries         []ImageRegistryConfigModel `tfsdk:"registry"`
+	Dockerfile         *DockerfileModel           `tfsdk:"dockerfile"`
 }
 
 // BuildArgumentModel holds a single build argument for a Docker build.
@@ -69,16 +70,24 @@ type DockerBuildModel struct {
 	Path           types.String         `tfsdk:"path"`
 	ExtraArguments types.List           `tfsdk:"extra_arguments"`
 	Arguments      []BuildArgumentModel `tfsdk:"argument"`
+	UseBuildx      types.Bool           `tfsdk:"buildx_enabled"`
+}
+
+// DockerfileModel is the Terraform model for the dockerfile block of a build.
+type DockerfileModel struct {
+	Contents types.String `tfsdk:"contents"`
+	Path     types.String `tfsdk:"path"`
 }
 
 // BuildSourceModel is the Terraform model for the source block of a build.
 type BuildSourceModel struct {
-	RepoID    types.String `tfsdk:"repo_id"`
-	URL       types.String `tfsdk:"url"`
-	AccountID types.String `tfsdk:"account_id"`
-	Path      types.String `tfsdk:"path"`
-	Branch    types.String `tfsdk:"branch"`
-	Commit    types.String `tfsdk:"commit"`
+	RepoID      types.String `tfsdk:"repo_id"`
+	URL         types.String `tfsdk:"url"`
+	AccountID   types.String `tfsdk:"account_id"`
+	Path        types.String `tfsdk:"path"`
+	Branch      types.String `tfsdk:"branch"`
+	Commit      types.String `tfsdk:"commit"`
+	FilesOnHost types.Bool   `tfsdk:"on_host_enabled"`
 }
 
 // ImageRegistryConfigModel is the Terraform model for an image_registry list entry.
@@ -98,13 +107,9 @@ type BuildResourceModel struct {
 	Links            types.List          `tfsdk:"links"`
 	Source           *BuildSourceModel   `tfsdk:"source"`
 	Webhook          *WebhookModel       `tfsdk:"webhook"`
-	FilesOnHost      types.Bool          `tfsdk:"files_on_host"`
 	Build            *DockerBuildModel   `tfsdk:"build"`
-	DockerfilePath   types.String        `tfsdk:"dockerfile_path"`
-	SkipSecretInterp types.Bool          `tfsdk:"skip_secret_interp"`
-	UseBuildx        types.Bool          `tfsdk:"use_buildx"`
+	SkipSecretInterp types.Bool          `tfsdk:"skip_secret_interpolation_enabled"`
 	PreBuild         *SystemCommandModel `tfsdk:"pre_build"`
-	Dockerfile       types.String        `tfsdk:"dockerfile"`
 	Labels           types.String        `tfsdk:"labels"`
 }
 
@@ -162,44 +167,12 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Default:             listdefault.StaticValue(types.ListValueMust(types.StringType, []attr.Value{})),
 				MarkdownDescription: "Quick links associated with this build.",
 			},
-			"files_on_host": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to use files on the host filesystem for the build context instead of a git repository.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"dockerfile_path": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Path to the Dockerfile relative to `build_path`.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"skip_secret_interp": schema.BoolAttribute{
+			"skip_secret_interpolation_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Whether to skip secret interpolation in build args.",
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"use_buildx": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Whether to use `docker buildx` for multi-platform builds.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"dockerfile": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Inline Dockerfile contents. Overrides `dockerfile_path` when set.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"labels": schema.StringAttribute{
@@ -283,6 +256,27 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 							},
 						},
 					},
+					"dockerfile": schema.SingleNestedBlock{
+						MarkdownDescription: "Dockerfile configuration.",
+						Attributes: map[string]schema.Attribute{
+							"contents": schema.StringAttribute{
+								Optional:            true,
+								Computed:            true,
+								MarkdownDescription: "Inline Dockerfile contents. Overrides `path` when set.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
+							},
+							"path": schema.StringAttribute{
+								Optional:            true,
+								Computed:            true,
+								MarkdownDescription: "Path to the Dockerfile relative to `build.path`.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
+							},
+						},
+					},
 				},
 			},
 			"source": schema.SingleNestedBlock{
@@ -311,6 +305,12 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					"commit": schema.StringAttribute{
 						Optional:            true,
 						MarkdownDescription: "A specific commit hash to check out.",
+					},
+					"on_host_enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(false),
+						MarkdownDescription: "Whether to use files on the host filesystem for the build context instead of a git repository.",
 					},
 				},
 			},
@@ -341,6 +341,14 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						Optional:            true,
 						ElementType:         types.StringType,
 						MarkdownDescription: "Additional arguments to pass to the `docker build` command.",
+					},
+					"buildx_enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						MarkdownDescription: "Whether to use `docker buildx` for multi-platform builds.",
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
+						},
 					},
 				},
 				Blocks: map[string]schema.Block{
@@ -708,9 +716,13 @@ func partialBuildConfigFromModel(ctx context.Context, c *client.Client, data *Bu
 		cfg.WebhookEnabled = &f
 		cfg.WebhookSecret = &s
 	}
-	if !data.FilesOnHost.IsNull() && !data.FilesOnHost.IsUnknown() {
-		v := data.FilesOnHost.ValueBool()
+	if data.Source != nil && !data.Source.FilesOnHost.IsNull() && !data.Source.FilesOnHost.IsUnknown() {
+		v := data.Source.FilesOnHost.ValueBool()
 		cfg.FilesOnHost = &v
+	}
+	if !data.SkipSecretInterp.IsNull() && !data.SkipSecretInterp.IsUnknown() {
+		v := data.SkipSecretInterp.ValueBool()
+		cfg.SkipSecretInterp = &v
 	}
 	if data.Build != nil {
 		if !data.Build.Path.IsNull() && !data.Build.Path.IsUnknown() {
@@ -741,18 +753,10 @@ func partialBuildConfigFromModel(ctx context.Context, c *client.Client, data *Bu
 			v := buildArgsToString(secretBuildArgs)
 			cfg.SecretArgs = &v
 		}
-	}
-	if !data.DockerfilePath.IsNull() && !data.DockerfilePath.IsUnknown() {
-		v := data.DockerfilePath.ValueString()
-		cfg.DockerfilePath = &v
-	}
-	if !data.SkipSecretInterp.IsNull() && !data.SkipSecretInterp.IsUnknown() {
-		v := data.SkipSecretInterp.ValueBool()
-		cfg.SkipSecretInterp = &v
-	}
-	if !data.UseBuildx.IsNull() && !data.UseBuildx.IsUnknown() {
-		v := data.UseBuildx.ValueBool()
-		cfg.UseBuildx = &v
+		if !data.Build.UseBuildx.IsNull() && !data.Build.UseBuildx.IsUnknown() {
+			v := data.Build.UseBuildx.ValueBool()
+			cfg.UseBuildx = &v
+		}
 	}
 	if data.PreBuild != nil {
 		cfg.PreBuild = &client.SystemCommand{
@@ -760,13 +764,18 @@ func partialBuildConfigFromModel(ctx context.Context, c *client.Client, data *Bu
 			Command: data.PreBuild.Command.ValueString(),
 		}
 	} else {
-		// Explicitly clear pre_build on the API when the user removes the block.
-		empty := ""
-		cfg.PreBuild = &client.SystemCommand{Path: empty, Command: empty}
+		emptyCmd := client.SystemCommand{Path: "", Command: ""}
+		cfg.PreBuild = &emptyCmd
 	}
-	if !data.Dockerfile.IsNull() && !data.Dockerfile.IsUnknown() {
-		v := data.Dockerfile.ValueString()
-		cfg.Dockerfile = &v
+	if data.Image != nil && data.Image.Dockerfile != nil {
+		if !data.Image.Dockerfile.Path.IsNull() && !data.Image.Dockerfile.Path.IsUnknown() {
+			v := data.Image.Dockerfile.Path.ValueString()
+			cfg.DockerfilePath = &v
+		}
+		if !data.Image.Dockerfile.Contents.IsNull() && !data.Image.Dockerfile.Contents.IsUnknown() {
+			v := data.Image.Dockerfile.Contents.ValueString()
+			cfg.Dockerfile = &v
+		}
 	}
 	if !data.Labels.IsNull() && !data.Labels.IsUnknown() {
 		v := data.Labels.ValueString()
@@ -812,6 +821,13 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 		} else if data.Image != nil && data.Image.Registries != nil && len(data.Image.Registries) == 0 {
 			regs = []ImageRegistryConfigModel{}
 		}
+		var docfile *DockerfileModel
+		if data.Image.Dockerfile != nil {
+			docfile = &DockerfileModel{
+				Path:     types.StringValue(b.Config.DockerfilePath),
+				Contents: types.StringValue(strings.TrimRight(b.Config.Dockerfile, "\n\r")),
+			}
+		}
 		data.Image = &BuildImageModel{
 			Name:               types.StringValue(b.Config.ImageName),
 			Tag:                types.StringValue(b.Config.ImageTag),
@@ -819,6 +835,7 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 			IncludeVersionTags: types.BoolValue(b.Config.IncludeVersionTags),
 			IncludeCommitTag:   types.BoolValue(b.Config.IncludeCommitTag),
 			Registries:         regs,
+			Dockerfile:         docfile,
 		}
 	}
 
@@ -833,7 +850,7 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 	}
 
 	// Source block: keep nil when all git fields are empty/default and caller didn't set it.
-	if data.Source != nil || b.Config.Repo != "" || b.Config.LinkedRepo != "" {
+	if data.Source != nil || b.Config.Repo != "" || b.Config.LinkedRepo != "" || b.Config.FilesOnHost {
 		// When repo_id is set, URL/account_id/path/branch/commit are derived from the
 		// linked repo by the API and must not be persisted, to avoid permanent diffs.
 		var urlVal types.String
@@ -865,12 +882,13 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 			urlVal = types.StringNull()
 		}
 		data.Source = &BuildSourceModel{
-			RepoID:    strOrNull(b.Config.LinkedRepo),
-			URL:       urlVal,
-			AccountID: accountIDVal,
-			Path:      pathVal,
-			Branch:    branchVal,
-			Commit:    commitVal,
+			RepoID:      strOrNull(b.Config.LinkedRepo),
+			URL:         urlVal,
+			AccountID:   accountIDVal,
+			Path:        pathVal,
+			Branch:      branchVal,
+			Commit:      commitVal,
+			FilesOnHost: types.BoolValue(b.Config.FilesOnHost),
 		}
 	} else {
 		data.Source = nil
@@ -887,7 +905,6 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 	} else {
 		data.Webhook = nil
 	}
-	data.FilesOnHost = types.BoolValue(b.Config.FilesOnHost)
 	if data.Build != nil {
 		var extraArgs types.List
 		if len(b.Config.ExtraArgs) > 0 {
@@ -906,12 +923,10 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 			Path:           types.StringValue(b.Config.BuildPath),
 			ExtraArguments: extraArgs,
 			Arguments:      allArgs,
+			UseBuildx:      types.BoolValue(b.Config.UseBuildx),
 		}
 	}
-	data.DockerfilePath = types.StringValue(b.Config.DockerfilePath)
-
 	data.SkipSecretInterp = types.BoolValue(b.Config.SkipSecretInterp)
-	data.UseBuildx = types.BoolValue(b.Config.UseBuildx)
 
 	// pre_build: only show when non-empty.
 	if b.Config.PreBuild.Path != "" || b.Config.PreBuild.Command != "" {
@@ -929,7 +944,6 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 		data.PreBuild = nil
 	}
 
-	data.Dockerfile = types.StringValue(strings.TrimRight(b.Config.Dockerfile, "\n\r"))
 	data.Labels = types.StringValue(strings.TrimRight(b.Config.Labels, "\n\r"))
 }
 

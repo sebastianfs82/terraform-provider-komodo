@@ -5,7 +5,10 @@ package provider
 
 import (
 	"fmt"
+	"context"
+	"regexp"
 	"testing"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -149,4 +152,52 @@ data "komodo_procedure" "test" {
   depends_on = [komodo_procedure.src]
 }
 `, name)
+}
+
+func TestUnitProcedureDataSource_configure(t *testing.T) {
+d := &ProcedureDataSource{}
+resp := &datasource.ConfigureResponse{}
+d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+if !resp.Diagnostics.HasError() {
+t.Fatal("expected diagnostic error for wrong provider data type")
+}
+}
+
+func TestAccProcedureDataSource_bothSet_isError(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccProcedureDataSourceConfig_bothSet(),
+				ExpectError: regexp.MustCompile(`Only one of`),
+			},
+		},
+	})
+}
+
+func TestAccProcedureDataSource_neitherSet_isError(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccProcedureDataSourceConfig_neitherSet(),
+				ExpectError: regexp.MustCompile(`One of`),
+			},
+		},
+	})
+}
+
+func testAccProcedureDataSourceConfig_bothSet() string {
+	return `
+data "komodo_procedure" "test" {
+  id   = "some-id"
+  name = "some-name"
+}
+`
+}
+
+func testAccProcedureDataSourceConfig_neitherSet() string {
+	return `
+data "komodo_procedure" "test" {}
+`
 }

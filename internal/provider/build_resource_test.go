@@ -10,7 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -870,4 +873,215 @@ resource "komodo_build" "test" {
   }
 }
 `, name, registryBlocks)
+}
+
+// ---------------------------------------------------------------------------
+// build.buildx_enabled
+// ---------------------------------------------------------------------------
+
+func TestAccBuildResource_buildxEnabled(t *testing.T) {
+	const name = "tf-acc-build-buildx"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Enable buildx inside the build block
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  build {
+    buildx_enabled = true
+  }
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "build.buildx_enabled", "true"),
+					resource.TestCheckResourceAttrSet("komodo_build.test", "id"),
+				),
+			},
+			// Second plan must be empty (no drift)
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  build {
+    buildx_enabled = true
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Disable buildx
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  build {
+    buildx_enabled = false
+  }
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "build.buildx_enabled", "false"),
+				),
+			},
+		},
+	})
+}
+
+// ---------------------------------------------------------------------------
+// image.dockerfile block
+// ---------------------------------------------------------------------------
+
+func TestAccBuildResource_imageDockerfile(t *testing.T) {
+	const name = "tf-acc-build-dockerfile"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Set a custom Dockerfile path inside image block
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  image {
+    name = "myorg/my-service"
+    dockerfile {
+      path = "docker/Dockerfile.prod"
+    }
+  }
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "image.dockerfile.path", "docker/Dockerfile.prod"),
+					resource.TestCheckResourceAttrSet("komodo_build.test", "id"),
+				),
+			},
+			// Second plan must be empty (no drift)
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  image {
+    name = "myorg/my-service"
+    dockerfile {
+      path = "docker/Dockerfile.prod"
+    }
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Update dockerfile path
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  image {
+    name = "myorg/my-service"
+    dockerfile {
+      path = "Dockerfile"
+    }
+  }
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("komodo_build.test", "image.dockerfile.path", "Dockerfile"),
+				),
+			},
+			// Remove dockerfile block
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  image {
+    name = "myorg/my-service"
+  }
+}
+`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("komodo_build.test", "image.dockerfile.path"),
+				),
+			},
+		},
+	})
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+func wrongRawBuildPlan(t *testing.T, r *BuildResource) tfsdk.Plan {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.Plan{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func wrongRawBuildState(t *testing.T, r *BuildResource) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.State{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func TestUnitBuildResource_configure(t *testing.T) {
+	t.Run("wrong_type", func(t *testing.T) {
+		r := &BuildResource{}
+		req := fwresource.ConfigureRequest{ProviderData: "not-a-client"}
+		resp := &fwresource.ConfigureResponse{}
+		r.Configure(context.Background(), req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected diagnostic error for wrong ProviderData type")
+		}
+	})
+}
+
+func TestUnitBuildResource_createPlanGetError(t *testing.T) {
+	r := &BuildResource{client: &client.Client{}}
+	req := fwresource.CreateRequest{Plan: wrongRawBuildPlan(t, r)}
+	resp := &fwresource.CreateResponse{}
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitBuildResource_readStateGetError(t *testing.T) {
+	r := &BuildResource{client: &client.Client{}}
+	req := fwresource.ReadRequest{State: wrongRawBuildState(t, r)}
+	resp := &fwresource.ReadResponse{}
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitBuildResource_updatePlanGetError(t *testing.T) {
+	r := &BuildResource{client: &client.Client{}}
+	req := fwresource.UpdateRequest{Plan: wrongRawBuildPlan(t, r)}
+	resp := &fwresource.UpdateResponse{}
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitBuildResource_deleteStateGetError(t *testing.T) {
+	r := &BuildResource{client: &client.Client{}}
+	req := fwresource.DeleteRequest{State: wrongRawBuildState(t, r)}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
 }

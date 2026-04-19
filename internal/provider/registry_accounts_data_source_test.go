@@ -5,7 +5,9 @@ package provider
 
 import (
 	"fmt"
+	"context"
 	"testing"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -59,4 +61,13 @@ data "komodo_registry_accounts" "all" {
   depends_on = [komodo_registry_account.test]
 }
 `, domain, username, token)
+}
+
+func TestUnitRegistryAccountsDataSource_configure(t *testing.T) {
+d := &RegistryAccountsDataSource{}
+resp := &datasource.ConfigureResponse{}
+d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+if !resp.Diagnostics.HasError() {
+t.Fatal("expected diagnostic error for wrong provider data type")
+}
 }

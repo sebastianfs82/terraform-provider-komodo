@@ -11,6 +11,9 @@ import (
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -247,5 +250,81 @@ func testAccProviderAccountDisappears(resourceName string) resource.TestCheckFun
 			os.Getenv("KOMODO_PASSWORD"),
 		)
 		return c.DeleteGitProviderAccount(context.Background(), rs.Primary.ID)
+	}
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+func wrongRawProviderAccountPlan(t *testing.T, r *ProviderAccountResource) tfsdk.Plan {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.Plan{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func wrongRawProviderAccountState(t *testing.T, r *ProviderAccountResource) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.State{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func TestUnitProviderAccountResource_configure(t *testing.T) {
+	t.Run("wrong_type", func(t *testing.T) {
+		r := &ProviderAccountResource{}
+		req := fwresource.ConfigureRequest{ProviderData: "not-a-client"}
+		resp := &fwresource.ConfigureResponse{}
+		r.Configure(context.Background(), req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected diagnostic error for wrong ProviderData type")
+		}
+	})
+}
+
+func TestUnitProviderAccountResource_createPlanGetError(t *testing.T) {
+	r := &ProviderAccountResource{client: &client.Client{}}
+	req := fwresource.CreateRequest{Plan: wrongRawProviderAccountPlan(t, r)}
+	resp := &fwresource.CreateResponse{}
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitProviderAccountResource_readStateGetError(t *testing.T) {
+	r := &ProviderAccountResource{client: &client.Client{}}
+	req := fwresource.ReadRequest{State: wrongRawProviderAccountState(t, r)}
+	resp := &fwresource.ReadResponse{}
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitProviderAccountResource_updatePlanGetError(t *testing.T) {
+	r := &ProviderAccountResource{client: &client.Client{}}
+	req := fwresource.UpdateRequest{Plan: wrongRawProviderAccountPlan(t, r)}
+	resp := &fwresource.UpdateResponse{}
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitProviderAccountResource_deleteStateGetError(t *testing.T) {
+	r := &ProviderAccountResource{client: &client.Client{}}
+	req := fwresource.DeleteRequest{State: wrongRawProviderAccountState(t, r)}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
 	}
 }

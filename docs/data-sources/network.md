@@ -30,14 +30,14 @@ data "komodo_network" "example" {
 ### Read-Only
 
 - `attachable` (Boolean) Whether manual container attachment is allowed.
-- `created` (String) The timestamp when the network was created.
+- `created_at` (String) The timestamp when the network was created (RFC3339 format, e.g. `2006-01-02T15:04:05Z`).
 - `driver` (String) The network driver (e.g. `bridge`, `overlay`).
-- `enable_ipv6` (Boolean) Whether IPv6 is enabled on the network.
 - `in_use` (Boolean) Whether the network is currently attached to one or more containers.
 - `ingress` (Boolean) Whether the network is an ingress network (used for swarm routing mesh).
 - `internal` (Boolean) Whether the network is internal (not connected to the external network).
 - `ipam_driver` (String) The IPAM driver used by the network.
 - `ipam_gateway` (String) The IPAM gateway configured for the network.
 - `ipam_subnet` (String) The IPAM subnet configured for the network.
+- `ipv6_enabled` (Boolean) Whether IPv6 is enabled on the network.
 - `network_id` (String) The docker-assigned network ID.
 - `scope` (String) The scope of the network (e.g. `local`, `swarm`).

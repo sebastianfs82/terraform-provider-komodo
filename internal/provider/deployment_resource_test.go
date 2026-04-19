@@ -12,6 +12,10 @@ import (
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -602,4 +606,134 @@ resource "komodo_deployment" "test" {
   secret_interpolation_enabled = %v
 }
 `, name, enabled)
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+func wrongRawDeploymentPlan(t *testing.T, r *DeploymentResource) tfsdk.Plan {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.Plan{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func wrongRawDeploymentState(t *testing.T, r *DeploymentResource) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.State{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func TestUnitDeploymentResource_configure(t *testing.T) {
+	t.Run("wrong_type", func(t *testing.T) {
+		r := &DeploymentResource{}
+		req := fwresource.ConfigureRequest{ProviderData: "not-a-client"}
+		resp := &fwresource.ConfigureResponse{}
+		r.Configure(context.Background(), req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected diagnostic error for wrong ProviderData type")
+		}
+	})
+}
+
+func TestUnitDeploymentResource_createPlanGetError(t *testing.T) {
+	r := &DeploymentResource{client: &client.Client{}}
+	req := fwresource.CreateRequest{Plan: wrongRawDeploymentPlan(t, r)}
+	resp := &fwresource.CreateResponse{}
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitDeploymentResource_readStateGetError(t *testing.T) {
+	r := &DeploymentResource{client: &client.Client{}}
+	req := fwresource.ReadRequest{State: wrongRawDeploymentState(t, r)}
+	resp := &fwresource.ReadResponse{}
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitDeploymentResource_updatePlanGetError(t *testing.T) {
+	r := &DeploymentResource{client: &client.Client{}}
+	req := fwresource.UpdateRequest{Plan: wrongRawDeploymentPlan(t, r)}
+	resp := &fwresource.UpdateResponse{}
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitDeploymentResource_deleteStateGetError(t *testing.T) {
+	r := &DeploymentResource{client: &client.Client{}}
+	req := fwresource.DeleteRequest{State: wrongRawDeploymentState(t, r)}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitDeploymentResource_imageModelToClient_buildNoVersion(t *testing.T) {
+	m := &DeploymentImageModel{
+		Type:    types.StringValue("Build"),
+		BuildID: types.StringValue("build-abc"),
+		Version: types.StringNull(),
+		Image:   types.StringNull(),
+	}
+	result := imageModelToClient(m)
+	if result.Build == nil {
+		t.Fatal("expected Build to be set")
+	}
+	if result.Build.BuildID != "build-abc" {
+		t.Fatalf("unexpected BuildID: %s", result.Build.BuildID)
+	}
+	if result.Image != nil {
+		t.Fatal("expected Image to be nil for Build type")
+	}
+}
+
+func TestUnitDeploymentResource_imageModelToClient_buildWithVersion(t *testing.T) {
+	m := &DeploymentImageModel{
+		Type:    types.StringValue("Build"),
+		BuildID: types.StringValue("build-xyz"),
+		Version: types.StringValue("2.3.4"),
+		Image:   types.StringNull(),
+	}
+	result := imageModelToClient(m)
+	if result.Build == nil {
+		t.Fatal("expected Build to be set")
+	}
+	if result.Build.Version.Major != 2 || result.Build.Version.Minor != 3 || result.Build.Version.Patch != 4 {
+		t.Fatalf("unexpected version: %+v", result.Build.Version)
+	}
+}
+
+func TestUnitDeploymentResource_imageModelToClient_imageType(t *testing.T) {
+	m := &DeploymentImageModel{
+		Type:    types.StringValue("Image"),
+		Image:   types.StringValue("nginx:latest"),
+		BuildID: types.StringNull(),
+		Version: types.StringNull(),
+	}
+	result := imageModelToClient(m)
+	if result.Image == nil {
+		t.Fatal("expected Image to be set")
+	}
+	if result.Image.Image != "nginx:latest" {
+		t.Fatalf("unexpected image: %s", result.Image.Image)
+	}
+	if result.Build != nil {
+		t.Fatal("expected Build to be nil for Image type")
+	}
 }

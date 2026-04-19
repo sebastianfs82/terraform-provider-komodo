@@ -40,7 +40,7 @@ Read-Only:
 
 - `branch` (String) The git branch.
 - `id` (String) The resource sync identifier (ObjectId).
-- `managed` (Boolean) Whether the sync manages resources (creates/deletes).
+- `managed_mode_enabled` (Boolean) Whether the sync manages resources (creates/deletes).
 - `name` (String) The name of the resource sync.
 - `repo` (String) The git repository path (owner/repo).
 - `webhook_enabled` (Boolean) Whether webhook triggers are enabled.

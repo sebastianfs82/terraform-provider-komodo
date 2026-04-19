@@ -1,9 +1,16 @@
 resource "komodo_resource_sync" "example" {
-  name   = "my-resource-sync"
-  repo   = "myorg/infra"
-  branch = "main"
+  name = "my-resource-sync"
 
-  resource_path     = ["resources/"]
-  managed           = true
-  include_variables = true
+  source {
+    path           = "myorg/infra"
+    branch         = "main"
+    resource_paths = ["resources/"]
+  }
+
+  scope = ["resources", "variables"]
+
+  managed_mode {
+    enabled    = true
+    tag_filter = ["prod"]
+  }
 }

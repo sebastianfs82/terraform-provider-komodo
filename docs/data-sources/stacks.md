@@ -45,13 +45,11 @@ Read-Only:
 
 - `alerts_enabled` (Boolean) Whether stack-state-change alerts are sent.
 - `auto_pull_enabled` (Boolean) Whether `compose pull` is run before every deploy.
-- `auto_update_enabled` (Boolean) Whether the stack is automatically redeployed when newer images are found.
-- `auto_update_scope` (String) How services are redeployed when `auto_update_enabled` is active. Either `"stack"` or `"service"`.
+- `auto_update` (Attributes) Auto-update configuration. (see [below for nested schema](#nestedatt--stacks--auto_update))
 - `build` (Attributes) Build configuration for the stack. (see [below for nested schema](#nestedatt--stacks--build))
-- `compose` (Attributes) Compose file configuration. (see [below for nested schema](#nestedatt--stacks--compose))
 - `compose_cmd_wrapper` (String) A command prefix to wrap the compose command.
 - `compose_cmd_wrapper_include` (List of String) Which compose subcommands get wrapped by `compose_cmd_wrapper`.
-- `destroy_enforced` (Boolean) Whether `docker compose down` is run before `compose up`.
+- `destroy_mode_enabled` (Boolean) Whether `docker compose down` is run before `compose up`.
 - `environment` (Attributes) Environment variable configuration written to an env file before deploying. (see [below for nested schema](#nestedatt--stacks--environment))
 - `extra_arguments` (List of String) Extra arguments appended to the compose/stack deploy command.
 - `id` (String) The stack identifier (ObjectId).
@@ -68,6 +66,15 @@ Read-Only:
 - `swarm_id` (String) The ID of the swarm the stack runs on.
 - `webhook` (Attributes) Webhook configuration for the stack. (see [below for nested schema](#nestedatt--stacks--webhook))
 
+<a id="nestedatt--stacks--auto_update"></a>
+### Nested Schema for `stacks.auto_update`
+
+Read-Only:
+
+- `enabled` (Boolean) Whether the stack is automatically redeployed when newer images are found.
+- `scope` (String) How services are redeployed. Either `"stack"` or `"service"`.
+
+
 <a id="nestedatt--stacks--build"></a>
 ### Nested Schema for `stacks.build`
 
@@ -75,17 +82,6 @@ Read-Only:
 
 - `enabled` (Boolean) Whether `docker compose build` is run before deploying.
 - `extra_arguments` (List of String) Extra arguments appended to `docker compose build`.
-
-
-<a id="nestedatt--stacks--compose"></a>
-### Nested Schema for `stacks.compose`
-
-Read-Only:
-
-- `contents` (String) Inline compose file contents.
-- `directory` (String) Directory to `cd` into before running `docker compose up`.
-- `file_paths` (List of String) Paths to compose files relative to `directory`.
-- `local_enabled` (Boolean) Whether compose files are sourced from the host filesystem.
 
 
 <a id="nestedatt--stacks--environment"></a>
@@ -131,8 +127,12 @@ Read-Only:
 - `account_id` (String) The git account used for private repositories.
 - `branch` (String) The branch checked out.
 - `commit` (String) The specific commit hash checked out.
+- `contents` (String) Inline compose file contents.
+- `directory` (String) Directory to `cd` into before running `docker compose up`.
+- `file_paths` (List of String) Paths to compose files relative to `directory`.
+- `on_host_enabled` (Boolean) Whether compose files are sourced from the host filesystem.
 - `path` (String) The repository path, e.g. `owner/repo`.
-- `reclone_enforced` (Boolean) Whether the repo folder is deleted and recloned instead of `git pull`.
+- `reclone_enabled` (Boolean) Whether the repo folder is deleted and recloned instead of `git pull`.
 - `repo_id` (String) Name or ID of the linked `komodo_repo` resource.
 - `url` (String) The git provider URL, e.g. `https://github.com`.
 

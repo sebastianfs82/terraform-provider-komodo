@@ -11,6 +11,9 @@ import (
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -171,4 +174,100 @@ resource "komodo_api_key" "test" {
   service_user_id = komodo_service_user.svc.id
 }
 `, username, keyName)
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+func wrongRawApiKeyPlan(t *testing.T, r *ApiKeyResource) tfsdk.Plan {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.Plan{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func wrongRawApiKeyState(t *testing.T, r *ApiKeyResource) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.State{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func TestUnitApiKeyResource_configure(t *testing.T) {
+	t.Run("wrong_type", func(t *testing.T) {
+		r := &ApiKeyResource{}
+		req := fwresource.ConfigureRequest{ProviderData: "not-a-client"}
+		resp := &fwresource.ConfigureResponse{}
+		r.Configure(context.Background(), req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected diagnostic error for wrong ProviderData type")
+		}
+	})
+}
+
+func TestUnitApiKeyResource_createPlanGetError(t *testing.T) {
+	r := &ApiKeyResource{client: &client.Client{}}
+	req := fwresource.CreateRequest{Plan: wrongRawApiKeyPlan(t, r)}
+	resp := &fwresource.CreateResponse{}
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitApiKeyResource_readStateGetError(t *testing.T) {
+	r := &ApiKeyResource{client: &client.Client{}}
+	req := fwresource.ReadRequest{State: wrongRawApiKeyState(t, r)}
+	resp := &fwresource.ReadResponse{}
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitApiKeyResource_deleteStateGetError(t *testing.T) {
+	r := &ApiKeyResource{client: &client.Client{}}
+	req := fwresource.DeleteRequest{State: wrongRawApiKeyState(t, r)}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitApiKeyResource_updatePlanGetError(t *testing.T) {
+	r := &ApiKeyResource{client: &client.Client{}}
+	req := fwresource.UpdateRequest{Plan: wrongRawApiKeyPlan(t, r)}
+	resp := &fwresource.UpdateResponse{}
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func wrongRawApiKeyConfig(t *testing.T, r *ApiKeyResource) tfsdk.Config {
+	t.Helper()
+	schResp := &fwresource.SchemaResponse{}
+	r.Schema(context.Background(), fwresource.SchemaRequest{}, schResp)
+	return tfsdk.Config{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schResp.Schema,
+	}
+}
+
+func TestUnitApiKeyResource_validateConfig_configGetError(t *testing.T) {
+	r := &ApiKeyResource{}
+	req := fwresource.ValidateConfigRequest{Config: wrongRawApiKeyConfig(t, r)}
+	resp := &fwresource.ValidateConfigResponse{}
+	r.ValidateConfig(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed config")
+	}
 }

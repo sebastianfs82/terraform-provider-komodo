@@ -5,7 +5,9 @@ package provider
 
 import (
 	"fmt"
+	"context"
 	"testing"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -88,4 +90,13 @@ data "komodo_repos" "filtered" {
   depends_on = [komodo_repo.test]
 }
 `, name, name)
+}
+
+func TestUnitReposDataSource_configure(t *testing.T) {
+d := &ReposDataSource{}
+resp := &datasource.ConfigureResponse{}
+d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+if !resp.Diagnostics.HasError() {
+t.Fatal("expected diagnostic error for wrong provider data type")
+}
 }

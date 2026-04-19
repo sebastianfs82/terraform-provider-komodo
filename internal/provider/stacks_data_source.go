@@ -107,21 +107,15 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 									Computed:            true,
 									MarkdownDescription: "The specific commit hash checked out.",
 								},
-								"reclone_enforced": schema.BoolAttribute{
+								"reclone_enabled": schema.BoolAttribute{
 									Computed:            true,
 									MarkdownDescription: "Whether the repo folder is deleted and recloned instead of `git pull`.",
 								},
-							},
-						},
-						"compose": schema.SingleNestedAttribute{
-							Computed:            true,
-							MarkdownDescription: "Compose file configuration.",
-							Attributes: map[string]schema.Attribute{
 								"contents": schema.StringAttribute{
 									Computed:            true,
 									MarkdownDescription: "Inline compose file contents.",
 								},
-								"local_enabled": schema.BoolAttribute{
+								"on_host_enabled": schema.BoolAttribute{
 									Computed:            true,
 									MarkdownDescription: "Whether compose files are sourced from the host filesystem.",
 								},
@@ -170,17 +164,23 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 								},
 							},
 						},
-						"destroy_enforced": schema.BoolAttribute{
+						"destroy_mode_enabled": schema.BoolAttribute{
 							Computed:            true,
 							MarkdownDescription: "Whether `docker compose down` is run before `compose up`.",
 						},
-						"auto_update_enabled": schema.BoolAttribute{
+						"auto_update": schema.SingleNestedAttribute{
 							Computed:            true,
-							MarkdownDescription: "Whether the stack is automatically redeployed when newer images are found.",
-						},
-						"auto_update_scope": schema.StringAttribute{
-							Computed:            true,
-							MarkdownDescription: "How services are redeployed when `auto_update_enabled` is active. Either `\"stack\"` or `\"service\"`.",
+							MarkdownDescription: "Auto-update configuration.",
+							Attributes: map[string]schema.Attribute{
+								"enabled": schema.BoolAttribute{
+									Computed:            true,
+									MarkdownDescription: "Whether the stack is automatically redeployed when newer images are found.",
+								},
+								"scope": schema.StringAttribute{
+									Computed:            true,
+									MarkdownDescription: "How services are redeployed. Either `\"stack\"` or `\"service\"`.",
+								},
+							},
 						},
 						"poll_updates_enabled": schema.BoolAttribute{
 							Computed:            true,
@@ -337,34 +337,27 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		}
 
 		items = append(items, StackDataSourceModel{
-			ID:          types.StringValue(stack.ID.OID),
-			Name:        types.StringValue(stack.Name),
-			ServerID:    strOrNull(stack.Config.ServerID),
-			SwarmID:     strOrNull(stack.Config.SwarmID),
-			ProjectName: strOrNull(stack.Config.ProjectName),
-			Files: func() *FilesConfigModel {
-				f, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
-				return &FilesConfigModel{
-					Contents:     strOrNull(stack.Config.FileContents),
-					LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
-					Directory:    strOrNull(stack.Config.RunDirectory),
-					FilePaths:    f,
-				}
-			}(),
+			ID:              types.StringValue(stack.ID.OID),
+			Name:            types.StringValue(stack.Name),
+			ServerID:        strOrNull(stack.Config.ServerID),
+			SwarmID:         strOrNull(stack.Config.SwarmID),
+			ProjectName:     strOrNull(stack.Config.ProjectName),
 			Environment:     environment,
 			AutoPullEnabled: types.BoolValue(stack.Config.AutoPull),
 			Build: &BuildConfigModel{
 				Enabled:        types.BoolValue(stack.Config.RunBuild),
 				ExtraArguments: buildExtraArgs,
 			},
-			DestroyEnforced:   types.BoolValue(stack.Config.DestroyBeforeDeploy),
-			AutoUpdateEnabled: types.BoolValue(stack.Config.AutoUpdate),
-			AutoUpdateScope: func() types.String {
-				if stack.Config.AutoUpdateAllServices {
-					return types.StringValue("stack")
-				}
-				return types.StringValue("service")
-			}(),
+			DestroyEnforced: types.BoolValue(stack.Config.DestroyBeforeDeploy),
+			AutoUpdate: &StackAutoUpdateModel{
+				Enabled: types.BoolValue(stack.Config.AutoUpdate),
+				Scope: func() types.String {
+					if stack.Config.AutoUpdateAllServices {
+						return types.StringValue("stack")
+					}
+					return types.StringValue("service")
+				}(),
+			},
 			PollUpdatesEnabled: types.BoolValue(stack.Config.PollForUpdates),
 			AlertsEnabled:      types.BoolValue(stack.Config.SendAlerts),
 			Registry: &RegistryConfigModel{
@@ -383,6 +376,17 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 				Branch:        strOrNull(stack.Config.Branch),
 				Commit:        strOrNull(stack.Config.Commit),
 				CloneEnforced: types.BoolValue(stack.Config.Reclone),
+				Contents: func() types.String {
+					v, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
+					_ = v
+					return strOrNull(stack.Config.FileContents)
+				}(),
+				LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
+				Directory:    strOrNull(stack.Config.RunDirectory),
+				FilePaths: func() types.List {
+					v, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
+					return v
+				}(),
 			},
 			Webhook: &StackDataSourceWebhookModel{
 				Enabled:     types.BoolValue(stack.Config.WebhookEnabled),

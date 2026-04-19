@@ -14,13 +14,20 @@ Manages a Komodo resource sync.
 
 ```terraform
 resource "komodo_resource_sync" "example" {
-  name   = "my-resource-sync"
-  repo   = "myorg/infra"
-  branch = "main"
+  name = "my-resource-sync"
 
-  resource_path     = ["resources/"]
-  managed           = true
-  include_variables = true
+  source {
+    path           = "myorg/infra"
+    branch         = "main"
+    resource_paths = ["resources/"]
+  }
+
+  scope = ["resources", "variables"]
+
+  managed_mode {
+    enabled    = true
+    tag_filter = ["prod"]
+  }
 }
 ```
 
@@ -33,29 +40,42 @@ resource "komodo_resource_sync" "example" {
 
 ### Optional
 
-- `branch` (String) The branch to check out.
-- `commit` (String) A specific commit hash to check out.
-- `delete` (Boolean) Whether the sync should delete resources not declared in the resource files.
-- `file_contents` (String) Manage resource file contents directly in Terraform state (UI-managed mode).
-- `files_on_host` (Boolean) Whether resource files are available on the Komodo Core host. Specify paths with `resource_path`.
-- `git_account` (String) The git account used to access private repos.
-- `git_https` (Boolean) Whether to use HTTPS to clone the repo (versus HTTP). Default: `true`.
-- `git_provider` (String) The git provider domain. Default: `github.com`.
-- `include_resources` (Boolean) Whether the sync should include resources. Default: `true`.
-- `include_user_groups` (Boolean) Whether the sync should include user groups.
-- `include_variables` (Boolean) Whether the sync should include variables.
-- `linked_repo` (String) Id or name of a Komodo Repo resource to source the sync files from.
-- `managed` (Boolean) Enable managed mode: resource exports matching tags are pushed to the sync file.
-- `match_tags` (List of String) In managed mode, only export resources matching all of these tags. Empty means all resources.
-- `pending_alert` (Boolean) Whether the sync should send an alert when it enters Pending state. Default: `true`.
-- `repo` (String) The git repository slug, e.g. `owner/repo`.
-- `resource_path` (List of String) Path(s) to the resource file(s) to sync. Relative to `sync_directory` (files on host) or repo root (git-based).
+- `alerts_enabled` (Boolean) Whether the sync should send an alert when it enters Pending state. Default: `true`.
+- `delete_undeclared_resources_enabled` (Boolean) Whether the sync should delete resources not declared in the resource files.
+- `managed_mode` (Block, Optional) Managed mode configuration: exports resources matching tags back into the sync file. (see [below for nested schema](#nestedblock--managed_mode))
+- `scope` (List of String) Which entity types to include in the sync. Valid values: `"resources"`, `"variables"`, `"user_groups"`.
+- `source` (Block, Optional) Git source configuration for repo-based resource syncs. (see [below for nested schema](#nestedblock--source))
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
 - `webhook` (Block, Optional) Webhook configuration for the sync. (see [below for nested schema](#nestedblock--webhook))
 
 ### Read-Only
 
 - `id` (String) The resource sync identifier (ObjectId).
+
+<a id="nestedblock--managed_mode"></a>
+### Nested Schema for `managed_mode`
+
+Optional:
+
+- `enabled` (Boolean) Whether managed mode is enabled.
+- `tag_filter` (List of String) Only export resources matching all of these tags. Empty means all resources.
+
+
+<a id="nestedblock--source"></a>
+### Nested Schema for `source`
+
+Optional:
+
+- `account_id` (String) Id of a `komodo_provider_account` (git) used to access private repos. The git provider domain and HTTPS setting are derived automatically.
+- `branch` (String) The branch to check out.
+- `commit` (String) A specific commit hash to check out.
+- `contents` (String) Manage resource file contents directly in Terraform state (UI-managed mode).
+- `on_host_enabled` (Boolean) Whether resource files are available on the Komodo Core host. Specify paths with `resource_paths`.
+- `path` (String) The git repository slug, e.g. `owner/repo`.
+- `repo_id` (String) Id or name of a linked `komodo_repo` resource.
+- `resource_paths` (List of String) Path(s) to the resource file(s) to sync. Relative to `sync_directory` (files on host) or repo root (git-based).
+- `url` (String) The URL of the git provider, e.g. `https://github.com`.
+
 
 <a id="nestedblock--webhook"></a>
 ### Nested Schema for `webhook`

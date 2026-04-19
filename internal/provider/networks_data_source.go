@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -48,9 +49,9 @@ func (d *NetworksDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 			Computed:            true,
 			MarkdownDescription: "The docker-assigned network ID.",
 		},
-		"created": schema.StringAttribute{
+		"created_at": schema.StringAttribute{
 			Computed:            true,
-			MarkdownDescription: "The timestamp when the network was created.",
+			MarkdownDescription: "The timestamp when the network was created (RFC3339 format, e.g. `2006-01-02T15:04:05Z`).",
 		},
 		"scope": schema.StringAttribute{
 			Computed:            true,
@@ -60,7 +61,7 @@ func (d *NetworksDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 			Computed:            true,
 			MarkdownDescription: "The network driver (e.g. `bridge`, `overlay`).",
 		},
-		"enable_ipv6": schema.BoolAttribute{
+		"ipv6_enabled": schema.BoolAttribute{
 			Computed:            true,
 			MarkdownDescription: "Whether IPv6 is enabled on the network.",
 		},
@@ -173,9 +174,13 @@ func (d *NetworksDataSource) Read(ctx context.Context, req datasource.ReadReques
 				item.NetworkID = types.StringValue("")
 			}
 			if n.Created != nil {
-				item.Created = types.StringValue(*n.Created)
+				if t, err := time.Parse(time.RFC3339Nano, *n.Created); err == nil {
+					item.CreatedAt = types.StringValue(t.UTC().Format(time.RFC3339))
+				} else {
+					item.CreatedAt = types.StringValue(*n.Created)
+				}
 			} else {
-				item.Created = types.StringValue("")
+				item.CreatedAt = types.StringValue("")
 			}
 			if n.Scope != nil {
 				item.Scope = types.StringValue(*n.Scope)
@@ -188,9 +193,9 @@ func (d *NetworksDataSource) Read(ctx context.Context, req datasource.ReadReques
 				item.Driver = types.StringValue("")
 			}
 			if n.EnableIPv6 != nil {
-				item.EnableIPv6 = types.BoolValue(*n.EnableIPv6)
+				item.IPv6Enabled = types.BoolValue(*n.EnableIPv6)
 			} else {
-				item.EnableIPv6 = types.BoolValue(false)
+				item.IPv6Enabled = types.BoolValue(false)
 			}
 			if n.IPAMDriver != nil {
 				item.IPAMDriver = types.StringValue(*n.IPAMDriver)

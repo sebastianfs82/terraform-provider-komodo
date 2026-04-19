@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -56,6 +55,11 @@ type StackCmdWrapperModel struct {
 	Include types.List   `tfsdk:"include"`
 }
 
+type StackAutoUpdateModel struct {
+	Enabled types.Bool   `tfsdk:"enabled"`
+	Scope   types.String `tfsdk:"scope"`
+}
+
 type StackSourceModel struct {
 	RepoID        types.String `tfsdk:"repo_id"`
 	URL           types.String `tfsdk:"url"`
@@ -63,13 +67,11 @@ type StackSourceModel struct {
 	Path          types.String `tfsdk:"path"`
 	Branch        types.String `tfsdk:"branch"`
 	Commit        types.String `tfsdk:"commit"`
-	CloneEnforced types.Bool   `tfsdk:"reclone_enforced"`
-}
-
-type FilesConfigModel struct {
+	CloneEnforced types.Bool   `tfsdk:"reclone_enabled"`
+	// Compose fields
 	Contents     types.String `tfsdk:"contents"`
 	FilePaths    types.List   `tfsdk:"file_paths"`
-	LocalEnabled types.Bool   `tfsdk:"local_enabled"`
+	LocalEnabled types.Bool   `tfsdk:"on_host_enabled"`
 	Directory    types.String `tfsdk:"directory"`
 }
 
@@ -84,19 +86,16 @@ type StackResourceModel struct {
 	// Source
 	Source *StackSourceModel `tfsdk:"source"`
 
-	Compose *FilesConfigModel `tfsdk:"compose"`
-
 	// Environment
 	Environment *EnvironmentModel `tfsdk:"environment"`
 
 	// Behavior flags
-	AutoPullEnabled    types.Bool        `tfsdk:"auto_pull_enabled"`
-	Build              *BuildConfigModel `tfsdk:"build"`
-	DestroyEnforced    types.Bool        `tfsdk:"destroy_enforced"`
-	AutoUpdateEnabled  types.Bool        `tfsdk:"auto_update_enabled"`
-	AutoUpdateScope    types.String      `tfsdk:"auto_update_scope"`
-	PollUpdatesEnabled types.Bool        `tfsdk:"poll_updates_enabled"`
-	AlertsEnabled      types.Bool        `tfsdk:"alerts_enabled"`
+	AutoPullEnabled    types.Bool            `tfsdk:"auto_pull_enabled"`
+	Build              *BuildConfigModel     `tfsdk:"build"`
+	DestroyEnforced    types.Bool            `tfsdk:"destroy_mode_enabled"`
+	AutoUpdate         *StackAutoUpdateModel `tfsdk:"auto_update"`
+	PollUpdatesEnabled types.Bool            `tfsdk:"poll_updates_enabled"`
+	AlertsEnabled      types.Bool            `tfsdk:"alerts_enabled"`
 
 	// Webhook
 	Webhook *StackWebhookModel `tfsdk:"webhook"`
@@ -177,23 +176,11 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Default:             booldefault.StaticBool(false),
 				MarkdownDescription: "Whether to run `compose pull` before redeploying to ensure the latest images are used.",
 			},
-			"destroy_enforced": schema.BoolAttribute{
+			"destroy_mode_enabled": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 				MarkdownDescription: "Whether to run `docker compose down` before `compose up`.",
-			},
-			"auto_update_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Whether to automatically redeploy when newer images are found.",
-			},
-			"auto_update_scope": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString("service"),
-				MarkdownDescription: "How services are redeployed when `auto_update_enabled` is active. Allowed values: `\"stack\"`, `\"service\"`.",
 			},
 			"poll_updates_enabled": schema.BoolAttribute{
 				Optional:            true,
@@ -261,17 +248,12 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						Optional:            true,
 						MarkdownDescription: "A specific commit hash to check out.",
 					},
-					"reclone_enforced": schema.BoolAttribute{
+					"reclone_enabled": schema.BoolAttribute{
 						Optional:            true,
 						Computed:            true,
 						Default:             booldefault.StaticBool(false),
 						MarkdownDescription: "Whether to delete and reclone the repo folder instead of `git pull`.",
 					},
-				},
-			},
-			"compose": schema.SingleNestedBlock{
-				MarkdownDescription: "Compose file configuration.",
-				Attributes: map[string]schema.Attribute{
 					"contents": schema.StringAttribute{
 						Optional:            true,
 						Computed:            true,
@@ -280,7 +262,7 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 							stringplanmodifier.UseStateForUnknown(),
 						},
 					},
-					"local_enabled": schema.BoolAttribute{
+					"on_host_enabled": schema.BoolAttribute{
 						Optional:            true,
 						Computed:            true,
 						Default:             booldefault.StaticBool(false),
@@ -332,6 +314,21 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						Optional:            true,
 						ElementType:         types.StringType,
 						MarkdownDescription: "Extra arguments appended to `docker compose build`.",
+					},
+				},
+			},
+			"auto_update": schema.SingleNestedBlock{
+				MarkdownDescription: "Auto-update configuration.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(false),
+						MarkdownDescription: "Whether the stack is automatically redeployed when newer images are found.",
+					},
+					"scope": schema.StringAttribute{
+						Optional:            true,
+						MarkdownDescription: "How services are redeployed. Either `\"stack\"` or `\"service\"`.",
 					},
 				},
 			},
@@ -485,11 +482,11 @@ func (v autoUpdateRequiresPollUpdatesValidator) ValidateResource(ctx context.Con
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.AutoUpdateEnabled.ValueBool() && !data.PollUpdatesEnabled.ValueBool() {
+	if data.AutoUpdate != nil && data.AutoUpdate.Enabled.ValueBool() && !data.PollUpdatesEnabled.ValueBool() {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("auto_update_enabled"),
-			"auto_update_enabled requires poll_updates_enabled",
-			"`auto_update_enabled = true` has no effect unless `poll_updates_enabled = true` is also set.",
+			path.Root("auto_update").AtName("enabled"),
+			"auto_update.enabled requires poll_updates_enabled",
+			"`auto_update.enabled = true` has no effect unless `poll_updates_enabled = true` is also set.",
 		)
 	}
 }
@@ -513,23 +510,26 @@ func (v autoUpdateScopeValidator) ValidateResource(ctx context.Context, req reso
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.AutoUpdateScope.IsNull() || data.AutoUpdateScope.IsUnknown() {
+	if data.AutoUpdate == nil {
 		return
 	}
-	t := data.AutoUpdateScope.ValueString()
+	if data.AutoUpdate.Scope.IsNull() || data.AutoUpdate.Scope.IsUnknown() {
+		return
+	}
+	t := data.AutoUpdate.Scope.ValueString()
 	if t != "stack" && t != "service" {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("auto_update_scope"),
-			"Invalid auto_update_scope",
-			`auto_update_scope must be "stack" or "service".`,
+			path.Root("auto_update").AtName("scope"),
+			"Invalid auto_update.scope",
+			`auto_update.scope must be "stack" or "service".`,
 		)
 		return
 	}
-	if t == "stack" && !data.AutoUpdateEnabled.ValueBool() {
+	if t == "stack" && (data.AutoUpdate == nil || !data.AutoUpdate.Enabled.ValueBool()) {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("auto_update_scope"),
-			"auto_update_scope requires auto_update_enabled",
-			`auto_update_scope = "stack" has no effect unless auto_update_enabled = true and poll_updates_enabled = true are also set.`,
+			path.Root("auto_update").AtName("scope"),
+			"auto_update.scope requires auto_update.enabled",
+			`auto_update.scope = "stack" has no effect unless auto_update.enabled = true and poll_updates_enabled = true are also set.`,
 		)
 	}
 }
@@ -625,10 +625,6 @@ func (r *StackResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 	stack, err := r.client.GetStack(ctx, data.ID.ValueString())
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			resp.State.RemoveResource(ctx)
-			return
-		}
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read stack, got error: %s", err))
 		return
 	}
@@ -726,12 +722,12 @@ func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackReso
 		ProjectName: data.ProjectName.ValueString(),
 
 		FileContents: func() string {
-			if data.Compose != nil {
-				return strings.ReplaceAll(data.Compose.Contents.ValueString(), "\r\n", "\n")
+			if data.Source != nil {
+				return strings.ReplaceAll(data.Source.Contents.ValueString(), "\r\n", "\n")
 			}
 			return ""
 		}(),
-		FilesOnHost: data.Compose != nil && data.Compose.LocalEnabled.ValueBool(),
+		FilesOnHost: data.Source != nil && data.Source.LocalEnabled.ValueBool(),
 
 		AutoPull: data.AutoPullEnabled.ValueBool(),
 		RunBuild: func() bool {
@@ -741,8 +737,8 @@ func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackReso
 			return false
 		}(),
 		DestroyBeforeDeploy:   data.DestroyEnforced.ValueBool(),
-		AutoUpdate:            data.AutoUpdateEnabled.ValueBool(),
-		AutoUpdateAllServices: data.AutoUpdateScope.ValueString() == "stack",
+		AutoUpdate:            data.AutoUpdate != nil && data.AutoUpdate.Enabled.ValueBool(),
+		AutoUpdateAllServices: data.AutoUpdate != nil && data.AutoUpdate.Scope.ValueString() == "stack",
 		PollForUpdates:        data.PollUpdatesEnabled.ValueBool(),
 		SendAlerts:            data.AlertsEnabled.ValueBool(),
 
@@ -830,13 +826,10 @@ func stackConfigFromModel(ctx context.Context, c *client.Client, data *StackReso
 		cfg.Branch = data.Source.Branch.ValueString()
 		cfg.Commit = data.Source.Commit.ValueString()
 		cfg.Reclone = data.Source.CloneEnforced.ValueBool()
-	}
-
-	if data.Compose != nil {
-		cfg.RunDirectory = data.Compose.Directory.ValueString()
-		if !data.Compose.FilePaths.IsNull() && !data.Compose.FilePaths.IsUnknown() {
+		cfg.RunDirectory = data.Source.Directory.ValueString()
+		if !data.Source.FilePaths.IsNull() && !data.Source.FilePaths.IsUnknown() {
 			var vals []string
-			data.Compose.FilePaths.ElementsAs(ctx, &vals, false)
+			data.Source.FilePaths.ElementsAs(ctx, &vals, false)
 			cfg.FilePaths = vals
 		}
 	}
@@ -913,11 +906,17 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	data.ProjectName = strOrNull(stack.Config.ProjectName)
 	data.AutoPullEnabled = types.BoolValue(stack.Config.AutoPull)
 	data.DestroyEnforced = types.BoolValue(stack.Config.DestroyBeforeDeploy)
-	data.AutoUpdateEnabled = types.BoolValue(stack.Config.AutoUpdate)
-	if stack.Config.AutoUpdateAllServices {
-		data.AutoUpdateScope = types.StringValue("stack")
+	if stack.Config.AutoUpdate || stack.Config.AutoUpdateAllServices {
+		scope := "service"
+		if stack.Config.AutoUpdateAllServices {
+			scope = "stack"
+		}
+		data.AutoUpdate = &StackAutoUpdateModel{
+			Enabled: types.BoolValue(stack.Config.AutoUpdate),
+			Scope:   types.StringValue(scope),
+		}
 	} else {
-		data.AutoUpdateScope = types.StringValue("service")
+		data.AutoUpdate = nil
 	}
 	data.PollUpdatesEnabled = types.BoolValue(stack.Config.PollForUpdates)
 	data.AlertsEnabled = types.BoolValue(stack.Config.SendAlerts)
@@ -929,10 +928,18 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	} else {
 		data.Registry = nil
 	}
+	// Save prior source contents for normalization before overwriting data.Source
+	var priorSourceContents types.String
+	if data.Source != nil {
+		priorSourceContents = data.Source.Contents
+	}
+
 	// Git block: keep nil when all git fields are empty/default and caller didn't set it
 	if data.Source != nil || stack.Config.Repo != "" || stack.Config.Branch != "" ||
 		stack.Config.GitProvider != "" || stack.Config.GitAccount != "" || stack.Config.Commit != "" ||
-		stack.Config.LinkedRepo != "" || stack.Config.Reclone {
+		stack.Config.LinkedRepo != "" || stack.Config.Reclone ||
+		stack.Config.FileContents != "" || stack.Config.FilesOnHost ||
+		len(stack.Config.FilePaths) > 0 || stack.Config.RunDirectory != "" {
 		// When repo_id is set, URL/account_id/path/branch/commit are derived from
 		// the linked repo by the API and must not be persisted to state (they were
 		// never in config), otherwise plan == null but state == derived value
@@ -973,6 +980,26 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 			Branch:        branchVal,
 			Commit:        commitVal,
 			CloneEnforced: types.BoolValue(stack.Config.Reclone),
+			Contents: func() types.String {
+				filePaths, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
+				_ = filePaths
+				norm := func(s string) string {
+					return strings.TrimRight(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+				}
+				apiNorm := norm(stack.Config.FileContents)
+				if !priorSourceContents.IsNull() && !priorSourceContents.IsUnknown() {
+					if norm(priorSourceContents.ValueString()) == apiNorm {
+						return priorSourceContents
+					}
+				}
+				return strOrNull(apiNorm)
+			}(),
+			LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
+			Directory:    strOrNull(stack.Config.RunDirectory),
+			FilePaths: func() types.List {
+				v, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
+				return v
+			}(),
 		}
 	} else {
 		data.Source = nil
@@ -1026,35 +1053,12 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	}
 
 	// Lists
-	extraArgs, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.ExtraArgs)
-	data.ExtraArguments = extraArgs
-
-	if data.Compose != nil || stack.Config.FileContents != "" || stack.Config.FilesOnHost ||
-		len(stack.Config.FilePaths) > 0 || stack.Config.RunDirectory != "" {
-		filePaths, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
-		normalize := func(s string) string {
-			return strings.TrimRight(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
-		}
-		apiNorm := normalize(stack.Config.FileContents)
-		var contents types.String
-		if data.Compose != nil && !data.Compose.Contents.IsNull() && !data.Compose.Contents.IsUnknown() {
-			if normalize(data.Compose.Contents.ValueString()) == apiNorm {
-				contents = data.Compose.Contents
-			} else {
-				contents = strOrNull(apiNorm)
-			}
-		} else {
-			contents = strOrNull(apiNorm)
-		}
-		data.Compose = &FilesConfigModel{
-			Contents:     contents,
-			LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
-			Directory:    strOrNull(stack.Config.RunDirectory),
-			FilePaths:    filePaths,
-		}
-	} else {
-		data.Compose = nil
+	extraArgsSlice := stack.Config.ExtraArgs
+	if extraArgsSlice == nil {
+		extraArgsSlice = []string{}
 	}
+	extraArgs, _ := types.ListValueFrom(ctx, types.StringType, extraArgsSlice)
+	data.ExtraArguments = extraArgs
 
 	// Build block
 	if stack.Config.RunBuild || len(stack.Config.BuildExtraArgs) > 0 || data.Build != nil {
@@ -1072,7 +1076,11 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 		data.Build = nil
 	}
 
-	ignoreServices, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.IgnoreServices)
+	ignoreServicesSlice := stack.Config.IgnoreServices
+	if ignoreServicesSlice == nil {
+		ignoreServicesSlice = []string{}
+	}
+	ignoreServices, _ := types.ListValueFrom(ctx, types.StringType, ignoreServicesSlice)
 	data.IgnoreServices = ignoreServices
 
 	// Wrapper block
@@ -1086,7 +1094,11 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 		data.Wrapper = nil
 	}
 
-	links, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.Links)
+	linksSlice := stack.Config.Links
+	if linksSlice == nil {
+		linksSlice = []string{}
+	}
+	links, _ := types.ListValueFrom(ctx, types.StringType, linksSlice)
 	data.Links = links
 }
 

@@ -43,13 +43,10 @@ type BuildDataSourceModel struct {
 	Branch           types.String        `tfsdk:"branch"`
 	Commit           types.String        `tfsdk:"commit"`
 	Webhook          *WebhookModel       `tfsdk:"webhook"`
-	FilesOnHost      types.Bool          `tfsdk:"files_on_host"`
+	FilesOnHost      types.Bool          `tfsdk:"on_host_enabled"`
 	Build            *DockerBuildModel   `tfsdk:"build"`
-	DockerfilePath   types.String        `tfsdk:"dockerfile_path"`
-	SkipSecretInterp types.Bool          `tfsdk:"skip_secret_interp"`
-	UseBuildx        types.Bool          `tfsdk:"use_buildx"`
+	SkipSecretInterp types.Bool          `tfsdk:"skip_secret_interpolation_enabled"`
 	PreBuild         *SystemCommandModel `tfsdk:"pre_build"`
-	Dockerfile       types.String        `tfsdk:"dockerfile"`
 	Labels           types.String        `tfsdk:"labels"`
 }
 
@@ -140,6 +137,20 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 							},
 						},
 					},
+					"dockerfile": schema.SingleNestedAttribute{
+						Computed:            true,
+						MarkdownDescription: "Dockerfile configuration.",
+						Attributes: map[string]schema.Attribute{
+							"contents": schema.StringAttribute{
+								Computed:            true,
+								MarkdownDescription: "Inline Dockerfile contents.",
+							},
+							"path": schema.StringAttribute{
+								Computed:            true,
+								MarkdownDescription: "Path to the Dockerfile.",
+							},
+						},
+					},
 				},
 			},
 			"links": schema.ListAttribute{
@@ -190,7 +201,7 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 					},
 				},
 			},
-			"files_on_host": schema.BoolAttribute{
+			"on_host_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether host filesystem files are used instead of a git repository.",
 			},
@@ -227,28 +238,20 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 							},
 						},
 					},
+					"buildx_enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether `docker buildx` is used.",
+					},
 				},
 			},
-			"dockerfile_path": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Path to the Dockerfile.",
-			},
-			"skip_secret_interp": schema.BoolAttribute{
+			"skip_secret_interpolation_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether secret interpolation in build args is skipped.",
-			},
-			"use_buildx": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether `docker buildx` is used.",
 			},
 			"pre_build": schema.SingleNestedAttribute{
 				Computed:            true,
 				MarkdownDescription: "Command run before the Docker build.",
 				Attributes:          systemCommandAttrs,
-			},
-			"dockerfile": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Inline Dockerfile contents.",
 			},
 			"labels": schema.StringAttribute{
 				Computed:            true,
@@ -334,6 +337,13 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 				}
 			}
 		}
+		var docfile *DockerfileModel
+		if b.Config.DockerfilePath != "" || b.Config.Dockerfile != "" {
+			docfile = &DockerfileModel{
+				Path:     types.StringValue(b.Config.DockerfilePath),
+				Contents: types.StringValue(b.Config.Dockerfile),
+			}
+		}
 		data.Image = &BuildImageModel{
 			Name:               types.StringValue(b.Config.ImageName),
 			Tag:                types.StringValue(b.Config.ImageTag),
@@ -341,6 +351,7 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 			IncludeVersionTags: types.BoolValue(b.Config.IncludeVersionTags),
 			IncludeCommitTag:   types.BoolValue(b.Config.IncludeCommitTag),
 			Registries:         regs,
+			Dockerfile:         docfile,
 		}
 	}
 	links, _ := types.ListValueFrom(ctx, types.StringType, b.Config.Links)
@@ -382,12 +393,10 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 			Path:           types.StringValue(b.Config.BuildPath),
 			ExtraArguments: extraArgs,
 			Arguments:      allArgs,
+			UseBuildx:      types.BoolValue(b.Config.UseBuildx),
 		}
 	}
-	data.DockerfilePath = types.StringValue(b.Config.DockerfilePath)
 	data.SkipSecretInterp = types.BoolValue(b.Config.SkipSecretInterp)
-	data.UseBuildx = types.BoolValue(b.Config.UseBuildx)
-
 	if b.Config.PreBuild.Path != "" || b.Config.PreBuild.Command != "" {
 		data.PreBuild = &SystemCommandModel{
 			Path:    types.StringValue(b.Config.PreBuild.Path),
@@ -396,8 +405,6 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	} else {
 		data.PreBuild = nil
 	}
-
-	data.Dockerfile = types.StringValue(b.Config.Dockerfile)
 	data.Labels = types.StringValue(b.Config.Labels)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

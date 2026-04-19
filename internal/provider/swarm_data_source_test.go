@@ -6,7 +6,11 @@ package provider
 import (
 	"fmt"
 	"regexp"
+	"context"
 	"testing"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -144,4 +148,59 @@ func testAccSwarmDataSourceConfig_neitherSet() string {
 	return `
 data "komodo_swarm" "test" {}
 `
+}
+
+func TestUnitSwarmDataSource_configure(t *testing.T) {
+d := &SwarmDataSource{}
+resp := &datasource.ConfigureResponse{}
+d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+if !resp.Diagnostics.HasError() {
+t.Fatal("expected diagnostic error for wrong provider data type")
+}
+}
+
+func TestUnitSwarmDataSource_swarmToDataSourceModel_withAll(t *testing.T) {
+	ctx := context.Background()
+	swarm := &client.Swarm{
+		ID:   client.OID{OID: "swarm-001"},
+		Name: "test-swarm",
+		Tags: []string{"env:prod"},
+		Config: client.SwarmConfig{
+			ServerIDs: []string{"srv-1", "srv-2"},
+			Links:     []string{"link-a"},
+			MaintenanceWindows: []client.MaintenanceWindow{
+				{
+					Name:            "nightly",
+					ScheduleType:    "Weekly",
+					DayOfWeek:       "Monday",
+					Hour:            2,
+					Minute:          0,
+					DurationMinutes: 60,
+					Enabled:         true,
+				},
+			},
+		},
+	}
+	data := &SwarmDataSourceModel{
+		ServerIDs:   types.ListNull(types.StringType),
+		Links:       types.ListNull(types.StringType),
+		Tags:        types.ListNull(types.StringType),
+		Maintenance: nil,
+	}
+	swarmToDataSourceModel(ctx, swarm, data)
+	if data.ID.ValueString() != "swarm-001" {
+		t.Fatalf("unexpected ID: %s", data.ID.ValueString())
+	}
+	if data.ServerIDs.IsNull() {
+		t.Fatal("expected ServerIDs to be set")
+	}
+	if data.Links.IsNull() {
+		t.Fatal("expected Links to be set")
+	}
+	if len(data.Maintenance) != 1 {
+		t.Fatalf("expected 1 maintenance window, got %d", len(data.Maintenance))
+	}
+	if data.Maintenance[0].Name.ValueString() != "nightly" {
+		t.Fatalf("unexpected maintenance window name: %s", data.Maintenance[0].Name.ValueString())
+	}
 }

@@ -41,21 +41,18 @@ type ResourceSyncDataSourceModel struct {
 	GitAccount  types.String `tfsdk:"git_account"`
 
 	// Files
-	FilesOnHost  types.Bool   `tfsdk:"files_on_host"`
-	ResourcePath types.List   `tfsdk:"resource_path"`
-	FileContents types.String `tfsdk:"file_contents"`
+	FilesOnHost   types.Bool   `tfsdk:"on_host_enabled"`
+	ResourcePaths types.List   `tfsdk:"resource_paths"`
+	FileContents  types.String `tfsdk:"contents"`
 
 	// Webhook
 	Webhook *WebhookModel `tfsdk:"webhook"`
 
 	// Sync behaviour
-	Managed           types.Bool `tfsdk:"managed"`
-	Delete            types.Bool `tfsdk:"delete"`
-	IncludeResources  types.Bool `tfsdk:"include_resources"`
-	MatchTags         types.List `tfsdk:"match_tags"`
-	IncludeVariables  types.Bool `tfsdk:"include_variables"`
-	IncludeUserGroups types.Bool `tfsdk:"include_user_groups"`
-	PendingAlert      types.Bool `tfsdk:"pending_alert"`
+	Delete        types.Bool                    `tfsdk:"delete_undeclared_resources_enabled"`
+	Scope         types.List                    `tfsdk:"scope"`
+	ManagedMode   *ResourceSyncManagedModeModel `tfsdk:"managed_mode"`
+	AlertsEnabled types.Bool                    `tfsdk:"alerts_enabled"`
 }
 
 func (d *ResourceSyncDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -108,16 +105,16 @@ func (d *ResourceSyncDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 			},
 
 			// Files
-			"files_on_host": schema.BoolAttribute{
+			"on_host_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether resource files are on the Komodo Core host.",
 			},
-			"resource_path": schema.ListAttribute{
+			"resource_paths": schema.ListAttribute{
 				Computed:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "Path(s) to the resource file(s) to sync.",
 			},
-			"file_contents": schema.StringAttribute{
+			"contents": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "UI-managed resource file contents.",
 			},
@@ -140,32 +137,31 @@ func (d *ResourceSyncDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 			},
 
 			// Sync behaviour
-			"managed": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether managed mode is enabled.",
-			},
-			"delete": schema.BoolAttribute{
+			"delete_undeclared_resources_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether the sync deletes undeclared resources.",
 			},
-			"include_resources": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether the sync includes resources.",
-			},
-			"match_tags": schema.ListAttribute{
+			"scope": schema.ListAttribute{
 				Computed:            true,
 				ElementType:         types.StringType,
-				MarkdownDescription: "Tags used to filter resource exports in managed mode.",
+				MarkdownDescription: "Which entity types are included in the sync. Values: `\"resources\"`, `\"variables\"`, `\"user_groups\"`.",
 			},
-			"include_variables": schema.BoolAttribute{
+			"managed_mode": schema.SingleNestedAttribute{
 				Computed:            true,
-				MarkdownDescription: "Whether the sync includes variables.",
+				MarkdownDescription: "Managed mode configuration.",
+				Attributes: map[string]schema.Attribute{
+					"enabled": schema.BoolAttribute{
+						Computed:            true,
+						MarkdownDescription: "Whether managed mode is enabled.",
+					},
+					"tag_filter": schema.ListAttribute{
+						Computed:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "Tags used to filter resource exports in managed mode.",
+					},
+				},
 			},
-			"include_user_groups": schema.BoolAttribute{
-				Computed:            true,
-				MarkdownDescription: "Whether the sync includes user groups.",
-			},
-			"pending_alert": schema.BoolAttribute{
+			"alerts_enabled": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether an alert is sent when the sync enters Pending state.",
 			},
@@ -253,25 +249,39 @@ func (d *ResourceSyncDataSource) Read(ctx context.Context, req datasource.ReadRe
 	} else {
 		data.Webhook = nil
 	}
-	data.Managed = types.BoolValue(cfg.Managed)
 	data.Delete = types.BoolValue(cfg.Delete)
-	data.IncludeResources = types.BoolValue(cfg.IncludeResources)
-	data.IncludeVariables = types.BoolValue(cfg.IncludeVariables)
-	data.IncludeUserGroups = types.BoolValue(cfg.IncludeUserGroups)
-	data.PendingAlert = types.BoolValue(cfg.PendingAlert)
+	data.AlertsEnabled = types.BoolValue(cfg.PendingAlert)
+
+	// Build scope list from the three include booleans.
+	var scopeItems []string
+	if cfg.IncludeResources {
+		scopeItems = append(scopeItems, "resources")
+	}
+	if cfg.IncludeVariables {
+		scopeItems = append(scopeItems, "variables")
+	}
+	if cfg.IncludeUserGroups {
+		scopeItems = append(scopeItems, "user_groups")
+	}
+	data.Scope, _ = types.ListValueFrom(ctx, types.StringType, scopeItems)
+
+	// managed_mode nested attribute.
+	var tagFilter types.List
+	if tags := cfg.MatchTags; len(tags) > 0 {
+		tagFilter, _ = types.ListValueFrom(ctx, types.StringType, tags)
+	} else {
+		tagFilter, _ = types.ListValueFrom(ctx, types.StringType, []string{})
+	}
+	data.ManagedMode = &ResourceSyncManagedModeModel{
+		Enabled:   types.BoolValue(cfg.Managed),
+		TagFilter: tagFilter,
+	}
 
 	if paths := cfg.ResourcePath; len(paths) > 0 {
 		listVal, _ := types.ListValueFrom(ctx, types.StringType, paths)
-		data.ResourcePath = listVal
+		data.ResourcePaths = listVal
 	} else {
-		data.ResourcePath, _ = types.ListValueFrom(ctx, types.StringType, []string{})
-	}
-
-	if tags := cfg.MatchTags; len(tags) > 0 {
-		listVal, _ := types.ListValueFrom(ctx, types.StringType, tags)
-		data.MatchTags = listVal
-	} else {
-		data.MatchTags, _ = types.ListValueFrom(ctx, types.StringType, []string{})
+		data.ResourcePaths, _ = types.ListValueFrom(ctx, types.StringType, []string{})
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

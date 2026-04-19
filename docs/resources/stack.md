@@ -17,7 +17,7 @@ resource "komodo_stack" "example" {
   name      = "my-stack"
   server_id = komodo_server.example.id
 
-  compose {
+  source {
     contents = file("${path.module}/compose.yaml")
   }
 }
@@ -27,7 +27,7 @@ resource "komodo_stack" "nginx" {
   name      = "nginx"
   server_id = komodo_server.example.id
 
-  compose {
+  source {
     contents = <<-EOT
       services:
         nginx:
@@ -69,11 +69,9 @@ resource "komodo_stack" "from_git" {
 
 - `alerts_enabled` (Boolean) Whether to send stack-state-change alerts for this stack.
 - `auto_pull_enabled` (Boolean) Whether to run `compose pull` before redeploying to ensure the latest images are used.
-- `auto_update_enabled` (Boolean) Whether to automatically redeploy when newer images are found.
-- `auto_update_scope` (String) How services are redeployed when `auto_update_enabled` is active. Allowed values: `"stack"`, `"service"`.
+- `auto_update` (Block, Optional) Auto-update configuration. (see [below for nested schema](#nestedblock--auto_update))
 - `build` (Block, Optional) Build configuration. When set, `docker compose build` is run before deploying. (see [below for nested schema](#nestedblock--build))
-- `compose` (Block, Optional) Compose file configuration. (see [below for nested schema](#nestedblock--compose))
-- `destroy_enforced` (Boolean) Whether to run `docker compose down` before `compose up`.
+- `destroy_mode_enabled` (Boolean) Whether to run `docker compose down` before `compose up`.
 - `environment` (Block, Optional) Environment variable configuration written to an env file before deploying. (see [below for nested schema](#nestedblock--environment))
 - `extra_arguments` (List of String) Extra arguments appended to `docker compose up -d` (Compose) or `docker stack deploy` (Swarm).
 - `ignore_services` (List of String) Services to ignore when checking stack health status (e.g. init containers).
@@ -94,6 +92,15 @@ resource "komodo_stack" "from_git" {
 
 - `id` (String) The stack identifier (ObjectId).
 
+<a id="nestedblock--auto_update"></a>
+### Nested Schema for `auto_update`
+
+Optional:
+
+- `enabled` (Boolean) Whether the stack is automatically redeployed when newer images are found.
+- `scope` (String) How services are redeployed. Either `"stack"` or `"service"`.
+
+
 <a id="nestedblock--build"></a>
 ### Nested Schema for `build`
 
@@ -101,17 +108,6 @@ Optional:
 
 - `enabled` (Boolean) Whether to run `docker compose build` before deploying.
 - `extra_arguments` (List of String) Extra arguments appended to `docker compose build`.
-
-
-<a id="nestedblock--compose"></a>
-### Nested Schema for `compose`
-
-Optional:
-
-- `contents` (String) Inline compose file contents. When set, this takes precedence over git repo sourcing.
-- `directory` (String) Directory to `cd` into before running `docker compose up`.
-- `file_paths` (List of String) Paths to compose files relative to `directory`. Defaults to `["compose.yaml"]` when empty.
-- `local_enabled` (Boolean) Whether to source compose files from the host filesystem instead of a git repo or inline contents.
 
 
 <a id="nestedblock--environment"></a>
@@ -157,8 +153,12 @@ Optional:
 - `account_id` (String) Git account for private repositories.
 - `branch` (String) The branch to check out.
 - `commit` (String) A specific commit hash to check out.
+- `contents` (String) Inline compose file contents. When set, this takes precedence over git repo sourcing.
+- `directory` (String) Directory to `cd` into before running `docker compose up`.
+- `file_paths` (List of String) Paths to compose files relative to `directory`. Defaults to `["compose.yaml"]` when empty.
+- `on_host_enabled` (Boolean) Whether to source compose files from the host filesystem instead of a git repo or inline contents.
 - `path` (String) The repository path, e.g. `owner/repo`.
-- `reclone_enforced` (Boolean) Whether to delete and reclone the repo folder instead of `git pull`.
+- `reclone_enabled` (Boolean) Whether to delete and reclone the repo folder instead of `git pull`.
 - `repo_id` (String) Id or name of a linked `komodo_repo` resource.
 - `url` (String) The URL of the git provider, e.g. `https://github.com`.
 

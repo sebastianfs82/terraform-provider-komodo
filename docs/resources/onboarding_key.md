@@ -30,7 +30,7 @@ resource "komodo_onboarding_key" "example" {
 - `copy_server` (String) New servers onboarded by this key will copy configuration from the specified server.
 - `create_builder` (Boolean) Whether to also create a Builder for servers onboarded using this key.
 - `enabled` (Boolean) Whether the onboarding key is enabled.
-- `expires` (String) Expiration time in RFC3339 format (e.g. `2030-01-01T00:00:00Z`). Use `""` (empty string) for no expiration.
+- `expires_at` (String) Expiration time in RFC3339 format (e.g. `2030-01-01T00:00:00Z`). Use `""` (empty string) for no expiration.
 - `privileged` (Boolean) When enabled, allows the key to enable disabled servers, remove address configuration, and update existing server public keys.
 - `tags` (List of String) Default tags applied to servers onboarded using this key.
 

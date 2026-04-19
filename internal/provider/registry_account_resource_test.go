@@ -11,6 +11,9 @@ import (
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -179,4 +182,80 @@ resource "komodo_registry_account" "test" {
   token    = %q
 }
 `, domain, username, token)
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+func wrongRawRegistryAccountPlan(t *testing.T, r *RegistryAccountResource) tfsdk.Plan {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.Plan{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func wrongRawRegistryAccountState(t *testing.T, r *RegistryAccountResource) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.State{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func TestUnitRegistryAccountResource_configure(t *testing.T) {
+	t.Run("wrong_type", func(t *testing.T) {
+		r := &RegistryAccountResource{}
+		req := fwresource.ConfigureRequest{ProviderData: "not-a-client"}
+		resp := &fwresource.ConfigureResponse{}
+		r.Configure(context.Background(), req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected diagnostic error for wrong ProviderData type")
+		}
+	})
+}
+
+func TestUnitRegistryAccountResource_createPlanGetError(t *testing.T) {
+	r := &RegistryAccountResource{client: &client.Client{}}
+	req := fwresource.CreateRequest{Plan: wrongRawRegistryAccountPlan(t, r)}
+	resp := &fwresource.CreateResponse{}
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitRegistryAccountResource_readStateGetError(t *testing.T) {
+	r := &RegistryAccountResource{client: &client.Client{}}
+	req := fwresource.ReadRequest{State: wrongRawRegistryAccountState(t, r)}
+	resp := &fwresource.ReadResponse{}
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitRegistryAccountResource_updatePlanGetError(t *testing.T) {
+	r := &RegistryAccountResource{client: &client.Client{}}
+	req := fwresource.UpdateRequest{Plan: wrongRawRegistryAccountPlan(t, r)}
+	resp := &fwresource.UpdateResponse{}
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitRegistryAccountResource_deleteStateGetError(t *testing.T) {
+	r := &RegistryAccountResource{client: &client.Client{}}
+	req := fwresource.DeleteRequest{State: wrongRawRegistryAccountState(t, r)}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
 }

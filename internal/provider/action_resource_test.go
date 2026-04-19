@@ -13,6 +13,9 @@ import (
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -487,4 +490,142 @@ resource "komodo_action" "test" {
   }
 }
 `, name)
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+func wrongRawActionPlan(t *testing.T, r *ActionResource) tfsdk.Plan {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.Plan{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func wrongRawActionState(t *testing.T, r *ActionResource) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.State{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func TestUnitActionResource_configure(t *testing.T) {
+	t.Run("wrong_type", func(t *testing.T) {
+		r := &ActionResource{}
+		req := fwresource.ConfigureRequest{ProviderData: "not-a-client"}
+		resp := &fwresource.ConfigureResponse{}
+		r.Configure(context.Background(), req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected diagnostic error for wrong ProviderData type")
+		}
+	})
+}
+
+func TestUnitActionResource_createPlanGetError(t *testing.T) {
+	r := &ActionResource{client: &client.Client{}}
+	req := fwresource.CreateRequest{Plan: wrongRawActionPlan(t, r)}
+	resp := &fwresource.CreateResponse{}
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitActionResource_readStateGetError(t *testing.T) {
+	r := &ActionResource{client: &client.Client{}}
+	req := fwresource.ReadRequest{State: wrongRawActionState(t, r)}
+	resp := &fwresource.ReadResponse{}
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitActionResource_updatePlanGetError(t *testing.T) {
+	r := &ActionResource{client: &client.Client{}}
+	req := fwresource.UpdateRequest{Plan: wrongRawActionPlan(t, r)}
+	resp := &fwresource.UpdateResponse{}
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitActionResource_deleteStateGetError(t *testing.T) {
+	r := &ActionResource{client: &client.Client{}}
+	req := fwresource.DeleteRequest{State: wrongRawActionState(t, r)}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitActionResource_parseActionArguments(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		if parseActionArguments("json", "") != nil {
+			t.Fatal("expected nil for empty raw")
+		}
+		if parseActionArguments("json", "{}") != nil {
+			t.Fatal("expected nil for empty JSON object")
+		}
+	})
+
+	t.Run("json_format", func(t *testing.T) {
+		result := parseActionArguments("json", `{"b": "2", "a": "1"}`)
+		if len(result) != 2 {
+			t.Fatalf("expected 2 args, got %d", len(result))
+		}
+		if result[0].Name.ValueString() != "a" {
+			t.Fatal("expected sorted: a first")
+		}
+	})
+
+	t.Run("json_invalid", func(t *testing.T) {
+		result := parseActionArguments("json", "not-json")
+		if result != nil {
+			t.Fatal("expected nil for invalid JSON")
+		}
+	})
+
+	t.Run("default_format_kv", func(t *testing.T) {
+		result := parseActionArguments("key_value", "B=2\nA=1\n")
+		if len(result) != 2 {
+			t.Fatalf("expected 2 args, got %d", len(result))
+		}
+		if result[0].Name.ValueString() != "A" {
+			t.Fatal("expected sorted: A first")
+		}
+	})
+
+	t.Run("default_format_quoted_value", func(t *testing.T) {
+		result := parseActionArguments("key_value", `KEY="hello world"`)
+		if len(result) != 1 {
+			t.Fatalf("expected 1 arg, got %d", len(result))
+		}
+		if result[0].Value.ValueString() != "hello world" {
+			t.Fatalf("expected unquoted value, got %q", result[0].Value.ValueString())
+		}
+	})
+
+	t.Run("default_format_skip_no_equals", func(t *testing.T) {
+		result := parseActionArguments("key_value", "NOEQUALS\nK=V")
+		if len(result) != 1 {
+			t.Fatalf("expected 1 arg (NOEQUALS skipped), got %d", len(result))
+		}
+	})
+
+	t.Run("default_format_empty_lines", func(t *testing.T) {
+		result := parseActionArguments("key_value", "\n\nK=V\n\n")
+		if len(result) != 1 {
+			t.Fatalf("expected 1 arg, got %d", len(result))
+		}
+	})
 }

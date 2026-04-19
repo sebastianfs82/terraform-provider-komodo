@@ -4,7 +4,10 @@
 package provider
 
 import (
+	"context"
+	"regexp"
 	"testing"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -80,4 +83,52 @@ data "komodo_variable" "secret" {
 			},
 		},
 	})
+}
+
+func TestUnitVariableDataSource_configure(t *testing.T) {
+d := &VariableDataSource{}
+resp := &datasource.ConfigureResponse{}
+d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+if !resp.Diagnostics.HasError() {
+t.Fatal("expected diagnostic error for wrong provider data type")
+}
+}
+
+func TestAccVariableDataSource_bothSet_isError(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccVariableDataSourceConfig_bothSet(),
+				ExpectError: regexp.MustCompile(`Only one of`),
+			},
+		},
+	})
+}
+
+func TestAccVariableDataSource_neitherSet_isError(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccVariableDataSourceConfig_neitherSet(),
+				ExpectError: regexp.MustCompile(`One of`),
+			},
+		},
+	})
+}
+
+func testAccVariableDataSourceConfig_bothSet() string {
+	return `
+data "komodo_variable" "test" {
+  id   = "some-id"
+  name = "some-name"
+}
+`
+}
+
+func testAccVariableDataSourceConfig_neitherSet() string {
+	return `
+data "komodo_variable" "test" {}
+`
 }

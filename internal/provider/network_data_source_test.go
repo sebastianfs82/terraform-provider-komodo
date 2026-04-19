@@ -4,7 +4,10 @@
 package provider
 
 import (
+	"context"
 	"testing"
+
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -36,7 +39,7 @@ func TestAccNetworkDataSource_fields(t *testing.T) {
 					resource.TestCheckResourceAttrSet("data.komodo_network.test", "network_id"),
 					resource.TestCheckResourceAttrSet("data.komodo_network.test", "driver"),
 					resource.TestCheckResourceAttrSet("data.komodo_network.test", "scope"),
-					resource.TestCheckResourceAttrSet("data.komodo_network.test", "enable_ipv6"),
+					resource.TestCheckResourceAttrSet("data.komodo_network.test", "ipv6_enabled"),
 					resource.TestCheckResourceAttrSet("data.komodo_network.test", "internal"),
 					resource.TestCheckResourceAttrSet("data.komodo_network.test", "attachable"),
 					resource.TestCheckResourceAttrSet("data.komodo_network.test", "ingress"),
@@ -64,4 +67,13 @@ data "komodo_network" "test" {
   depends_on = [data.komodo_networks.all]
 }
 `
+}
+
+func TestUnitNetworkDataSource_configure(t *testing.T) {
+	d := &NetworkDataSource{}
+	resp := &datasource.ConfigureResponse{}
+	d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for wrong provider data type")
+	}
 }

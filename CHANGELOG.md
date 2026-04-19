@@ -1,3 +1,47 @@
+## 0.10.0 (April 19, 2026)
+
+BREAKING CHANGES:
+
+* **Actions — complete restructuring:** All individual per-operation action resources have been replaced by a single unified action resource per resource type. A required `action` attribute selects which operation to invoke. Existing configurations must be migrated:
+  * `komodo_deploy_deployment`, `komodo_destroy_deployment`, `komodo_pause_deployment`, `komodo_unpause_deployment`, `komodo_pull_deployment`, `komodo_restart_deployment`, `komodo_start_deployment`, `komodo_stop_deployment` → `komodo_deployment` action (with `action` set to `"deploy"`, `"destroy"`, etc.)
+  * `komodo_stack_deploy`, `komodo_stack_deploy_if_changed`, `komodo_stack_destroy`, `komodo_stack_pause`, `komodo_stack_unpause`, `komodo_stack_pull`, `komodo_stack_restart`, `komodo_stack_run_service`, `komodo_stack_start`, `komodo_stack_stop` → `komodo_stack` action
+  * `komodo_repo_build`, `komodo_repo_clone`, `komodo_repo_pull` → `komodo_repo` action
+  * `komodo_server_prune_buildx`, `komodo_server_prune_containers`, `komodo_server_prune_builders`, `komodo_server_prune_images`, `komodo_server_prune_networks`, `komodo_server_prune_system`, `komodo_server_prune_volumes` → `komodo_server` action
+  * `komodo_run_action` → `komodo_action` action
+  * `komodo_run_build` → `komodo_build` action
+  * `komodo_run_procedure` → `komodo_procedure` action
+  * `komodo_run_sync` → `komodo_resource_sync` action
+  * `komodo_test_alerter` → `komodo_alerter` action
+* **`komodo_stack` resource / data source:**
+  * The `compose` block has been merged into the `source` block. Compose file attributes (`contents`, `directory`, `file_paths`) are now sub-attributes of `source`. Configurations using a bare `compose { contents = "..." }` block must be changed to `source { contents = "..." }`.
+  * `local_enabled` (previously inside `compose`) → `on_host_enabled` (inside `source`).
+  * `reclone_enforced` (inside `source`) → `reclone_enabled`.
+  * `destroy_enforced` → `destroy_mode_enabled`.
+  * `auto_update_enabled` and `auto_update_scope` have been replaced by an `auto_update` block with `enabled` and `scope` sub-attributes.
+* **`komodo_resource_sync` resource:** Flat git-source attributes (`linked_repo`, `git_provider`, `git_https`, `repo`, `branch`, `commit`, `git_account`) and file-source attributes (`files_on_host`, `file_contents`, `resource_path`) have been consolidated into a `source` block. Sub-attribute renames inside the new block: `files_on_host` → `on_host_enabled`, `file_contents` → `contents`, `resource_path` → `resource_paths`.
+* **`komodo_resource_sync` resource / data source:** Sync-behaviour attributes have been renamed and restructured:
+  * `files_on_host` → `on_host_enabled`, `resource_path` → `resource_paths`, `file_contents` → `contents` (data source: flat; resource: inside the new `source` block).
+  * `managed`, `include_resources`, `include_variables`, `include_user_groups`, and `match_tags` replaced by a `managed_mode` block (with `enabled` and `tag_filter`) and a `scope` list attribute (values: `"resources"`, `"variables"`, `"user_groups"`).
+  * `delete` → `delete_undeclared_resources_enabled`.
+  * `pending_alert` → `alerts_enabled`.
+* **`komodo_resource_syncs` data source:** Nested items: `managed` → `managed_mode_enabled`.
+* **`komodo_build` resource / data source:**
+  * `files_on_host` → `on_host_enabled`.
+  * `skip_secret_interp` → `skip_secret_interpolation_enabled`.
+  * `use_buildx` → `buildx_enabled` (now inside the `build` block).
+  * Top-level `dockerfile_path` and inline `dockerfile` string attributes replaced by a `dockerfile` nested block with `path` and `contents` sub-attributes.
+* **`komodo_network` / `komodo_networks` data sources:**
+  * `created` → `created_at` (now always emitted in RFC3339 format).
+  * `enable_ipv6` → `ipv6_enabled`.
+* **`komodo_onboarding_key` resource / data source:** `expires` → `expires_at`.
+
+FEATURES:
+
+* **Unified action resources:** Nine new per-resource-type action resources (`komodo_stack`, `komodo_deployment`, `komodo_repo`, `komodo_server`, `komodo_build`, `komodo_procedure`, `komodo_action`, `komodo_resource_sync`, `komodo_alerter`) replace the previous per-operation action resources. Each accepts a required `action` attribute that selects the operation to invoke, keeping all configuration in one place.
+* **`komodo_networks` data source:** New optional `server_id` attribute. When set, only networks on that server are returned; when omitted, all servers are queried as before.
+
+---
+
 ## 0.9.0 (April 15, 2026)
 
 BREAKING CHANGES:

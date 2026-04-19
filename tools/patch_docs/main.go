@@ -31,35 +31,35 @@ var subcategoryRules = []struct {
 	{"repo", "Repos"},
 	// Builds — builder must come before build so "builder" matches first
 	{"builder", "Builds"},
-	{"run_build", "Builds"},
+	{"build_run", "Builds"},
 	{"build", "Builds"},
 	// Deployments
-	{"deploy_deployment", "Deployments"},
-	{"destroy_deployment", "Deployments"},
-	{"pause_deployment", "Deployments"},
-	{"unpause_deployment", "Deployments"},
-	{"pull_deployment", "Deployments"},
-	{"restart_deployment", "Deployments"},
-	{"start_deployment", "Deployments"},
-	{"stop_deployment", "Deployments"},
+	{"deployment_deploy", "Deployments"},
+	{"deployment_destroy", "Deployments"},
+	{"deployment_pause", "Deployments"},
+	{"deployment_unpause", "Deployments"},
+	{"deployment_pull", "Deployments"},
+	{"deployment_restart", "Deployments"},
+	{"deployment_start", "Deployments"},
+	{"deployment_stop", "Deployments"},
 	{"deployment", "Deployments"},
 	// Procedures
-	{"run_procedure", "Procedures"},
+	{"procedure_run", "Procedures"},
 	{"procedure", "Procedures"},
-	// Actions — run_action before action so it matches first
-	{"run_action", "Actions"},
+	// Actions — action_run before action so it matches first
+	{"action_run", "Actions"},
 	{"action", "Actions"},
 	// Servers
 	{"server_prune", "Servers"},
 	{"server", "Servers"},
 	// Networks
 	{"network", "Networks"},
-	// Alerters
-	{"test_alerter", "Alerters"},
+	// Alerters — alerter_test before alerter so it matches first
+	{"alerter_test", "Alerters"},
 	{"alerter", "Alerters"},
 	// Resource Syncs
 	{"resource_sync", "Resource Syncs"},
-	{"run_sync", "Resource Syncs"},
+	{"sync_run", "Resource Syncs"},
 	// Users & Access — user_group before user; service_user before user
 	{"user_group", "Users & Access"},
 	{"service_user", "Users & Access"},

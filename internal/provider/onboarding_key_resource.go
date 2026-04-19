@@ -42,7 +42,7 @@ type OnboardingKeyResourceModel struct {
 	PrivateKey    types.String `tfsdk:"private_key"`
 	Name          types.String `tfsdk:"name"`
 	Enabled       types.Bool   `tfsdk:"enabled"`
-	Expires       types.String `tfsdk:"expires"`
+	ExpiresAt     types.String `tfsdk:"expires_at"`
 	Tags          types.List   `tfsdk:"tags"`
 	Privileged    types.Bool   `tfsdk:"privileged"`
 	CopyServer    types.String `tfsdk:"copy_server"`
@@ -85,7 +85,7 @@ func (r *OnboardingKeyResource) Schema(ctx context.Context, req resource.SchemaR
 				Default:             booldefault.StaticBool(true),
 				MarkdownDescription: "Whether the onboarding key is enabled.",
 			},
-			"expires": schema.StringAttribute{
+			"expires_at": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString(""),
@@ -164,11 +164,11 @@ func (r *OnboardingKeyResource) Create(ctx context.Context, req resource.CreateR
 	}
 
 	tflog.Debug(ctx, "Creating onboarding key", map[string]interface{}{
-		"name":    data.Name.ValueString(),
-		"expires": data.Expires.ValueString(),
+		"name":       data.Name.ValueString(),
+		"expires_at": data.ExpiresAt.ValueString(),
 	})
 
-	expiresMs, err := rfc3339ToMs(data.Expires.ValueString())
+	expiresMs, err := rfc3339ToMs(data.ExpiresAt.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid expires value", err.Error())
 		return
@@ -193,7 +193,7 @@ func (r *OnboardingKeyResource) Create(ctx context.Context, req resource.CreateR
 	data.PrivateKey = types.StringValue(createResp.PrivateKey)
 	data.Name = types.StringValue(k.Name)
 	data.Enabled = types.BoolValue(k.Enabled)
-	data.Expires = types.StringValue(msToRFC3339(k.Expires))
+	data.ExpiresAt = types.StringValue(msToRFC3339(k.Expires))
 	data.Privileged = types.BoolValue(k.Privileged)
 	data.CopyServer = types.StringValue(k.CopyServer)
 	data.CreateBuilder = types.BoolValue(k.CreateBuilder)
@@ -253,7 +253,7 @@ func (r *OnboardingKeyResource) Read(ctx context.Context, req resource.ReadReque
 	data.PublicKey = types.StringValue(key.PublicKey)
 	data.Name = types.StringValue(key.Name)
 	data.Enabled = types.BoolValue(key.Enabled)
-	data.Expires = types.StringValue(msToRFC3339(key.Expires))
+	data.ExpiresAt = types.StringValue(msToRFC3339(key.Expires))
 	data.Privileged = types.BoolValue(key.Privileged)
 	data.CopyServer = types.StringValue(key.CopyServer)
 	data.CreateBuilder = types.BoolValue(key.CreateBuilder)
@@ -294,9 +294,9 @@ func (r *OnboardingKeyResource) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	name := data.Name.ValueString()
-	expiresMs, err := rfc3339ToMs(data.Expires.ValueString())
+	expiresMs, err := rfc3339ToMs(data.ExpiresAt.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid expires value", err.Error())
+		resp.Diagnostics.AddError("Invalid expires_at value", err.Error())
 		return
 	}
 	enabled := data.Enabled.ValueBool()
@@ -327,7 +327,7 @@ func (r *OnboardingKeyResource) Update(ctx context.Context, req resource.UpdateR
 	data.PublicKey = types.StringValue(key.PublicKey)
 	data.Name = types.StringValue(key.Name)
 	data.Enabled = types.BoolValue(key.Enabled)
-	data.Expires = types.StringValue(msToRFC3339(key.Expires))
+	data.ExpiresAt = types.StringValue(msToRFC3339(key.Expires))
 	data.Privileged = types.BoolValue(key.Privileged)
 	data.CopyServer = types.StringValue(key.CopyServer)
 	data.CreateBuilder = types.BoolValue(key.CreateBuilder)

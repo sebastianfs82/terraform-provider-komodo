@@ -36,7 +36,7 @@ type ResourceSyncListItemModel struct {
 	Repo           types.String `tfsdk:"repo"`
 	Branch         types.String `tfsdk:"branch"`
 	WebhookEnabled types.Bool   `tfsdk:"webhook_enabled"`
-	Managed        types.Bool   `tfsdk:"managed"`
+	Managed        types.Bool   `tfsdk:"managed_mode_enabled"`
 }
 
 func (d *ResourceSyncsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -76,7 +76,7 @@ func (d *ResourceSyncsDataSource) Schema(_ context.Context, _ datasource.SchemaR
 							Computed:            true,
 							MarkdownDescription: "Whether webhook triggers are enabled.",
 						},
-						"managed": schema.BoolAttribute{
+						"managed_mode_enabled": schema.BoolAttribute{
 							Computed:            true,
 							MarkdownDescription: "Whether the sync manages resources (creates/deletes).",
 						},

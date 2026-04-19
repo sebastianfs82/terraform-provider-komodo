@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	tftest "github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 )
 
 // testAccTerminalServerID returns the ID of the first available server in the Komodo instance.
@@ -33,13 +34,32 @@ resource "komodo_stack" "nginx" {
   name      = %q
   server_id = data.komodo_servers.all.servers[0].id
 
-  compose {
+  source {
     contents = <<-EOT
       services:
         web:
           image: nginx:latest
     EOT
   }
+
+  lifecycle {
+    action_trigger {
+      events  = [after_create, after_update]
+      actions = [action.komodo_stack.deploy]
+    }
+  }
+}
+
+action "komodo_stack" "deploy" {
+  config {
+    id     = komodo_stack.nginx.id
+    action = "deploy"
+  }
+}
+
+resource "time_sleep" "wait" {
+  create_duration = "60s"
+  depends_on      = [komodo_stack.nginx]
 }
 `, name)
 }
@@ -227,21 +247,19 @@ func TestAccTerminalResource_container(t *testing.T) {
 	tftest.Test(t, tftest.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ExternalProviders: map[string]tftest.ExternalProvider{
+			"time": {Source: "hashicorp/time"},
+		},
 		Steps: []tftest.TestStep{
 			{
 				Config: testAccTerminalNginxStackConfig("tf-nginx-container-stack") + `
-action "komodo_stack_deploy" "deploy" {
-  config {
-    id = komodo_stack.nginx.name
-  }
-}
-
 resource "komodo_terminal" "test" {
   target_type = "Container"
   target_id   = data.komodo_servers.all.servers[0].id
   container   = "tf-nginx-container-stack-web-1"
   name        = "tf-container-terminal"
-  depends_on  = [action.komodo_stack_deploy.deploy]
+  command     = "/bin/sh"
+  depends_on  = [time_sleep.wait]
 }
 `,
 				Check: tftest.ComposeAggregateTestCheckFunc(
@@ -262,21 +280,18 @@ func TestAccTerminalResource_stack(t *testing.T) {
 	tftest.Test(t, tftest.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ExternalProviders: map[string]tftest.ExternalProvider{
+			"time": {Source: "hashicorp/time"},
+		},
 		Steps: []tftest.TestStep{
 			{
 				Config: testAccTerminalNginxStackConfig("tf-nginx-stack-terminal") + `
-action "komodo_stack_deploy" "deploy" {
-  config {
-    id = komodo_stack.nginx.name
-  }
-}
-
 resource "komodo_terminal" "test" {
   target_type = "Stack"
   target_id   = komodo_stack.nginx.id
   service     = "web"
   name        = "tf-stack-terminal"
-  depends_on  = [action.komodo_stack_deploy.deploy]
+  depends_on  = [time_sleep.wait]
 }
 `,
 				Check: tftest.ComposeAggregateTestCheckFunc(
@@ -297,22 +312,19 @@ func TestAccTerminalResource_attachMode(t *testing.T) {
 	tftest.Test(t, tftest.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ExternalProviders: map[string]tftest.ExternalProvider{
+			"time": {Source: "hashicorp/time"},
+		},
 		Steps: []tftest.TestStep{
 			{
 				Config: testAccTerminalNginxStackConfig("tf-nginx-attach-stack") + `
-action "komodo_stack_deploy" "deploy" {
-  config {
-    id = komodo_stack.nginx.name
-  }
-}
-
 resource "komodo_terminal" "test" {
   target_type = "Container"
   target_id   = data.komodo_servers.all.servers[0].id
   container   = "tf-nginx-attach-stack-web-1"
   name        = "tf-attach-terminal"
   mode        = "attach"
-  depends_on  = [action.komodo_stack_deploy.deploy]
+  depends_on  = [time_sleep.wait]
 }
 `,
 				Check: tftest.ComposeAggregateTestCheckFunc(
@@ -429,5 +441,81 @@ func testAccTerminalImportID3Part(resourceAddress string) tftest.ImportStateIdFu
 		targetID := rs.Primary.Attributes["target_id"]
 		name := rs.Primary.Attributes["name"]
 		return targetType + ":" + targetID + ":" + name, nil
+	}
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+func wrongRawTerminalPlan(t *testing.T, r *TerminalResource) tfsdk.Plan {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.Plan{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func wrongRawTerminalState(t *testing.T, r *TerminalResource) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.State{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func TestUnitTerminalResource_configure(t *testing.T) {
+	t.Run("wrong_type", func(t *testing.T) {
+		r := &TerminalResource{}
+		req := fwresource.ConfigureRequest{ProviderData: "not-a-client"}
+		resp := &fwresource.ConfigureResponse{}
+		r.Configure(context.Background(), req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected diagnostic error for wrong ProviderData type")
+		}
+	})
+}
+
+func TestUnitTerminalResource_createPlanGetError(t *testing.T) {
+	r := &TerminalResource{client: &client.Client{}}
+	req := fwresource.CreateRequest{Plan: wrongRawTerminalPlan(t, r)}
+	resp := &fwresource.CreateResponse{}
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitTerminalResource_readStateGetError(t *testing.T) {
+	r := &TerminalResource{client: &client.Client{}}
+	req := fwresource.ReadRequest{State: wrongRawTerminalState(t, r)}
+	resp := &fwresource.ReadResponse{}
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitTerminalResource_deleteStateGetError(t *testing.T) {
+	r := &TerminalResource{client: &client.Client{}}
+	req := fwresource.DeleteRequest{State: wrongRawTerminalState(t, r)}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitTerminalResource_updateIsNoop(t *testing.T) {
+	r := &TerminalResource{}
+	req := fwresource.UpdateRequest{}
+	resp := &fwresource.UpdateResponse{}
+	r.Update(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error in no-op Update: %v", resp.Diagnostics)
 	}
 }

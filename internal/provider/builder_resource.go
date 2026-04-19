@@ -534,9 +534,6 @@ func builderToModel(ctx context.Context, b *client.Builder, data *BuilderResourc
 	}
 	tags, tagsDiags := types.ListValueFrom(ctx, types.StringType, tagsSlice)
 	diags.Append(tagsDiags...)
-	if diags.HasError() {
-		return diags
-	}
 	data.Tags = tags
 	data.BuilderType = types.StringValue(b.Config.Type)
 
@@ -547,13 +544,11 @@ func builderToModel(ctx context.Context, b *client.Builder, data *BuilderResourc
 			diags.AddError("Parse Error", fmt.Sprintf("Unable to decode URL builder config: %s", err))
 			return diags
 		}
-		if urlCfg != nil {
-			data.UrlConfig = &UrlConfigModel{
-				Address:            types.StringValue(urlCfg.Address),
-				PeripheryPublicKey: types.StringValue(urlCfg.PeripheryPublicKey),
-				InsecureTls:        types.BoolValue(urlCfg.InsecureTls),
-				Passkey:            types.StringValue(urlCfg.Passkey),
-			}
+		data.UrlConfig = &UrlConfigModel{
+			Address:            types.StringValue(urlCfg.Address),
+			PeripheryPublicKey: types.StringValue(urlCfg.PeripheryPublicKey),
+			InsecureTls:        types.BoolValue(urlCfg.InsecureTls),
+			Passkey:            types.StringValue(urlCfg.Passkey),
 		}
 		data.ServerConfig = nil
 		data.AwsConfig = nil
@@ -563,10 +558,8 @@ func builderToModel(ctx context.Context, b *client.Builder, data *BuilderResourc
 			diags.AddError("Parse Error", fmt.Sprintf("Unable to decode Server builder config: %s", err))
 			return diags
 		}
-		if serverCfg != nil {
-			data.ServerConfig = &ServerConfigModel{
-				ServerID: types.StringValue(serverCfg.ServerID),
-			}
+		data.ServerConfig = &ServerConfigModel{
+			ServerID: types.StringValue(serverCfg.ServerID),
 		}
 		data.UrlConfig = nil
 		data.AwsConfig = nil
@@ -576,34 +569,26 @@ func builderToModel(ctx context.Context, b *client.Builder, data *BuilderResourc
 			diags.AddError("Parse Error", fmt.Sprintf("Unable to decode AWS builder config: %s", err))
 			return diags
 		}
-		if awsCfg != nil {
-			securityGroupIDs, sgDiags := types.ListValueFrom(ctx, types.StringType, awsCfg.SecurityGroupIDs)
-			diags.Append(sgDiags...)
-			if diags.HasError() {
-				return diags
-			}
-			secrets, secretsDiags := types.ListValueFrom(ctx, types.StringType, awsCfg.Secrets)
-			diags.Append(secretsDiags...)
-			if diags.HasError() {
-				return diags
-			}
-			data.AwsConfig = &AwsConfigModel{
-				Region:             types.StringValue(awsCfg.Region),
-				InstanceType:       types.StringValue(awsCfg.InstanceType),
-				VolumeGb:           types.Int64Value(awsCfg.VolumeGb),
-				AmiID:              types.StringValue(awsCfg.AmiID),
-				SubnetID:           types.StringValue(awsCfg.SubnetID),
-				KeyPairName:        types.StringValue(awsCfg.KeyPairName),
-				AssignPublicIP:     types.BoolValue(awsCfg.AssignPublicIP),
-				UsePublicIP:        types.BoolValue(awsCfg.UsePublicIP),
-				SecurityGroupIDs:   securityGroupIDs,
-				UserData:           types.StringValue(awsCfg.UserData),
-				Port:               types.Int64Value(awsCfg.Port),
-				UseHttps:           types.BoolValue(awsCfg.UseHttps),
-				PeripheryPublicKey: types.StringValue(awsCfg.PeripheryPublicKey),
-				InsecureTls:        types.BoolValue(awsCfg.InsecureTls),
-				Secrets:            secrets,
-			}
+		securityGroupIDs, sgDiags := types.ListValueFrom(ctx, types.StringType, awsCfg.SecurityGroupIDs)
+		diags.Append(sgDiags...)
+		secrets, secretsDiags := types.ListValueFrom(ctx, types.StringType, awsCfg.Secrets)
+		diags.Append(secretsDiags...)
+		data.AwsConfig = &AwsConfigModel{
+			Region:             types.StringValue(awsCfg.Region),
+			InstanceType:       types.StringValue(awsCfg.InstanceType),
+			VolumeGb:           types.Int64Value(awsCfg.VolumeGb),
+			AmiID:              types.StringValue(awsCfg.AmiID),
+			SubnetID:           types.StringValue(awsCfg.SubnetID),
+			KeyPairName:        types.StringValue(awsCfg.KeyPairName),
+			AssignPublicIP:     types.BoolValue(awsCfg.AssignPublicIP),
+			UsePublicIP:        types.BoolValue(awsCfg.UsePublicIP),
+			SecurityGroupIDs:   securityGroupIDs,
+			UserData:           types.StringValue(awsCfg.UserData),
+			Port:               types.Int64Value(awsCfg.Port),
+			UseHttps:           types.BoolValue(awsCfg.UseHttps),
+			PeripheryPublicKey: types.StringValue(awsCfg.PeripheryPublicKey),
+			InsecureTls:        types.BoolValue(awsCfg.InsecureTls),
+			Secrets:            secrets,
 		}
 		data.UrlConfig = nil
 		data.ServerConfig = nil

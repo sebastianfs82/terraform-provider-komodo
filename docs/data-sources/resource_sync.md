@@ -28,24 +28,30 @@ data "komodo_resource_sync" "example" {
 
 ### Read-Only
 
+- `alerts_enabled` (Boolean) Whether an alert is sent when the sync enters Pending state.
 - `branch` (String) The branch checked out.
 - `commit` (String) The specific commit hash checked out.
-- `delete` (Boolean) Whether the sync deletes undeclared resources.
-- `file_contents` (String) UI-managed resource file contents.
-- `files_on_host` (Boolean) Whether resource files are on the Komodo Core host.
+- `contents` (String) UI-managed resource file contents.
+- `delete_undeclared_resources_enabled` (Boolean) Whether the sync deletes undeclared resources.
 - `git_account` (String) The git account used to access private repos.
 - `git_https` (Boolean) Whether HTTPS is used to clone the repo.
 - `git_provider` (String) The git provider domain.
-- `include_resources` (Boolean) Whether the sync includes resources.
-- `include_user_groups` (Boolean) Whether the sync includes user groups.
-- `include_variables` (Boolean) Whether the sync includes variables.
 - `linked_repo` (String) Id or name of the linked Komodo Repo.
-- `managed` (Boolean) Whether managed mode is enabled.
-- `match_tags` (List of String) Tags used to filter resource exports in managed mode.
-- `pending_alert` (Boolean) Whether an alert is sent when the sync enters Pending state.
+- `managed_mode` (Attributes) Managed mode configuration. (see [below for nested schema](#nestedatt--managed_mode))
+- `on_host_enabled` (Boolean) Whether resource files are on the Komodo Core host.
 - `repo` (String) The git repository slug.
-- `resource_path` (List of String) Path(s) to the resource file(s) to sync.
+- `resource_paths` (List of String) Path(s) to the resource file(s) to sync.
+- `scope` (List of String) Which entity types are included in the sync. Values: `"resources"`, `"variables"`, `"user_groups"`.
 - `webhook` (Attributes) Webhook configuration for the sync. (see [below for nested schema](#nestedatt--webhook))
+
+<a id="nestedatt--managed_mode"></a>
+### Nested Schema for `managed_mode`
+
+Read-Only:
+
+- `enabled` (Boolean) Whether managed mode is enabled.
+- `tag_filter` (List of String) Tags used to filter resource exports in managed mode.
+
 
 <a id="nestedatt--webhook"></a>
 ### Nested Schema for `webhook`

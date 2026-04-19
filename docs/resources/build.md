@@ -57,17 +57,13 @@ resource "komodo_build" "example" {
 
 - `build` (Block, Optional) Docker build configuration. (see [below for nested schema](#nestedblock--build))
 - `builder_id` (String) The ID of the builder to use. Leave empty to use the default builder.
-- `dockerfile` (String) Inline Dockerfile contents. Overrides `dockerfile_path` when set.
-- `dockerfile_path` (String) Path to the Dockerfile relative to `build_path`.
-- `files_on_host` (Boolean) Whether to use files on the host filesystem for the build context instead of a git repository.
 - `image` (Block, Optional) Image configuration for the build output. (see [below for nested schema](#nestedblock--image))
 - `labels` (String) Docker image labels in `KEY=VALUE` format, newline-separated.
 - `links` (List of String) Quick links associated with this build.
 - `pre_build` (Block, Optional) A command to run before the Docker build. (see [below for nested schema](#nestedblock--pre_build))
-- `skip_secret_interp` (Boolean) Whether to skip secret interpolation in build args.
+- `skip_secret_interpolation_enabled` (Boolean) Whether to skip secret interpolation in build args.
 - `source` (Block, Optional) Git source configuration for repo-based builds. (see [below for nested schema](#nestedblock--source))
 - `tags` (List of String) A list of tag IDs to attach to this resource. Use `komodo_tag.<name>.id` to reference tags.
-- `use_buildx` (Boolean) Whether to use `docker buildx` for multi-platform builds.
 - `version` (Block, Optional) Semantic version and auto-increment settings for the built image. (see [below for nested schema](#nestedblock--version))
 - `webhook` (Block, Optional) Webhook configuration for the build. (see [below for nested schema](#nestedblock--webhook))
 
@@ -81,6 +77,7 @@ resource "komodo_build" "example" {
 Optional:
 
 - `argument` (Block List) Docker build argument. Set `secret_enabled = true` to pass it as a Docker secret (`--secret id=NAME,env=VALUE`) instead of a plain build-arg (`--build-arg NAME=VALUE`). (see [below for nested schema](#nestedblock--build--argument))
+- `buildx_enabled` (Boolean) Whether to use `docker buildx` for multi-platform builds.
 - `extra_arguments` (List of String) Additional arguments to pass to the `docker build` command.
 - `path` (String) Path to the Docker build context directory. Defaults to `.`.
 
@@ -103,12 +100,22 @@ Optional:
 
 Optional:
 
+- `dockerfile` (Block, Optional) Dockerfile configuration. (see [below for nested schema](#nestedblock--image--dockerfile))
 - `include_commit_tag_enabled` (Boolean) Whether to push a tag with the git commit hash.
 - `include_latest_tag_enabled` (Boolean) Whether to push a `:latest` tag alongside the versioned tag.
 - `include_version_tags_enabled` (Boolean) Whether to push individual semver component tags (e.g. `:1`, `:1.2`).
 - `name` (String) Override for the image name. Defaults to the build name.
 - `registry` (Block List) Image registry configurations to push the built image to. (see [below for nested schema](#nestedblock--image--registry))
 - `tag` (String) An extra tag suffix to apply to the image.
+
+<a id="nestedblock--image--dockerfile"></a>
+### Nested Schema for `image.dockerfile`
+
+Optional:
+
+- `contents` (String) Inline Dockerfile contents. Overrides `path` when set.
+- `path` (String) Path to the Dockerfile relative to `build.path`.
+
 
 <a id="nestedblock--image--registry"></a>
 ### Nested Schema for `image.registry`
@@ -137,6 +144,7 @@ Optional:
 - `account_id` (String) Git account for private repositories.
 - `branch` (String) The branch to check out.
 - `commit` (String) A specific commit hash to check out.
+- `on_host_enabled` (Boolean) Whether to use files on the host filesystem for the build context instead of a git repository.
 - `path` (String) The repository path, e.g. `owner/repo`.
 - `repo_id` (String) Id or name of a linked `komodo_repo` resource.
 - `url` (String) The URL of the git provider, e.g. `https://github.com`.

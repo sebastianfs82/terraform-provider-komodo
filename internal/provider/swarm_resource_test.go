@@ -9,7 +9,10 @@ import (
 	"os"
 	"testing"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
@@ -382,4 +385,80 @@ resource "komodo_swarm" "test" {
   }
 }
 `, name)
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+func wrongRawSwarmPlan(t *testing.T, r *SwarmResource) tfsdk.Plan {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.Plan{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func wrongRawSwarmState(t *testing.T, r *SwarmResource) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	return tfsdk.State{
+		Raw:    tftypes.NewValue(tftypes.String, "invalid"),
+		Schema: schemaResp.Schema,
+	}
+}
+
+func TestUnitSwarmResource_configure(t *testing.T) {
+	t.Run("wrong_type", func(t *testing.T) {
+		r := &SwarmResource{}
+		req := fwresource.ConfigureRequest{ProviderData: "not-a-client"}
+		resp := &fwresource.ConfigureResponse{}
+		r.Configure(context.Background(), req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Fatal("expected diagnostic error for wrong ProviderData type")
+		}
+	})
+}
+
+func TestUnitSwarmResource_createPlanGetError(t *testing.T) {
+	r := &SwarmResource{client: &client.Client{}}
+	req := fwresource.CreateRequest{Plan: wrongRawSwarmPlan(t, r)}
+	resp := &fwresource.CreateResponse{}
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitSwarmResource_readStateGetError(t *testing.T) {
+	r := &SwarmResource{client: &client.Client{}}
+	req := fwresource.ReadRequest{State: wrongRawSwarmState(t, r)}
+	resp := &fwresource.ReadResponse{}
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitSwarmResource_updatePlanGetError(t *testing.T) {
+	r := &SwarmResource{client: &client.Client{}}
+	req := fwresource.UpdateRequest{Plan: wrongRawSwarmPlan(t, r)}
+	resp := &fwresource.UpdateResponse{}
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed plan")
+	}
+}
+
+func TestUnitSwarmResource_deleteStateGetError(t *testing.T) {
+	r := &SwarmResource{client: &client.Client{}}
+	req := fwresource.DeleteRequest{State: wrongRawSwarmState(t, r)}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for malformed state")
+	}
 }

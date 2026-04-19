@@ -2,7 +2,7 @@ resource "komodo_stack" "example" {
   name      = "my-stack"
   server_id = komodo_server.example.id
 
-  compose {
+  source {
     contents = file("${path.module}/compose.yaml")
   }
 }
@@ -12,7 +12,7 @@ resource "komodo_stack" "nginx" {
   name      = "nginx"
   server_id = komodo_server.example.id
 
-  compose {
+  source {
     contents = <<-EOT
       services:
         nginx:

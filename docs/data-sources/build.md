@@ -32,9 +32,6 @@ data "komodo_build" "example" {
 - `build` (Attributes) Docker build configuration. (see [below for nested schema](#nestedatt--build))
 - `builder_id` (String) The ID of the builder used.
 - `commit` (String) Specific commit hash built.
-- `dockerfile` (String) Inline Dockerfile contents.
-- `dockerfile_path` (String) Path to the Dockerfile.
-- `files_on_host` (Boolean) Whether host filesystem files are used instead of a git repository.
 - `git_account` (String) Git account used for private repositories.
 - `git_https` (Boolean) Whether HTTPS is used for git access.
 - `git_provider` (String) Git provider domain.
@@ -42,10 +39,10 @@ data "komodo_build" "example" {
 - `labels` (String) Docker image labels.
 - `linked_repo` (String) The name of the linked Komodo Repo resource.
 - `links` (List of String) Quick links associated with this build.
+- `on_host_enabled` (Boolean) Whether host filesystem files are used instead of a git repository.
 - `pre_build` (Attributes) Command run before the Docker build. (see [below for nested schema](#nestedatt--pre_build))
 - `repo` (String) Repository path.
-- `skip_secret_interp` (Boolean) Whether secret interpolation in build args is skipped.
-- `use_buildx` (Boolean) Whether `docker buildx` is used.
+- `skip_secret_interpolation_enabled` (Boolean) Whether secret interpolation in build args is skipped.
 - `version` (Attributes) Semantic version and auto-increment settings for the built image. (see [below for nested schema](#nestedatt--version))
 - `webhook` (Attributes) Webhook configuration for the build. (see [below for nested schema](#nestedatt--webhook))
 
@@ -55,6 +52,7 @@ data "komodo_build" "example" {
 Read-Only:
 
 - `argument` (Attributes List) Docker build arguments. (see [below for nested schema](#nestedatt--build--argument))
+- `buildx_enabled` (Boolean) Whether `docker buildx` is used.
 - `extra_arguments` (List of String) Additional arguments passed to `docker build`.
 - `path` (String) Path to the Docker build context directory.
 
@@ -74,12 +72,22 @@ Read-Only:
 
 Read-Only:
 
+- `dockerfile` (Attributes) Dockerfile configuration. (see [below for nested schema](#nestedatt--image--dockerfile))
 - `include_commit_tag_enabled` (Boolean) Whether a git commit hash tag is pushed.
 - `include_latest_tag_enabled` (Boolean) Whether a `:latest` tag is pushed.
 - `include_version_tags_enabled` (Boolean) Whether individual semver component tags are pushed.
 - `name` (String) Override for the image name.
 - `registry` (Attributes List) Image registry configurations the built image is pushed to. (see [below for nested schema](#nestedatt--image--registry))
 - `tag` (String) Extra tag suffix applied to the built image.
+
+<a id="nestedatt--image--dockerfile"></a>
+### Nested Schema for `image.dockerfile`
+
+Read-Only:
+
+- `contents` (String) Inline Dockerfile contents.
+- `path` (String) Path to the Dockerfile.
+
 
 <a id="nestedatt--image--registry"></a>
 ### Nested Schema for `image.registry`

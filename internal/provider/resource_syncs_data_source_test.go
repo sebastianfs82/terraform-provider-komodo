@@ -5,7 +5,9 @@ package provider
 
 import (
 	"fmt"
+	"context"
 	"testing"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -70,8 +72,11 @@ func TestAccResourceSyncsDataSource_filteredByRepoID(t *testing.T) {
 func testAccResourceSyncsDataSourceConfig(name string) string {
 	return fmt.Sprintf(`
 resource "komodo_resource_sync" "test" {
-  name          = %q
-  file_contents = "# list ds test"
+  name = %q
+
+  source {
+    contents = "# list ds test"
+  }
 }
 
 data "komodo_resource_syncs" "all" {
@@ -87,8 +92,10 @@ resource "komodo_repo" "test" {
 }
 
 resource "komodo_resource_sync" "test" {
-  name        = %q
-  linked_repo = komodo_repo.test.id
+  name = %q
+  source {
+    repo_id = komodo_repo.test.id
+  }
 }
 
 data "komodo_resource_syncs" "filtered" {
@@ -96,4 +103,13 @@ data "komodo_resource_syncs" "filtered" {
   depends_on = [komodo_resource_sync.test]
 }
 `, name, name)
+}
+
+func TestUnitResourceSyncsDataSource_configure(t *testing.T) {
+d := &ResourceSyncsDataSource{}
+resp := &datasource.ConfigureResponse{}
+d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+if !resp.Diagnostics.HasError() {
+t.Fatal("expected diagnostic error for wrong provider data type")
+}
 }

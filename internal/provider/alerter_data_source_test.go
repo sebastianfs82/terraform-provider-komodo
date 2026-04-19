@@ -5,7 +5,10 @@ package provider
 
 import (
 	"fmt"
+	"context"
+	"regexp"
 	"testing"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -58,4 +61,52 @@ data "komodo_alerter" "test" {
   depends_on = [komodo_alerter.src]
 }
 `, name, url)
+}
+
+func TestUnitAlerterDataSource_configure(t *testing.T) {
+d := &AlerterDataSource{}
+resp := &datasource.ConfigureResponse{}
+d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+if !resp.Diagnostics.HasError() {
+t.Fatal("expected diagnostic error for wrong provider data type")
+}
+}
+
+func TestAccAlerterDataSource_bothSet_isError(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccAlerterDataSourceConfig_bothSet(),
+				ExpectError: regexp.MustCompile(`Only one of`),
+			},
+		},
+	})
+}
+
+func TestAccAlerterDataSource_neitherSet_isError(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccAlerterDataSourceConfig_neitherSet(),
+				ExpectError: regexp.MustCompile(`One of`),
+			},
+		},
+	})
+}
+
+func testAccAlerterDataSourceConfig_bothSet() string {
+	return `
+data "komodo_alerter" "test" {
+  id   = "some-id"
+  name = "some-name"
+}
+`
+}
+
+func testAccAlerterDataSourceConfig_neitherSet() string {
+	return `
+data "komodo_alerter" "test" {}
+`
 }
