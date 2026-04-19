@@ -5,9 +5,9 @@ package provider
 
 import (
 	"context"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 	"regexp"
 	"testing"
-	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -80,12 +80,12 @@ data "komodo_stack" "test" {
 }
 
 func TestUnitStackDataSource_configure(t *testing.T) {
-d := &StackDataSource{}
-resp := &datasource.ConfigureResponse{}
-d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
-if !resp.Diagnostics.HasError() {
-t.Fatal("expected diagnostic error for wrong provider data type")
-}
+	d := &StackDataSource{}
+	resp := &datasource.ConfigureResponse{}
+	d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for wrong provider data type")
+	}
 }
 
 func TestAccStackDataSource_bothSet_isError(t *testing.T) {

@@ -4,13 +4,13 @@
 package provider
 
 import (
-	"fmt"
-	"regexp"
 	"context"
-	"testing"
+	"fmt"
 	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
+	"regexp"
+	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -151,12 +151,12 @@ data "komodo_swarm" "test" {}
 }
 
 func TestUnitSwarmDataSource_configure(t *testing.T) {
-d := &SwarmDataSource{}
-resp := &datasource.ConfigureResponse{}
-d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
-if !resp.Diagnostics.HasError() {
-t.Fatal("expected diagnostic error for wrong provider data type")
-}
+	d := &SwarmDataSource{}
+	resp := &datasource.ConfigureResponse{}
+	d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for wrong provider data type")
+	}
 }
 
 func TestUnitSwarmDataSource_swarmToDataSourceModel_withAll(t *testing.T) {

@@ -5,9 +5,9 @@ package provider
 
 import (
 	"context"
+	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 	"regexp"
 	"testing"
-	datasource "github.com/hashicorp/terraform-plugin-framework/datasource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -86,12 +86,12 @@ data "komodo_variable" "secret" {
 }
 
 func TestUnitVariableDataSource_configure(t *testing.T) {
-d := &VariableDataSource{}
-resp := &datasource.ConfigureResponse{}
-d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
-if !resp.Diagnostics.HasError() {
-t.Fatal("expected diagnostic error for wrong provider data type")
-}
+	d := &VariableDataSource{}
+	resp := &datasource.ConfigureResponse{}
+	d.Configure(context.Background(), datasource.ConfigureRequest{ProviderData: "wrong"}, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for wrong provider data type")
+	}
 }
 
 func TestAccVariableDataSource_bothSet_isError(t *testing.T) {
