@@ -71,7 +71,7 @@ terraform {
   required_providers {
     komodo = {
       source  = "sebastianfs82/komodo"
-      version = "~> 0.7"
+      version = "~> 0.10"
     }
   }
 }
@@ -112,7 +112,7 @@ terraform {
   required_providers {
     komodo = {
       source  = "sebastianfs82/komodo"
-      version = "~> 0.7"
+      version = "~> 0.10"
     }
   }
 }
@@ -217,6 +217,7 @@ resource "komodo_stack" "app" {
 | [`komodo_registry_account`](docs/resources/registry_account.md) | Docker registry credentials |
 | [`komodo_repo`](docs/resources/repo.md) | Git repository registered in Komodo |
 | [`komodo_resource_sync`](docs/resources/resource_sync.md) | Syncs Komodo resources from a git repo |
+| [`komodo_server`](docs/resources/server.md) | Komodo-managed server |
 | [`komodo_service_user`](docs/resources/service_user.md) | Non-human service account |
 | [`komodo_stack`](docs/resources/stack.md) | Docker Compose stack |
 | [`komodo_swarm`](docs/resources/swarm.md) | Docker Swarm cluster |
@@ -238,6 +239,7 @@ Plural data sources return a filtered list.
 | ------------- | ------------- |
 | [`komodo_action`](docs/data-sources/action.md) | Look up an action |
 | [`komodo_alerter`](docs/data-sources/alerter.md) | Look up an alerter |
+| [`komodo_api_key`](docs/data-sources/api_key.md) | Look up an API key |
 | [`komodo_build`](docs/data-sources/build.md) | Look up a build |
 | [`komodo_builder`](docs/data-sources/builder.md) | Look up a builder |
 | [`komodo_deployment`](docs/data-sources/deployment.md) | Look up a deployment |
@@ -257,6 +259,7 @@ Plural data sources return a filtered list.
 | [`komodo_user`](docs/data-sources/user.md) | Look up a user |
 | [`komodo_user_group`](docs/data-sources/user_group.md) | Look up a user group |
 | [`komodo_variable`](docs/data-sources/variable.md) | Look up a variable |
+| [`komodo_version`](docs/data-sources/version.md) | Read the Komodo Core API server version |
 
 ### Plural
 
@@ -286,17 +289,19 @@ Plural data sources return a filtered list.
 ## Actions
 
 Terraform actions let you trigger imperative Komodo operations as part of a plan/apply cycle.
+Each action resource accepts a required `action` attribute to select the operation.
 
-| Action | Description |
+| Action | Operations (`action` value) |
 | -------- | ------------- |
-| `komodo_repo_clone` | Clone a registered repository |
-| `komodo_repo_pull` | Pull latest changes for a repository |
-| `komodo_repo_build` | Trigger a repository build |
-| `komodo_stack_deploy` | Deploy a stack |
-| `komodo_stack_destroy` | Destroy a running stack |
-| `komodo_stack_start` | Start a stopped stack |
-| `komodo_stack_stop` | Stop a running stack |
-| `komodo_stack_pause` | Pause a running stack |
+| [`komodo_action`](docs/actions/action.md) | `run` |
+| [`komodo_alerter`](docs/actions/alerter.md) | `test` |
+| [`komodo_build`](docs/actions/build.md) | `run` |
+| [`komodo_deployment`](docs/actions/deployment.md) | `deploy`, `destroy`, `pause`, `unpause`, `pull`, `restart`, `start`, `stop` |
+| [`komodo_procedure`](docs/actions/procedure.md) | `run` |
+| [`komodo_repo`](docs/actions/repo.md) | `build`, `clone`, `pull` |
+| [`komodo_resource_sync`](docs/actions/resource_sync.md) | `run` |
+| [`komodo_server`](docs/actions/server.md) | `prune_buildx`, `prune_containers`, `prune_builders`, `prune_images`, `prune_networks`, `prune_system`, `prune_volumes` |
+| [`komodo_stack`](docs/actions/stack.md) | `deploy`, `deploy_if_changed`, `destroy`, `pause`, `unpause`, `pull`, `restart`, `run_service`, `start`, `stop` |
 
 ## Developing the Provider
 

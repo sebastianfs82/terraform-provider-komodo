@@ -119,7 +119,6 @@ func TestUnitStackAction_invoke_simple(t *testing.T) {
 	simpleActions := []string{"deploy", "deploy_if_changed", "pause", "unpause", "pull", "restart", "start", "stop"}
 
 	for _, act := range simpleActions {
-		act := act
 		t.Run(act+"_success", func(t *testing.T) {
 			_, c := newActionSuccessMockServer(t)
 			a := &StackAction{client: c}

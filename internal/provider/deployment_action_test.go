@@ -113,7 +113,6 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name+"_success", func(t *testing.T) {
 			_, c := newActionSuccessMockServer(t)
 			a := &DeploymentAction{client: c}

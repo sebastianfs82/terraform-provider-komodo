@@ -87,7 +87,6 @@ func TestUnitServerAction_invoke(t *testing.T) {
 	}
 
 	for _, act := range allActions {
-		act := act
 		t.Run(act+"_success", func(t *testing.T) {
 			_, c := newActionSuccessMockServer(t)
 			a := &ServerAction{client: c}

@@ -158,7 +158,10 @@ func TestUnitUserGroupDataSource_validateConfigUnknown(t *testing.T) {
 	ctx := context.Background()
 	schemaResp := &datasource.SchemaResponse{}
 	d.Schema(ctx, datasource.SchemaRequest{}, schemaResp)
-	objType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	objType, ok := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	if !ok {
+		t.Fatal("expected schema type to be tftypes.Object")
+	}
 	configVal := tftypes.NewValue(objType, map[string]tftypes.Value{
 		"id":               tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
 		"name":             tftypes.NewValue(tftypes.String, nil),

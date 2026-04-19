@@ -80,7 +80,6 @@ func TestUnitRepoAction_invoke(t *testing.T) {
 	}
 
 	for _, act := range []string{"build", "clone", "pull"} {
-		act := act
 		t.Run(act+"_success", func(t *testing.T) {
 			_, c := newActionSuccessMockServer(t)
 			a := &RepoAction{client: c}

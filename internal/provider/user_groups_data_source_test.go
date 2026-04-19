@@ -161,8 +161,16 @@ func TestUnitUserGroupsDataSource_readWithNonEmptyAllDirect(t *testing.T) {
 	schemaResp := &datasource.SchemaResponse{}
 	d.Schema(ctx, datasource.SchemaRequest{}, schemaResp)
 	schemaType := schemaResp.Schema.Type().TerraformType(ctx)
+	schemaObj, ok := schemaType.(tftypes.Object)
+	if !ok {
+		t.Fatal("expected schema type to be tftypes.Object")
+	}
+	groupsListType, ok := schemaObj.AttributeTypes["groups"].(tftypes.List)
+	if !ok {
+		t.Fatal("expected groups attribute type to be tftypes.List")
+	}
 	configVal := tftypes.NewValue(schemaType, map[string]tftypes.Value{
-		"groups": tftypes.NewValue(tftypes.List{ElementType: schemaType.(tftypes.Object).AttributeTypes["groups"].(tftypes.List).ElementType}, nil),
+		"groups": tftypes.NewValue(tftypes.List{ElementType: groupsListType.ElementType}, nil),
 	})
 	req := datasource.ReadRequest{Config: tfsdk.Config{Raw: configVal, Schema: schemaResp.Schema}}
 	resp := &datasource.ReadResponse{State: tfsdk.State{Schema: schemaResp.Schema}}
@@ -192,8 +200,16 @@ func TestUnitUserGroupsDataSource_readNilUsersDirect(t *testing.T) {
 	schemaResp := &datasource.SchemaResponse{}
 	d.Schema(ctx, datasource.SchemaRequest{}, schemaResp)
 	schemaType := schemaResp.Schema.Type().TerraformType(ctx)
+	schemaObj2, ok := schemaType.(tftypes.Object)
+	if !ok {
+		t.Fatal("expected schema type to be tftypes.Object")
+	}
+	groupsListType2, ok := schemaObj2.AttributeTypes["groups"].(tftypes.List)
+	if !ok {
+		t.Fatal("expected groups attribute type to be tftypes.List")
+	}
 	configVal := tftypes.NewValue(schemaType, map[string]tftypes.Value{
-		"groups": tftypes.NewValue(tftypes.List{ElementType: schemaType.(tftypes.Object).AttributeTypes["groups"].(tftypes.List).ElementType}, nil),
+		"groups": tftypes.NewValue(tftypes.List{ElementType: groupsListType2.ElementType}, nil),
 	})
 	req := datasource.ReadRequest{Config: tfsdk.Config{Raw: configVal, Schema: schemaResp.Schema}}
 	resp := &datasource.ReadResponse{State: tfsdk.State{Schema: schemaResp.Schema}}

@@ -1432,7 +1432,7 @@ resource "komodo_user_group" "test" {
 
 // TestAccUserGroupResource_createWithAllSuccess covers:
 // - data.All.ElementsAs in Create (line ~93)
-// - non-empty fetched.All in Create (line ~147)
+// - non-empty fetched.All in Create (line ~147).
 func TestAccUserGroupResource_createWithAllSuccess(t *testing.T) {
 	const jsonWithAll = `{"_id":{"$oid":"aabbccddeeff001122334455"},"name":"tf-mock-group","everyone":false,"users":[],"all":{"key":"val"},"updated_at":0}`
 	srv := newUserGroupMockServer(t, map[string]mockUserGroupRoute{
