@@ -1146,16 +1146,6 @@ const mockValidUserGroupNullUsersJSON = `{
   "updated_at": 0
 }`
 
-// JSON after user is removed: empty users, non-empty all still present.
-const mockValidUserGroupNoUsersJSON = `{
-  "_id": {"$oid": "aabbccddeeff001122334455"},
-  "name": "tf-mock-group",
-  "everyone": false,
-  "users": [],
-  "all": {"key": "val"},
-  "updated_at": 0
-}`
-
 const mockUserGroupResourceConfigWithUsers = `
 resource "komodo_user_group" "test" {
   name  = "tf-mock-group"

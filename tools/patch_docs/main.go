@@ -31,46 +31,37 @@ var subcategoryRules = []struct {
 	{"repo", "Repos"},
 	// Builds — builder must come before build so "builder" matches first
 	{"builder", "Builds"},
-	{"build_run", "Builds"},
 	{"build", "Builds"},
 	// Deployments
-	{"deployment_deploy", "Deployments"},
-	{"deployment_destroy", "Deployments"},
-	{"deployment_pause", "Deployments"},
-	{"deployment_unpause", "Deployments"},
-	{"deployment_pull", "Deployments"},
-	{"deployment_restart", "Deployments"},
-	{"deployment_start", "Deployments"},
-	{"deployment_stop", "Deployments"},
 	{"deployment", "Deployments"},
 	// Procedures
-	{"procedure_run", "Procedures"},
 	{"procedure", "Procedures"},
-	// Actions — action_run before action so it matches first
-	{"action_run", "Actions"},
+	// Actions
 	{"action", "Actions"},
 	// Servers
-	{"server_prune", "Servers"},
 	{"server", "Servers"},
 	// Networks
 	{"network", "Networks"},
-	// Alerters — alerter_test before alerter so it matches first
-	{"alerter_test", "Alerters"},
+	// Swarms
+	{"swarm", "Swarms"},
+	// Alerters
 	{"alerter", "Alerters"},
 	// Resource Syncs
 	{"resource_sync", "Resource Syncs"},
-	{"sync_run", "Resource Syncs"},
 	// Users & Access — user_group before user; service_user before user
 	{"user_group", "Users & Access"},
 	{"service_user", "Users & Access"},
 	{"user", "Users & Access"},
 	{"api_key", "Users & Access"},
 	{"onboarding_key", "Users & Access"},
+	// Terminals
+	{"terminal", "Terminals"},
 	// Configuration
 	{"variable", "Configuration"},
 	{"tag", "Configuration"},
 	{"provider_account", "Configuration"},
 	{"registry_account", "Configuration"},
+	{"version", "Configuration"},
 }
 
 var subcategoryRe = regexp.MustCompile(`(?m)^subcategory:\s*"[^"]*"`)
