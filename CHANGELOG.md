@@ -1,3 +1,16 @@
+## 0.10.1 (April 24, 2026)
+
+BUG FIXES:
+
+* **Documentation:** Fixed missing subcategory groupings for `komodo_swarm`, `komodo_terminal`, and `komodo_version` docs on the Terraform Registry.
+* **Documentation:** Fixed broken link for `komodo_user_group_membership` in README.
+
+ENHANCEMENTS:
+
+* **`patch_docs` tool:** Removed dead subcategory rules that matched no generated docs (deployment action variants, `build_run`, `action_run`, `procedure_run`, `server_prune`, `alerter_test`, `sync_run`). Added rules for `swarm`, `terminal`, and `version`.
+
+---
+
 ## 0.10.0 (April 19, 2026)
 
 BREAKING CHANGES:
