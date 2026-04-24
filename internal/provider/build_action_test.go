@@ -54,7 +54,7 @@ func TestUnitBuildAction_configure(t *testing.T) {
 
 	t.Run("valid_client", func(t *testing.T) {
 		a := &BuildAction{}
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		cfgResp := &action.ConfigureResponse{}
 		a.Configure(ctx, action.ConfigureRequest{ProviderData: c}, cfgResp)
 		if cfgResp.Diagnostics.HasError() {
@@ -77,7 +77,7 @@ func TestUnitBuildAction_invoke(t *testing.T) {
 	}
 
 	t.Run("run_success", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &BuildAction{client: c}
 		schResp := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -88,7 +88,7 @@ func TestUnitBuildAction_invoke(t *testing.T) {
 	})
 
 	t.Run("run_client_error", func(t *testing.T) {
-		_, c := newActionErrorMockServer(t)
+		c := newActionErrorMockServer(t)
 		a := &BuildAction{client: c}
 		schResp := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -99,7 +99,7 @@ func TestUnitBuildAction_invoke(t *testing.T) {
 	})
 
 	t.Run("invalid_action", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &BuildAction{client: c}
 		schResp := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -110,7 +110,7 @@ func TestUnitBuildAction_invoke(t *testing.T) {
 	})
 
 	t.Run("config_error", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &BuildAction{client: c}
 		schResp := getSchema()
 		invokeResp := &action.InvokeResponse{}
