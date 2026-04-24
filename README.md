@@ -225,7 +225,7 @@ resource "komodo_stack" "app" {
 | [`komodo_terminal`](docs/resources/terminal.md) | Terminal session on a target resource |
 | [`komodo_user`](docs/resources/user.md) | Human user account |
 | [`komodo_user_group`](docs/resources/user_group.md) | User group for permission management |
-| [`komodo_user_group_membership`](docs/resources/user_group.md) | User ↔ group membership |
+| [`komodo_user_group_membership`](docs/resources/user_group_membership.md) | User ↔ group membership |
 | [`komodo_variable`](docs/resources/variable.md) | Global variable / secret |
 
 ## Data Sources
