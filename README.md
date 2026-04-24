@@ -24,7 +24,7 @@ Komodo is a self-hosted tool for building and deploying Docker containers at sca
 The provider supports two mutually exclusive authentication methods.
 Configure one via the provider block or the corresponding environment variables.
 
-### API key (preferred)
+### API Key (preferred)
 
 API keys are scoped to a single Komodo user and do not expose the account password.
 Generate one through the Komodo UI or with the `komodo_api_key` resource,
@@ -44,7 +44,7 @@ provider "komodo" {
 | `KOMODO_API_KEY`      | API key value    |
 | `KOMODO_API_SECRET`   | API key secret   |
 
-### Username / password
+### Username / Password
 
 Fine for interactive local development, but avoid committing plain-text passwords to version control.
 
