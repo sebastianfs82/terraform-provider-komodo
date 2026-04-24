@@ -648,40 +648,9 @@ func wrongRawStackState(t *testing.T, r *StackResource) tfsdk.State {
 	}
 }
 
-// newStackAPIMock creates a minimal httptest server that routes requests by
-// the JSON "type" field. Login and GetVersion are handled automatically.
-// Callers provide a routes map; unrecognised types return mockValidStackJSON.
-func newStackAPIMock(t *testing.T, routes map[string]string) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/auth/login/LoginLocalUser" {
-			_, _ = w.Write([]byte(`{"type":"Jwt","data":{"jwt":"mock-token"}}`))
-			return
-		}
-		body, _ := io.ReadAll(r.Body)
-		var req struct {
-			Type string `json:"type"`
-		}
-		_ = json.Unmarshal(body, &req)
-		if resp, ok := routes[req.Type]; ok {
-			_, _ = w.Write([]byte(resp))
-			return
-		}
-		switch req.Type {
-		case "GetVersion":
-			_, _ = w.Write([]byte(`{"version":"2.0.0"}`))
-		default:
-			_, _ = w.Write([]byte(mockValidStackJSON))
-		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv
-}
-
 // newStackAPIClientMock creates an httptest server and a *client.Client
 // (using API key auth, so no login needed) routing by JSON "type" field.
-func newStackAPIClientMock(t *testing.T, routes map[string]string) (*httptest.Server, *client.Client) {
+func newStackAPIClientMock(t *testing.T, routes map[string]string) *client.Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -697,8 +666,7 @@ func newStackAPIClientMock(t *testing.T, routes map[string]string) (*httptest.Se
 		_, _ = w.Write([]byte(`null`))
 	}))
 	t.Cleanup(srv.Close)
-	c := client.NewClientWithApiKey(srv.URL, "key", "secret")
-	return srv, c
+	return client.NewClientWithApiKey(srv.URL, "key", "secret")
 }
 
 // ---------------------------------------------------------------------------
@@ -1264,7 +1232,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("nil_tags_converted_to_empty", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1281,7 +1249,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("auto_update_all_services", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1304,7 +1272,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("registry_set", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, map[string]string{
+		c := newStackAPIClientMock(t, map[string]string{
 			"ListDockerRegistryAccounts": `[{"_id":{"$oid":"reg1"},"domain":"docker.io","username":"myuser","token":""}]`,
 		})
 		stack := &client.Stack{
@@ -1326,7 +1294,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("source_with_linked_repo", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1349,7 +1317,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("source_git_https_false", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1375,7 +1343,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("source_git_account_resolution", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, map[string]string{
+		c := newStackAPIClientMock(t, map[string]string{
 			"ListGitProviderAccounts": `[{"_id":{"$oid":"acc1"},"domain":"github.com","username":"myuser","https":true,"token":""}]`,
 		})
 		stack := &client.Stack{
@@ -1403,7 +1371,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("webhook_set", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1430,7 +1398,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("post_deploy_set", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1452,7 +1420,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("environment_with_file_path", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1472,7 +1440,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 
 	t.Run("environment_cleared", func(t *testing.T) {
 		// Environment block was set in prior state but API now returns nothing.
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1493,7 +1461,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("build_extra_args_present", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1517,7 +1485,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	t.Run("build_already_in_state", func(t *testing.T) {
 		// data.Build is non-nil but API returns RunBuild=false and no BuildExtraArgs
 		// → Build block should remain (nil-guarded by `data.Build != nil`).
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1538,7 +1506,7 @@ func TestUnitStackResource_stackToModel(t *testing.T) {
 	})
 
 	t.Run("wrapper_set", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		stack := &client.Stack{
 			ID:   client.OID{OID: "id1"},
 			Name: "test",
@@ -1571,7 +1539,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("registry_with_account", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, map[string]string{
+		c := newStackAPIClientMock(t, map[string]string{
 			"GetDockerRegistryAccount": `{"_id":{"$oid":"reg1"},"domain":"docker.io","username":"myuser","token":""}`,
 		})
 		data := &StackResourceModel{
@@ -1589,7 +1557,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 	})
 
 	t.Run("wrapper_command", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		inc, _ := types.ListValueFrom(ctx, types.StringType, []string{})
 		data := &StackResourceModel{
 			Wrapper: &StackCmdWrapperModel{
@@ -1604,7 +1572,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 	})
 
 	t.Run("webhook_fields", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		data := &StackResourceModel{
 			Webhook: &StackWebhookModel{
 				Enabled:     types.BoolValue(true),
@@ -1625,7 +1593,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 	})
 
 	t.Run("environment_fields", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		vars, _ := types.MapValueFrom(ctx, types.StringType, map[string]string{"KEY": "val"})
 		data := &StackResourceModel{
 			Environment: &EnvironmentModel{
@@ -1643,7 +1611,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 	})
 
 	t.Run("source_http_url", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		data := &StackResourceModel{
 			Source: &StackSourceModel{
 				URL:       types.StringValue("http://gitlab.com"),
@@ -1661,7 +1629,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 
 	t.Run("source_plain_url", func(t *testing.T) {
 		// URL without http/https scheme → stored as-is, GitHttps=true.
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		data := &StackResourceModel{
 			Source: &StackSourceModel{
 				URL:       types.StringValue("gitlab.com"),
@@ -1678,7 +1646,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 	})
 
 	t.Run("source_file_paths", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		fps, _ := types.ListValueFrom(ctx, types.StringType, []string{"docker-compose.yml", "override.yml"})
 		data := &StackResourceModel{
 			Source: &StackSourceModel{
@@ -1693,7 +1661,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 	})
 
 	t.Run("post_deploy", func(t *testing.T) {
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		data := &StackResourceModel{
 			PostDeploy: &SystemCommandModel{
 				Path:    types.StringValue("/opt"),
@@ -1777,7 +1745,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 
 	t.Run("build_extra_arguments_set", func(t *testing.T) {
 		// Covers the `Build.ExtraArguments not null` branch in stackConfigFromModel.
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		args, _ := types.ListValueFrom(ctx, types.StringType, []string{"--no-cache"})
 		data := &StackResourceModel{
 			Build: &BuildConfigModel{
@@ -1793,7 +1761,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 
 	t.Run("build_extra_arguments_null_clears", func(t *testing.T) {
 		// Covers the else branch: Build != nil but ExtraArguments is null → BuildExtraArgs = []string{}.
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		data := &StackResourceModel{
 			Build: &BuildConfigModel{
 				Enabled:        types.BoolValue(true),
@@ -1811,7 +1779,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 
 	t.Run("wrapper_include_set", func(t *testing.T) {
 		// Covers the `Wrapper.Include not null` branch in stackConfigFromModel.
-		_, c := newStackAPIClientMock(t, nil)
+		c := newStackAPIClientMock(t, nil)
 		inc, _ := types.ListValueFrom(ctx, types.StringType, []string{"web", "db"})
 		data := &StackResourceModel{
 			Wrapper: &StackCmdWrapperModel{

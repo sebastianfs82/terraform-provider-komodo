@@ -57,7 +57,7 @@ func TestUnitRepoAction_configure(t *testing.T) {
 
 	t.Run("valid_client", func(t *testing.T) {
 		a := &RepoAction{}
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		cfgResp := &action.ConfigureResponse{}
 		a.Configure(ctx, action.ConfigureRequest{ProviderData: c}, cfgResp)
 		if cfgResp.Diagnostics.HasError() {
@@ -81,7 +81,7 @@ func TestUnitRepoAction_invoke(t *testing.T) {
 
 	for _, act := range []string{"build", "clone", "pull"} {
 		t.Run(act+"_success", func(t *testing.T) {
-			_, c := newActionSuccessMockServer(t)
+			c := newActionSuccessMockServer(t)
 			a := &RepoAction{client: c}
 			schResp := getSchema()
 			invokeResp := &action.InvokeResponse{}
@@ -92,7 +92,7 @@ func TestUnitRepoAction_invoke(t *testing.T) {
 		})
 
 		t.Run(act+"_client_error", func(t *testing.T) {
-			_, c := newActionErrorMockServer(t)
+			c := newActionErrorMockServer(t)
 			a := &RepoAction{client: c}
 			schResp := getSchema()
 			invokeResp := &action.InvokeResponse{}
@@ -104,7 +104,7 @@ func TestUnitRepoAction_invoke(t *testing.T) {
 	}
 
 	t.Run("invalid_action", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &RepoAction{client: c}
 		schResp := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -115,7 +115,7 @@ func TestUnitRepoAction_invoke(t *testing.T) {
 	})
 
 	t.Run("config_error", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &RepoAction{client: c}
 		schResp := getSchema()
 		invokeResp := &action.InvokeResponse{}

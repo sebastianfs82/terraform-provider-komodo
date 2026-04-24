@@ -67,7 +67,7 @@ func TestUnitStackAction_configure(t *testing.T) {
 
 	t.Run("valid_client", func(t *testing.T) {
 		a := &StackAction{}
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		cfgResp := &action.ConfigureResponse{}
 		a.Configure(ctx, action.ConfigureRequest{ProviderData: c}, cfgResp)
 		if cfgResp.Diagnostics.HasError() {
@@ -88,10 +88,10 @@ func stackActionSchema(ctx context.Context) action.SchemaResponse {
 }
 
 // buildStackActionInvokeReq constructs a StackAction InvokeRequest with all optional fields null.
-func buildStackActionInvokeReq(ctx context.Context, schm action.SchemaResponse, stackID, act string) action.InvokeRequest {
+func buildStackActionInvokeReq(ctx context.Context, schm action.SchemaResponse, act string) action.InvokeRequest {
 	schemaType := schm.Schema.Type().TerraformType(ctx)
 	raw := tftypes.NewValue(schemaType, map[string]tftypes.Value{
-		"id":             tftypes.NewValue(tftypes.String, stackID),
+		"id":             tftypes.NewValue(tftypes.String, "stack-id"),
 		"action":         tftypes.NewValue(tftypes.String, act),
 		"services":       tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, nil),
 		"stop_time":      tftypes.NewValue(tftypes.Number, nil),
@@ -120,22 +120,22 @@ func TestUnitStackAction_invoke_simple(t *testing.T) {
 
 	for _, act := range simpleActions {
 		t.Run(act+"_success", func(t *testing.T) {
-			_, c := newActionSuccessMockServer(t)
+			c := newActionSuccessMockServer(t)
 			a := &StackAction{client: c}
 			schResp := stackActionSchema(ctx)
 			invokeResp := &action.InvokeResponse{}
-			a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "stack-id", act), invokeResp)
+			a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, act), invokeResp)
 			if invokeResp.Diagnostics.HasError() {
 				t.Fatalf("unexpected error for action %q: %s", act, invokeResp.Diagnostics)
 			}
 		})
 
 		t.Run(act+"_client_error", func(t *testing.T) {
-			_, c := newActionErrorMockServer(t)
+			c := newActionErrorMockServer(t)
 			a := &StackAction{client: c}
 			schResp := stackActionSchema(ctx)
 			invokeResp := &action.InvokeResponse{}
-			a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "stack-id", act), invokeResp)
+			a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, act), invokeResp)
 			if !invokeResp.Diagnostics.HasError() {
 				t.Fatalf("expected error for action %q on client failure", act)
 			}
@@ -144,7 +144,7 @@ func TestUnitStackAction_invoke_simple(t *testing.T) {
 
 	// deploy with stop_time set
 	t.Run("deploy_with_stop_time", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &StackAction{client: c}
 		schResp := stackActionSchema(ctx)
 		schemaType := schResp.Schema.Type().TerraformType(ctx)
@@ -175,7 +175,7 @@ func TestUnitStackAction_invoke_simple(t *testing.T) {
 
 	// deploy_if_changed with stop_time set
 	t.Run("deploy_if_changed_with_stop_time", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &StackAction{client: c}
 		schResp := stackActionSchema(ctx)
 		schemaType := schResp.Schema.Type().TerraformType(ctx)
@@ -206,7 +206,7 @@ func TestUnitStackAction_invoke_simple(t *testing.T) {
 
 	// stop with stop_time set
 	t.Run("stop_with_stop_time", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &StackAction{client: c}
 		schResp := stackActionSchema(ctx)
 		schemaType := schResp.Schema.Type().TerraformType(ctx)
@@ -242,17 +242,17 @@ func TestUnitStackAction_invoke_destroy(t *testing.T) {
 	schemaType := schResp.Schema.Type().TerraformType(ctx)
 
 	t.Run("destroy_success", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &StackAction{client: c}
 		invokeResp := &action.InvokeResponse{}
-		a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "stack-id", "destroy"), invokeResp)
+		a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "destroy"), invokeResp)
 		if invokeResp.Diagnostics.HasError() {
 			t.Fatalf("unexpected error: %s", invokeResp.Diagnostics)
 		}
 	})
 
 	t.Run("destroy_with_remove_orphans", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &StackAction{client: c}
 		raw := tftypes.NewValue(schemaType, map[string]tftypes.Value{
 			"id":             tftypes.NewValue(tftypes.String, "stack-id"),
@@ -281,7 +281,7 @@ func TestUnitStackAction_invoke_destroy(t *testing.T) {
 	})
 
 	t.Run("destroy_with_stop_time", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &StackAction{client: c}
 		raw := tftypes.NewValue(schemaType, map[string]tftypes.Value{
 			"id":             tftypes.NewValue(tftypes.String, "stack-id"),
@@ -309,10 +309,10 @@ func TestUnitStackAction_invoke_destroy(t *testing.T) {
 	})
 
 	t.Run("destroy_client_error", func(t *testing.T) {
-		_, c := newActionErrorMockServer(t)
+		c := newActionErrorMockServer(t)
 		a := &StackAction{client: c}
 		invokeResp := &action.InvokeResponse{}
-		a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "stack-id", "destroy"), invokeResp)
+		a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "destroy"), invokeResp)
 		if !invokeResp.Diagnostics.HasError() {
 			t.Fatal("expected error on client failure")
 		}
@@ -324,7 +324,7 @@ func TestUnitStackAction_invoke_deploy_with_services(t *testing.T) {
 	schResp := stackActionSchema(ctx)
 	schemaType := schResp.Schema.Type().TerraformType(ctx)
 
-	_, c := newActionSuccessMockServer(t)
+	c := newActionSuccessMockServer(t)
 	a := &StackAction{client: c}
 
 	raw := tftypes.NewValue(schemaType, map[string]tftypes.Value{
@@ -362,7 +362,7 @@ func TestUnitStackAction_invoke_run_service(t *testing.T) {
 	schemaType := schResp.Schema.Type().TerraformType(ctx)
 
 	t.Run("run_service_success", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &StackAction{client: c}
 		raw := tftypes.NewValue(schemaType, map[string]tftypes.Value{
 			"id":             tftypes.NewValue(tftypes.String, "stack-id"),
@@ -395,18 +395,18 @@ func TestUnitStackAction_invoke_run_service(t *testing.T) {
 	})
 
 	t.Run("run_service_missing_service", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &StackAction{client: c}
 		// service is null → validation error
 		invokeResp := &action.InvokeResponse{}
-		a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "stack-id", "run_service"), invokeResp)
+		a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "run_service"), invokeResp)
 		if !invokeResp.Diagnostics.HasError() {
 			t.Fatal("expected error when service is not set for run_service")
 		}
 	})
 
 	t.Run("run_service_client_error", func(t *testing.T) {
-		_, c := newActionErrorMockServer(t)
+		c := newActionErrorMockServer(t)
 		a := &StackAction{client: c}
 		raw := tftypes.NewValue(schemaType, map[string]tftypes.Value{
 			"id":             tftypes.NewValue(tftypes.String, "stack-id"),
@@ -437,10 +437,10 @@ func TestUnitStackAction_invoke_run_service(t *testing.T) {
 func TestUnitStackAction_invoke_invalid(t *testing.T) {
 	ctx := context.Background()
 	schResp := stackActionSchema(ctx)
-	_, c := newActionSuccessMockServer(t)
+	c := newActionSuccessMockServer(t)
 	a := &StackAction{client: c}
 	invokeResp := &action.InvokeResponse{}
-	a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "stack-id", "bogus"), invokeResp)
+	a.Invoke(ctx, buildStackActionInvokeReq(ctx, schResp, "bogus"), invokeResp)
 	if !invokeResp.Diagnostics.HasError() {
 		t.Fatal("expected error for invalid action")
 	}
@@ -448,7 +448,7 @@ func TestUnitStackAction_invoke_invalid(t *testing.T) {
 
 func TestUnitStackAction_invoke_config_error(t *testing.T) {
 	ctx := context.Background()
-	_, c := newActionSuccessMockServer(t)
+	c := newActionSuccessMockServer(t)
 	a := &StackAction{client: c}
 	schResp := stackActionSchema(ctx)
 	invokeResp := &action.InvokeResponse{}
