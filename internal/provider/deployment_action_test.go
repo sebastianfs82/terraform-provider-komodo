@@ -62,7 +62,7 @@ func TestUnitDeploymentAction_configure(t *testing.T) {
 
 	t.Run("valid_client", func(t *testing.T) {
 		a := &DeploymentAction{}
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		cfgResp := &action.ConfigureResponse{}
 		a.Configure(ctx, action.ConfigureRequest{ProviderData: c}, cfgResp)
 		if cfgResp.Diagnostics.HasError() {
@@ -114,7 +114,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name+"_success", func(t *testing.T) {
-			_, c := newActionSuccessMockServer(t)
+			c := newActionSuccessMockServer(t)
 			a := &DeploymentAction{client: c}
 			schResp := getSchema()
 			invokeResp := &action.InvokeResponse{}
@@ -126,7 +126,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 
 		tc2 := tc
 		t.Run(tc2.name+"_client_error", func(t *testing.T) {
-			_, c := newActionErrorMockServer(t)
+			c := newActionErrorMockServer(t)
 			a := &DeploymentAction{client: c}
 			schResp := getSchema()
 			invokeResp := &action.InvokeResponse{}
@@ -138,7 +138,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	}
 
 	t.Run("deploy_with_stop_signal", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &DeploymentAction{client: c}
 		schResp := getSchema()
 		schemaType := schResp.Schema.Type().TerraformType(ctx)
@@ -158,7 +158,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	})
 
 	t.Run("stop_with_signal", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &DeploymentAction{client: c}
 		schResp := getSchema()
 		schemaType := schResp.Schema.Type().TerraformType(ctx)
@@ -178,7 +178,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	})
 
 	t.Run("invalid_action", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &DeploymentAction{client: c}
 		schResp := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -189,7 +189,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	})
 
 	t.Run("config_error", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &DeploymentAction{client: c}
 		schResp := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -200,7 +200,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	})
 
 	t.Run("deploy_with_stop_time", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &DeploymentAction{client: c}
 		schResp := getSchema()
 		schemaType := schResp.Schema.Type().TerraformType(ctx)
@@ -220,7 +220,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	})
 
 	t.Run("stop_with_time", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &DeploymentAction{client: c}
 		schResp := getSchema()
 		schemaType := schResp.Schema.Type().TerraformType(ctx)
@@ -240,7 +240,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	})
 
 	t.Run("destroy_with_signal", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &DeploymentAction{client: c}
 		schResp := getSchema()
 		schemaType := schResp.Schema.Type().TerraformType(ctx)
@@ -260,7 +260,7 @@ func TestUnitDeploymentAction_invoke(t *testing.T) {
 	})
 
 	t.Run("destroy_with_time", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &DeploymentAction{client: c}
 		schResp := getSchema()
 		schemaType := schResp.Schema.Type().TerraformType(ctx)

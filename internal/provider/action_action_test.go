@@ -19,9 +19,9 @@ import (
 
 // ─── shared action test helpers ───────────────────────────────────────────────
 
-// newActionSuccessMockServer returns a mock HTTP server that returns 200 null for every request
-// and a pre-configured API-key client pointing at it.
-func newActionSuccessMockServer(t *testing.T) (*httptest.Server, *client.Client) {
+// newActionSuccessMockServer returns a pre-configured API-key client pointing at a mock HTTP server
+// that returns 200 null for every request.
+func newActionSuccessMockServer(t *testing.T) *client.Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -29,11 +29,12 @@ func newActionSuccessMockServer(t *testing.T) (*httptest.Server, *client.Client)
 		_, _ = w.Write([]byte(`null`))
 	}))
 	t.Cleanup(srv.Close)
-	return srv, client.NewClientWithApiKey(srv.URL, "key", "secret")
+	return client.NewClientWithApiKey(srv.URL, "key", "secret")
 }
 
-// newActionErrorMockServer returns a mock HTTP server that returns 500 for every request.
-func newActionErrorMockServer(t *testing.T) (*httptest.Server, *client.Client) {
+// newActionErrorMockServer returns a pre-configured API-key client pointing at a mock HTTP server
+// that returns 500 for every request.
+func newActionErrorMockServer(t *testing.T) *client.Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -41,7 +42,7 @@ func newActionErrorMockServer(t *testing.T) (*httptest.Server, *client.Client) {
 		_, _ = w.Write([]byte(`"action failed"`))
 	}))
 	t.Cleanup(srv.Close)
-	return srv, client.NewClientWithApiKey(srv.URL, "key", "secret")
+	return client.NewClientWithApiKey(srv.URL, "key", "secret")
 }
 
 // buildSimpleActionInvokeReq builds an action.InvokeRequest for an action schema
@@ -116,7 +117,7 @@ func TestUnitActionAction_configure(t *testing.T) {
 
 	t.Run("valid_client", func(t *testing.T) {
 		a := &KomodoActionAction{}
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		cfgResp := &action.ConfigureResponse{}
 		a.Configure(ctx, action.ConfigureRequest{ProviderData: c}, cfgResp)
 		if cfgResp.Diagnostics.HasError() {
@@ -139,7 +140,7 @@ func TestUnitActionAction_invoke(t *testing.T) {
 	}
 
 	t.Run("run_success", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &KomodoActionAction{client: c}
 		schm := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -150,7 +151,7 @@ func TestUnitActionAction_invoke(t *testing.T) {
 	})
 
 	t.Run("run_client_error", func(t *testing.T) {
-		_, c := newActionErrorMockServer(t)
+		c := newActionErrorMockServer(t)
 		a := &KomodoActionAction{client: c}
 		schm := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -161,7 +162,7 @@ func TestUnitActionAction_invoke(t *testing.T) {
 	})
 
 	t.Run("invalid_action", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &KomodoActionAction{client: c}
 		schm := getSchema()
 		invokeResp := &action.InvokeResponse{}
@@ -172,7 +173,7 @@ func TestUnitActionAction_invoke(t *testing.T) {
 	})
 
 	t.Run("config_error", func(t *testing.T) {
-		_, c := newActionSuccessMockServer(t)
+		c := newActionSuccessMockServer(t)
 		a := &KomodoActionAction{client: c}
 		schm := getSchema()
 		invokeResp := &action.InvokeResponse{}
