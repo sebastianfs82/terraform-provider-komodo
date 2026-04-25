@@ -573,8 +573,10 @@ func terminalTestClient(t *testing.T, status int, body string) (*client.Client, 
 }
 
 // terminalReadState builds a valid tfsdk.State for TerminalResource Read/Delete tests.
-func terminalReadState(t *testing.T, r *TerminalResource, targetType, targetID, name string) tfsdk.State {
+func terminalReadState(t *testing.T, r *TerminalResource, targetID string) tfsdk.State {
 	t.Helper()
+	const targetType = "Server"
+	const name = "test-term"
 	ctx := context.Background()
 	schemaResp := &fwresource.SchemaResponse{}
 	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
@@ -596,7 +598,7 @@ func terminalReadState(t *testing.T, r *TerminalResource, targetType, targetID, 
 func TestUnitTerminalResource_readTargetIDEmpty(t *testing.T) {
 	r := &TerminalResource{client: &client.Client{}}
 	ctx := context.Background()
-	state := terminalReadState(t, r, "Server", "", "test-term")
+	state := terminalReadState(t, r, "")
 	req := fwresource.ReadRequest{State: state}
 	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
 	r.Read(ctx, req, resp)
@@ -607,12 +609,12 @@ func TestUnitTerminalResource_readTargetIDEmpty(t *testing.T) {
 
 func TestUnitTerminalResource_readListTerminalsNotFound(t *testing.T) {
 	// body contains "did not find" → Read must RemoveResource without an error diagnostic.
-	c, close := terminalTestClient(t, http.StatusInternalServerError, `"did not find target"`)
-	defer close()
+	c, closeSrv := terminalTestClient(t, http.StatusInternalServerError, `"did not find target"`)
+	defer closeSrv()
 
 	r := &TerminalResource{client: c}
 	ctx := context.Background()
-	state := terminalReadState(t, r, "Server", "server-1", "test-term")
+	state := terminalReadState(t, r, "server-1")
 	req := fwresource.ReadRequest{State: state}
 	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
 	r.Read(ctx, req, resp)
@@ -623,12 +625,12 @@ func TestUnitTerminalResource_readListTerminalsNotFound(t *testing.T) {
 
 func TestUnitTerminalResource_readListTerminalsClientError(t *testing.T) {
 	// body does NOT contain a not-found phrase → Read must call AddError.
-	c, close := terminalTestClient(t, http.StatusInternalServerError, `"internal error"`)
-	defer close()
+	c, closeSrv := terminalTestClient(t, http.StatusInternalServerError, `"internal error"`)
+	defer closeSrv()
 
 	r := &TerminalResource{client: c}
 	ctx := context.Background()
-	req := fwresource.ReadRequest{State: terminalReadState(t, r, "Server", "server-1", "test-term")}
+	req := fwresource.ReadRequest{State: terminalReadState(t, r, "server-1")}
 	resp := &fwresource.ReadResponse{}
 	r.Read(ctx, req, resp)
 	if !resp.Diagnostics.HasError() {
@@ -638,12 +640,12 @@ func TestUnitTerminalResource_readListTerminalsClientError(t *testing.T) {
 
 func TestUnitTerminalResource_readTerminalNotInList(t *testing.T) {
 	// Returns an empty terminal list → terminal not found → RemoveResource, no error.
-	c, close := terminalTestClient(t, http.StatusOK, `[]`)
-	defer close()
+	c, closeSrv := terminalTestClient(t, http.StatusOK, `[]`)
+	defer closeSrv()
 
 	r := &TerminalResource{client: c}
 	ctx := context.Background()
-	state := terminalReadState(t, r, "Server", "server-1", "test-term")
+	state := terminalReadState(t, r, "server-1")
 	req := fwresource.ReadRequest{State: state}
 	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
 	r.Read(ctx, req, resp)
@@ -653,12 +655,12 @@ func TestUnitTerminalResource_readTerminalNotInList(t *testing.T) {
 }
 
 func TestUnitTerminalResource_deleteClientError(t *testing.T) {
-	c, close := terminalTestClient(t, http.StatusInternalServerError, `"delete error"`)
-	defer close()
+	c, closeSrv := terminalTestClient(t, http.StatusInternalServerError, `"delete error"`)
+	defer closeSrv()
 
 	r := &TerminalResource{client: c}
 	ctx := context.Background()
-	req := fwresource.DeleteRequest{State: terminalReadState(t, r, "Server", "server-1", "test-term")}
+	req := fwresource.DeleteRequest{State: terminalReadState(t, r, "server-1")}
 	resp := &fwresource.DeleteResponse{}
 	r.Delete(ctx, req, resp)
 	if !resp.Diagnostics.HasError() {

@@ -179,8 +179,9 @@ func networkTestClient(t *testing.T, status int, body string) (*client.Client, f
 }
 
 // networkReadState builds a valid tfsdk.State for NetworkResource Read/Delete tests.
-func networkReadState(t *testing.T, r *NetworkResource, serverID, name string) tfsdk.State {
+func networkReadState(t *testing.T, r *NetworkResource, serverID string) tfsdk.State {
 	t.Helper()
+	const name = "test-net"
 	ctx := context.Background()
 	schemaResp := &fwresource.SchemaResponse{}
 	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
@@ -193,8 +194,8 @@ func networkReadState(t *testing.T, r *NetworkResource, serverID, name string) t
 }
 
 func TestUnitNetworkResource_createClientError(t *testing.T) {
-	c, close := networkTestClient(t, http.StatusInternalServerError, `"create error"`)
-	defer close()
+	c, closeSrv := networkTestClient(t, http.StatusInternalServerError, `"create error"`)
+	defer closeSrv()
 
 	r := &NetworkResource{client: c}
 	ctx := context.Background()
@@ -216,7 +217,7 @@ func TestUnitNetworkResource_createClientError(t *testing.T) {
 func TestUnitNetworkResource_readServerIDEmpty(t *testing.T) {
 	r := &NetworkResource{client: &client.Client{}}
 	ctx := context.Background()
-	state := networkReadState(t, r, "", "test-net")
+	state := networkReadState(t, r, "")
 	req := fwresource.ReadRequest{State: state}
 	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
 	r.Read(ctx, req, resp)
@@ -227,12 +228,12 @@ func TestUnitNetworkResource_readServerIDEmpty(t *testing.T) {
 
 func TestUnitNetworkResource_readListNetworksNotFound(t *testing.T) {
 	// body contains "did not find" → Read must call RemoveResource without an error diagnostic.
-	c, close := networkTestClient(t, http.StatusInternalServerError, `"did not find server"`)
-	defer close()
+	c, closeSrv := networkTestClient(t, http.StatusInternalServerError, `"did not find server"`)
+	defer closeSrv()
 
 	r := &NetworkResource{client: c}
 	ctx := context.Background()
-	state := networkReadState(t, r, "server-1", "test-net")
+	state := networkReadState(t, r, "server-1")
 	req := fwresource.ReadRequest{State: state}
 	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
 	r.Read(ctx, req, resp)
@@ -243,12 +244,12 @@ func TestUnitNetworkResource_readListNetworksNotFound(t *testing.T) {
 
 func TestUnitNetworkResource_readListNetworksClientError(t *testing.T) {
 	// body does NOT contain a not-found phrase → Read must call AddError.
-	c, close := networkTestClient(t, http.StatusInternalServerError, `"internal error"`)
-	defer close()
+	c, closeSrv := networkTestClient(t, http.StatusInternalServerError, `"internal error"`)
+	defer closeSrv()
 
 	r := &NetworkResource{client: c}
 	ctx := context.Background()
-	req := fwresource.ReadRequest{State: networkReadState(t, r, "server-1", "test-net")}
+	req := fwresource.ReadRequest{State: networkReadState(t, r, "server-1")}
 	resp := &fwresource.ReadResponse{}
 	r.Read(ctx, req, resp)
 	if !resp.Diagnostics.HasError() {
@@ -258,12 +259,12 @@ func TestUnitNetworkResource_readListNetworksClientError(t *testing.T) {
 
 func TestUnitNetworkResource_readNetworkNotInList(t *testing.T) {
 	// Returns an empty network list → network not found → RemoveResource, no error.
-	c, close := networkTestClient(t, http.StatusOK, `[]`)
-	defer close()
+	c, closeSrv := networkTestClient(t, http.StatusOK, `[]`)
+	defer closeSrv()
 
 	r := &NetworkResource{client: c}
 	ctx := context.Background()
-	state := networkReadState(t, r, "server-1", "test-net")
+	state := networkReadState(t, r, "server-1")
 	req := fwresource.ReadRequest{State: state}
 	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
 	r.Read(ctx, req, resp)

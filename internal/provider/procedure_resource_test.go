@@ -1013,8 +1013,12 @@ func TestUnitProcedureResource_procedureToModel(t *testing.T) {
 		if !ok {
 			t.Fatal("expected key 'procedure' in merged parameters")
 		}
-		if val.(types.String).ValueString() != "new-child" {
-			t.Fatalf("expected procedure=new-child from API, got %s", val.(types.String).ValueString())
+		strVal, ok := val.(types.String)
+		if !ok {
+			t.Fatal("expected val to be types.String")
+		}
+		if strVal.ValueString() != "new-child" {
+			t.Fatalf("expected procedure=new-child from API, got %s", strVal.ValueString())
 		}
 	})
 }

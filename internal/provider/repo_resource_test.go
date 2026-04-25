@@ -862,8 +862,12 @@ func TestUnitRepoResource_envStringToMap(t *testing.T) {
 			t.Fatalf("expected 1 element, got %d", len(m.Elements()))
 		}
 		val := m.Elements()["FOO"]
-		if val.(types.String).ValueString() != "bar" {
-			t.Fatalf("expected FOO=bar, got %s", val.(types.String).ValueString())
+		strVal, ok := val.(types.String)
+		if !ok {
+			t.Fatal("expected val to be types.String")
+		}
+		if strVal.ValueString() != "bar" {
+			t.Fatalf("expected FOO=bar, got %s", strVal.ValueString())
 		}
 	})
 
@@ -880,16 +884,24 @@ func TestUnitRepoResource_envStringToMap(t *testing.T) {
 			t.Fatal("expected non-null map")
 		}
 		val := m.Elements()["MYVAR"]
-		if val.(types.String).ValueString() != "" {
-			t.Fatalf("expected empty value for key without =, got %q", val.(types.String).ValueString())
+		strVal2, ok := val.(types.String)
+		if !ok {
+			t.Fatal("expected val to be types.String")
+		}
+		if strVal2.ValueString() != "" {
+			t.Fatalf("expected empty value for key without =, got %q", strVal2.ValueString())
 		}
 	})
 
 	t.Run("value_with_equals_sign", func(t *testing.T) {
 		m := envStringToMap("DSN=host=localhost port=5432")
 		val := m.Elements()["DSN"]
-		if val.(types.String).ValueString() != "host=localhost port=5432" {
-			t.Fatalf("expected full value after first =, got %q", val.(types.String).ValueString())
+		strVal3, ok := val.(types.String)
+		if !ok {
+			t.Fatal("expected val to be types.String")
+		}
+		if strVal3.ValueString() != "host=localhost port=5432" {
+			t.Fatalf("expected full value after first =, got %q", strVal3.ValueString())
 		}
 	})
 
