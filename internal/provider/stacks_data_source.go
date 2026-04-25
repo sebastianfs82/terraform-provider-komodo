@@ -43,6 +43,7 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 		},
 		"command": schema.StringAttribute{
 			Computed:            true,
+			CustomType:          TrimmedStringType{},
 			MarkdownDescription: "The shell command to run.",
 		},
 	}
@@ -112,8 +113,7 @@ func (d *StacksDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 									MarkdownDescription: "Whether the repo folder is deleted and recloned instead of `git pull`.",
 								},
 								"contents": schema.StringAttribute{
-									Computed:            true,
-									MarkdownDescription: "Inline compose file contents.",
+									Computed: true, CustomType: TrimmedStringType{}, MarkdownDescription: "Inline compose file contents.",
 								},
 								"on_host_enabled": schema.BoolAttribute{
 									Computed:            true,
@@ -297,6 +297,12 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		}
 		return types.StringNull()
 	}
+	trimmedOrNull := func(s string) TrimmedStringValue {
+		if s != "" {
+			return NewTrimmedStringValue(s)
+		}
+		return NewTrimmedStringNull()
+	}
 
 	items := make([]StackDataSourceModel, 0, len(stacks))
 	for _, stack := range stacks {
@@ -376,13 +382,9 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 				Branch:        strOrNull(stack.Config.Branch),
 				Commit:        strOrNull(stack.Config.Commit),
 				CloneEnforced: types.BoolValue(stack.Config.Reclone),
-				Contents: func() types.String {
-					v, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
-					_ = v
-					return strOrNull(stack.Config.FileContents)
-				}(),
-				LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
-				Directory:    strOrNull(stack.Config.RunDirectory),
+				Contents:      trimmedOrNull(stack.Config.FileContents),
+				LocalEnabled:  types.BoolValue(stack.Config.FilesOnHost),
+				Directory:     strOrNull(stack.Config.RunDirectory),
 				FilePaths: func() types.List {
 					v, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
 					return v
@@ -395,11 +397,11 @@ func (d *StacksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 			},
 			PreDeploy: &SystemCommandModel{
 				Path:    types.StringValue(stack.Config.PreDeploy.Path),
-				Command: types.StringValue(strings.TrimRight(stack.Config.PreDeploy.Command, "\n")),
+				Command: NewTrimmedStringValue(strings.TrimRight(stack.Config.PreDeploy.Command, "\n")),
 			},
 			PostDeploy: &SystemCommandModel{
 				Path:    types.StringValue(stack.Config.PostDeploy.Path),
-				Command: types.StringValue(strings.TrimRight(stack.Config.PostDeploy.Command, "\n")),
+				Command: NewTrimmedStringValue(strings.TrimRight(stack.Config.PostDeploy.Command, "\n")),
 			},
 		})
 	}

@@ -39,8 +39,8 @@ type RepoResource struct {
 }
 
 type SystemCommandModel struct {
-	Path    types.String `tfsdk:"path"`
-	Command types.String `tfsdk:"command"`
+	Path    types.String       `tfsdk:"path"`
+	Command TrimmedStringValue `tfsdk:"command"`
 }
 
 type RepositoryProviderModel struct {
@@ -109,6 +109,7 @@ func (r *RepoResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 		"command": schema.StringAttribute{
 			Optional:            true,
 			Computed:            true,
+			CustomType:          TrimmedStringType{},
 			MarkdownDescription: "The shell command to run.",
 			PlanModifiers: []planmodifier.String{
 				stringplanmodifier.UseStateForUnknown(),
@@ -656,7 +657,7 @@ func repoToModel(ctx context.Context, c *client.Client, repo *client.GitReposito
 	if repo.Config.OnClone.Path != "" || repo.Config.OnClone.Command != "" {
 		data.OnClone = &SystemCommandModel{
 			Path:    types.StringValue(repo.Config.OnClone.Path),
-			Command: types.StringValue(strings.TrimRight(repo.Config.OnClone.Command, "\n")),
+			Command: NewTrimmedStringValue(strings.TrimRight(repo.Config.OnClone.Command, "\n")),
 		}
 	} else {
 		data.OnClone = nil
@@ -666,7 +667,7 @@ func repoToModel(ctx context.Context, c *client.Client, repo *client.GitReposito
 	if repo.Config.OnPull.Path != "" || repo.Config.OnPull.Command != "" {
 		data.OnPull = &SystemCommandModel{
 			Path:    types.StringValue(repo.Config.OnPull.Path),
-			Command: types.StringValue(strings.TrimRight(repo.Config.OnPull.Command, "\n")),
+			Command: NewTrimmedStringValue(strings.TrimRight(repo.Config.OnPull.Command, "\n")),
 		}
 	} else {
 		data.OnPull = nil

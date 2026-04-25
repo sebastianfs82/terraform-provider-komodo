@@ -44,6 +44,7 @@ func (d *ReposDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 		},
 		"command": schema.StringAttribute{
 			Computed:            true,
+			CustomType:          TrimmedStringType{},
 			MarkdownDescription: "The shell command to run.",
 		},
 	}
@@ -277,11 +278,11 @@ func (d *ReposDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 			Webhook: webhook,
 			OnClone: &SystemCommandModel{
 				Path:    types.StringValue(repo.Config.OnClone.Path),
-				Command: types.StringValue(strings.TrimRight(repo.Config.OnClone.Command, "\n")),
+				Command: NewTrimmedStringValue(strings.TrimRight(repo.Config.OnClone.Command, "\n")),
 			},
 			OnPull: &SystemCommandModel{
 				Path:    types.StringValue(repo.Config.OnPull.Path),
-				Command: types.StringValue(strings.TrimRight(repo.Config.OnPull.Command, "\n")),
+				Command: NewTrimmedStringValue(strings.TrimRight(repo.Config.OnPull.Command, "\n")),
 			},
 			Links:       links,
 			Environment: environment,

@@ -53,6 +53,7 @@ func (d *RepoDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 		},
 		"command": schema.StringAttribute{
 			Computed:            true,
+			CustomType:          TrimmedStringType{},
 			MarkdownDescription: "The shell command to run.",
 		},
 	}
@@ -273,13 +274,12 @@ func (d *RepoDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 
 	data.OnClone = &SystemCommandModel{
 		Path:    types.StringValue(repo.Config.OnClone.Path),
-		Command: types.StringValue(strings.TrimRight(repo.Config.OnClone.Command, "\n")),
+		Command: NewTrimmedStringValue(strings.TrimRight(repo.Config.OnClone.Command, "\n")),
 	}
 	data.OnPull = &SystemCommandModel{
 		Path:    types.StringValue(repo.Config.OnPull.Path),
-		Command: types.StringValue(strings.TrimRight(repo.Config.OnPull.Command, "\n")),
+		Command: NewTrimmedStringValue(strings.TrimRight(repo.Config.OnPull.Command, "\n")),
 	}
-
 	links, linksDiags := types.ListValueFrom(ctx, types.StringType, repo.Config.Links)
 	resp.Diagnostics.Append(linksDiags...)
 	if resp.Diagnostics.HasError() {

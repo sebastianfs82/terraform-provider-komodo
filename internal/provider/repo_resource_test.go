@@ -630,7 +630,7 @@ func TestUnitRepoResource_repoConfigFromModel(t *testing.T) {
 			Tags:        types.ListValueMust(types.StringType, nil),
 			OnClone: &SystemCommandModel{
 				Path:    types.StringValue("/app"),
-				Command: types.StringValue("./setup.sh"),
+				Command: NewTrimmedStringValue("./setup.sh"),
 			},
 		}
 		cfg := repoConfigFromModel(ctx, c, data)
@@ -910,5 +910,127 @@ func TestUnitRepoResource_envStringToMap(t *testing.T) {
 		if len(m.Elements()) != 3 {
 			t.Fatalf("expected 3 elements, got %d", len(m.Elements()))
 		}
+	})
+}
+
+// ─── Acceptance tests – line endings idempotency ─────────────────────────────
+
+// TestAccRepoResource_onCloneCommandLineEndingsNoDrift verifies that
+// on_clone.command with trailing LF or CRLF does not produce plan drift.
+// State mirrors the config value; SemanticEquals prevents unnecessary diffs.
+func TestAccRepoResource_onCloneCommandLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-repo-clone-le"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  on_clone {
+    command = "echo cloned\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_repo.test", "on_clone.command", "echo cloned\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  on_clone {
+    command = "echo cloned\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// CRLF variant.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  on_clone {
+    command = "step1\r\nstep2\r\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_repo.test", "on_clone.command", "step1\r\nstep2\r\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  on_clone {
+    command = "step1\r\nstep2\r\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestAccRepoResource_onPullCommandLineEndingsNoDrift verifies that
+// on_pull.command with trailing LF or CRLF does not produce plan drift.
+// State mirrors the config value; SemanticEquals prevents unnecessary diffs.
+func TestAccRepoResource_onPullCommandLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-repo-pull-le"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  on_pull {
+    command = "echo pulled\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_repo.test", "on_pull.command", "echo pulled\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  on_pull {
+    command = "echo pulled\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// CRLF variant.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  on_pull {
+    command = "step1\r\nstep2\r\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_repo.test", "on_pull.command", "step1\r\nstep2\r\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_repo" "test" {
+  name = %q
+  on_pull {
+    command = "step1\r\nstep2\r\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
 	})
 }

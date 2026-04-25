@@ -1151,7 +1151,7 @@ func TestUnitBuildResource_partialBuildConfigFromModel(t *testing.T) {
 			Webhook:          nil,
 			Build:            nil,
 			PreBuild:         nil,
-			Labels:           types.StringNull(),
+			Labels:           NewTrimmedStringNull(),
 			SkipSecretInterp: types.BoolNull(),
 		}
 		cfg := partialBuildConfigFromModel(ctx, c, data)
@@ -1176,7 +1176,7 @@ func TestUnitBuildResource_partialBuildConfigFromModel(t *testing.T) {
 			Webhook:          nil,
 			Build:            nil,
 			PreBuild:         nil,
-			Labels:           types.StringNull(),
+			Labels:           NewTrimmedStringNull(),
 			SkipSecretInterp: types.BoolNull(),
 		}
 		cfg := partialBuildConfigFromModel(ctx, c, data)
@@ -1198,7 +1198,7 @@ func TestUnitBuildResource_partialBuildConfigFromModel(t *testing.T) {
 			Webhook:          nil,
 			Build:            nil,
 			PreBuild:         nil,
-			Labels:           types.StringNull(),
+			Labels:           NewTrimmedStringNull(),
 			SkipSecretInterp: types.BoolNull(),
 		}
 		cfg := partialBuildConfigFromModel(ctx, c, data)
@@ -1231,7 +1231,7 @@ func TestUnitBuildResource_partialBuildConfigFromModel(t *testing.T) {
 			Webhook:          nil,
 			Build:            nil,
 			PreBuild:         nil,
-			Labels:           types.StringNull(),
+			Labels:           NewTrimmedStringNull(),
 			SkipSecretInterp: types.BoolNull(),
 		}
 		cfg := partialBuildConfigFromModel(ctx, c, data)
@@ -1267,7 +1267,7 @@ func TestUnitBuildResource_partialBuildConfigFromModel(t *testing.T) {
 				UseBuildx: types.BoolNull(),
 			},
 			PreBuild:         nil,
-			Labels:           types.StringNull(),
+			Labels:           NewTrimmedStringNull(),
 			SkipSecretInterp: types.BoolNull(),
 		}
 		cfg := partialBuildConfigFromModel(ctx, c, data)
@@ -1290,9 +1290,9 @@ func TestUnitBuildResource_partialBuildConfigFromModel(t *testing.T) {
 			Build:     nil,
 			PreBuild: &SystemCommandModel{
 				Path:    types.StringValue("/scripts"),
-				Command: types.StringValue("./build.sh"),
+				Command: NewTrimmedStringValue("./build.sh"),
 			},
-			Labels:           types.StringNull(),
+			Labels:           NewTrimmedStringNull(),
 			SkipSecretInterp: types.BoolNull(),
 		}
 		cfg := partialBuildConfigFromModel(ctx, c, data)
@@ -1311,7 +1311,7 @@ func TestUnitBuildResource_partialBuildConfigFromModel(t *testing.T) {
 			Webhook:          nil,
 			Build:            nil,
 			PreBuild:         nil,
-			Labels:           types.StringValue("env=prod\nteam=infra"),
+			Labels:           NewTrimmedStringValue("env=prod\nteam=infra"),
 			SkipSecretInterp: types.BoolNull(),
 		}
 		cfg := partialBuildConfigFromModel(ctx, c, data)
@@ -1652,4 +1652,186 @@ resource "komodo_build" "test" {
 			})
 		})
 	}
+}
+
+// ─── Acceptance tests – line endings idempotency ─────────────────────────────
+
+// TestAccBuildResource_labelsLineEndingsNoDrift verifies that a labels value
+// with a trailing newline does not produce plan drift on re-plan. State mirrors
+// the config value; SemanticEquals prevents unnecessary diffs.
+func TestAccBuildResource_labelsLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-build-labels-le"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name   = %q
+  labels = "maintainer=team\n"
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_build.test", "labels", "maintainer=team\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name   = %q
+  labels = "maintainer=team\n"
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// CRLF variant: multiline labels with CRLF endings.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name   = %q
+  labels = "maintainer=team\r\nenv=prod\r\n"
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_build.test", "labels", "maintainer=team\r\nenv=prod\r\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name   = %q
+  labels = "maintainer=team\r\nenv=prod\r\n"
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestAccBuildResource_preBuildCommandLineEndingsNoDrift verifies that
+// pre_build.command with trailing LF or CRLF is stored trimmed and does not
+// drift on re-plan.
+func TestAccBuildResource_preBuildCommandLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-build-prebuild-le"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  pre_build {
+    command = "make test\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_build.test", "pre_build.command", "make test\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  pre_build {
+    command = "make test\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// CRLF variant.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  pre_build {
+    command = "step1\r\nstep2\r\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_build.test", "pre_build.command", "step1\r\nstep2\r\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  pre_build {
+    command = "step1\r\nstep2\r\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestAccBuildResource_dockerfileContentsLineEndingsNoDrift verifies that
+// image.dockerfile.contents with trailing LF or CRLF is stored trimmed and
+// does not drift on re-plan.
+func TestAccBuildResource_dockerfileContentsLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-build-dockerfile-le"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  image {
+    dockerfile {
+      contents = "FROM ubuntu:22.04\n"
+    }
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_build.test", "image.dockerfile.contents", "FROM ubuntu:22.04\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  image {
+    dockerfile {
+      contents = "FROM ubuntu:22.04\n"
+    }
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// CRLF variant.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  image {
+    dockerfile {
+      contents = "FROM ubuntu:22.04\r\nRUN apt-get update\r\n"
+    }
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_build.test", "image.dockerfile.contents", "FROM ubuntu:22.04\r\nRUN apt-get update\r\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_build" "test" {
+  name = %q
+  image {
+    dockerfile {
+      contents = "FROM ubuntu:22.04\r\nRUN apt-get update\r\n"
+    }
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
 }

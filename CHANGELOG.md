@@ -1,3 +1,21 @@
+## 0.11.0 (April 25, 2026)
+
+BUG FIXES:
+
+* **`komodo_action` resource:** Trailing LF or CRLF in `file_contents` no longer produces a perpetual plan diff. Values with trailing newlines are now treated as semantically equal to their trimmed equivalents.
+* **`komodo_build` resource:** Trailing LF or CRLF in `labels` and `pre_build.command` no longer produces a perpetual plan diff.
+* **`komodo_build` resource:** `pre_build.path` is no longer incorrectly set to `""` (empty string) in state when the attribute is absent from the config, which previously caused a "Provider produced inconsistent result after apply" error.
+* **`komodo_repo` resource / data source:** Trailing LF or CRLF in `on_clone.command` and `on_pull.command` no longer produces a perpetual plan diff.
+* **`komodo_resource_sync` resource:** Trailing LF or CRLF in `source.contents` no longer produces a perpetual plan diff.
+* **`komodo_stack` resource / data source:** Trailing LF or CRLF in `source.contents` and `pre_deploy.command` no longer produces a perpetual plan diff.
+
+ENHANCEMENTS:
+
+* **`TrimmedStringType` custom type:** Introduced a new internal `TrimmedStringType` Terraform plugin framework custom type that implements `StringSemanticEquals`. Strings differing only in trailing newlines (`\n`, `\r\n`) or in CRLF vs LF line endings are treated as equivalent, preventing spurious plan diffs caused by the Komodo API normalising whitespace on write.
+* **Tests:** Added acceptance and unit tests for `komodo_build`, `komodo_deployment`, `komodo_network`, `komodo_onboarding_key`, `komodo_procedure`, `komodo_repo`, `komodo_resource_sync`, `komodo_server`, `komodo_swarm`, and `komodo_terminal` resources, significantly increasing provider test coverage.
+
+---
+
 ## 0.10.1 (April 24, 2026)
 
 BUG FIXES:

@@ -62,6 +62,7 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 		},
 		"command": schema.StringAttribute{
 			Computed:            true,
+			CustomType:          TrimmedStringType{},
 			MarkdownDescription: "The shell command to run.",
 		},
 	}
@@ -142,8 +143,7 @@ func (d *BuildDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 						MarkdownDescription: "Dockerfile configuration.",
 						Attributes: map[string]schema.Attribute{
 							"contents": schema.StringAttribute{
-								Computed:            true,
-								MarkdownDescription: "Inline Dockerfile contents.",
+								Computed: true, CustomType: TrimmedStringType{}, MarkdownDescription: "Inline Dockerfile contents.",
 							},
 							"path": schema.StringAttribute{
 								Computed:            true,
@@ -341,7 +341,7 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		if b.Config.DockerfilePath != "" || b.Config.Dockerfile != "" {
 			docfile = &DockerfileModel{
 				Path:     types.StringValue(b.Config.DockerfilePath),
-				Contents: types.StringValue(b.Config.Dockerfile),
+				Contents: NewTrimmedStringValue(b.Config.Dockerfile),
 			}
 		}
 		data.Image = &BuildImageModel{
@@ -400,7 +400,7 @@ func (d *BuildDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	if b.Config.PreBuild.Path != "" || b.Config.PreBuild.Command != "" {
 		data.PreBuild = &SystemCommandModel{
 			Path:    types.StringValue(b.Config.PreBuild.Path),
-			Command: types.StringValue(strings.TrimRight(b.Config.PreBuild.Command, "\n\r")),
+			Command: NewTrimmedStringValue(strings.TrimRight(b.Config.PreBuild.Command, "\n\r")),
 		}
 	} else {
 		data.PreBuild = nil

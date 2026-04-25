@@ -18,7 +18,6 @@ import (
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -1665,7 +1664,7 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 		data := &StackResourceModel{
 			PostDeploy: &SystemCommandModel{
 				Path:    types.StringValue("/opt"),
-				Command: types.StringValue("echo post"),
+				Command: NewTrimmedStringValue("echo post"),
 			},
 		}
 		cfg := stackConfigFromModel(ctx, c, data)
@@ -1795,43 +1794,171 @@ func TestUnitStackResource_stackConfigFromModel(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Unit tests – trimTrailingNewlinePlanModifier
+// Unit tests – TrimmedStringValue (stack resource)
 // ---------------------------------------------------------------------------
 
-func TestUnitStackResource_trimTrailingNewline(t *testing.T) {
+func TestUnitStackResource_trimmedStringSemanticEquals(t *testing.T) {
 	ctx := context.Background()
-	m := trimTrailingNewlinePlanModifier{}
 
-	t.Run("markdown_description_equals_description", func(t *testing.T) {
-		if m.MarkdownDescription(ctx) != m.Description(ctx) {
-			t.Fatal("expected MarkdownDescription == Description")
+	eq := func(a, b string) bool {
+		va := NewTrimmedStringValue(a)
+		vb := NewTrimmedStringValue(b)
+		equal, diags := va.StringSemanticEquals(ctx, vb)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		return equal
+	}
+
+	t.Run("identical_values_equal", func(t *testing.T) {
+		if !eq("echo hello", "echo hello") {
+			t.Fatal("expected equal")
 		}
 	})
 
-	t.Run("null_value_noop", func(t *testing.T) {
-		req := planmodifier.StringRequest{PlanValue: types.StringNull()}
-		resp := &planmodifier.StringResponse{PlanValue: types.StringNull()}
-		m.PlanModifyString(ctx, req, resp)
-		if !resp.PlanValue.IsNull() {
-			t.Fatal("expected PlanValue to remain null")
+	t.Run("trailing_lf_semantically_equal", func(t *testing.T) {
+		if !eq("echo hello", "echo hello\n") {
+			t.Fatal("expected equal")
 		}
 	})
 
-	t.Run("unknown_value_noop", func(t *testing.T) {
-		req := planmodifier.StringRequest{PlanValue: types.StringUnknown()}
-		resp := &planmodifier.StringResponse{PlanValue: types.StringUnknown()}
-		m.PlanModifyString(ctx, req, resp)
-		if !resp.PlanValue.IsUnknown() {
-			t.Fatal("expected PlanValue to remain unknown")
+	t.Run("trailing_crlf_semantically_equal", func(t *testing.T) {
+		if !eq("echo hello", "echo hello\r\n") {
+			t.Fatal("expected equal")
 		}
 	})
 
-	t.Run("strips_trailing_newline", func(t *testing.T) {
-		req := planmodifier.StringRequest{PlanValue: types.StringValue("echo hello\n")}
-		resp := &planmodifier.StringResponse{PlanValue: types.StringValue("echo hello\n")}
-		m.PlanModifyString(ctx, req, resp)
-		if resp.PlanValue.ValueString() != "echo hello" {
-			t.Fatalf("expected trimmed value, got %q", resp.PlanValue.ValueString())
+	t.Run("internal_crlf_semantically_equal", func(t *testing.T) {
+		if !eq("line1\nline2", "line1\r\nline2\r\n") {
+			t.Fatal("expected equal")
 		}
+	})
+
+	t.Run("different_content_not_equal", func(t *testing.T) {
+		if eq("echo hello", "echo world") {
+			t.Fatal("expected not equal")
+		}
+	})
+}
+
+// ─── Acceptance tests – line endings idempotency ─────────────────────────────
+
+// TestAccStackResource_sourceContentsLineEndingsNoDrift verifies that
+// source.contents with trailing LF or CRLF does not produce plan drift.
+// State mirrors the config value; SemanticEquals prevents unnecessary diffs.
+func TestAccStackResource_sourceContentsLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-stack-contents-le"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  source {
+    contents = "services:\n  web:\n    image: nginx\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_stack.test", "source.contents", "services:\n  web:\n    image: nginx\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  source {
+    contents = "services:\n  web:\n    image: nginx\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// CRLF variant.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  source {
+    contents = "services:\r\n  web:\r\n    image: nginx\r\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_stack.test", "source.contents", "services:\r\n  web:\r\n    image: nginx\r\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  source {
+    contents = "services:\r\n  web:\r\n    image: nginx\r\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestAccStackResource_preDeployCommandLineEndingsNoDrift verifies that
+// pre_deploy.command with trailing LF or CRLF does not produce plan drift.
+// State mirrors the config value; SemanticEquals prevents unnecessary diffs.
+func TestAccStackResource_preDeployCommandLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-stack-predeploy-le"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  pre_deploy {
+    command = "echo pre\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_stack.test", "pre_deploy.command", "echo pre\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  pre_deploy {
+    command = "echo pre\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// CRLF variant.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  pre_deploy {
+    command = "step1\r\nstep2\r\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_stack.test", "pre_deploy.command", "step1\r\nstep2\r\n"),
+			},
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_stack" "test" {
+  name = %q
+  pre_deploy {
+    command = "step1\r\nstep2\r\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
 	})
 }

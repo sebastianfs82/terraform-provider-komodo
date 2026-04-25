@@ -69,10 +69,10 @@ type StackSourceModel struct {
 	Commit        types.String `tfsdk:"commit"`
 	CloneEnforced types.Bool   `tfsdk:"reclone_enabled"`
 	// Compose fields
-	Contents     types.String `tfsdk:"contents"`
-	FilePaths    types.List   `tfsdk:"file_paths"`
-	LocalEnabled types.Bool   `tfsdk:"on_host_enabled"`
-	Directory    types.String `tfsdk:"directory"`
+	Contents     TrimmedStringValue `tfsdk:"contents"`
+	FilePaths    types.List         `tfsdk:"file_paths"`
+	LocalEnabled types.Bool         `tfsdk:"on_host_enabled"`
+	Directory    types.String       `tfsdk:"directory"`
 }
 
 type StackResourceModel struct {
@@ -128,10 +128,8 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 		},
 		"command": schema.StringAttribute{
 			Optional:            true,
+			CustomType:          TrimmedStringType{},
 			MarkdownDescription: "The shell command to run.",
-			PlanModifiers: []planmodifier.String{
-				trimTrailingNewlinePlanModifier{},
-			},
 		},
 	}
 
@@ -257,6 +255,7 @@ func (r *StackResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					"contents": schema.StringAttribute{
 						Optional:            true,
 						Computed:            true,
+						CustomType:          TrimmedStringType{},
 						MarkdownDescription: "Inline compose file contents. When set, this takes precedence over git repo sourcing.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
@@ -894,6 +893,13 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	tags, _ := types.ListValueFrom(ctx, types.StringType, tagsSlice)
 	data.Tags = tags
 
+	trimmedOrNull := func(s string) TrimmedStringValue {
+		if s != "" {
+			return NewTrimmedStringValue(s)
+		}
+		return NewTrimmedStringNull()
+	}
+
 	strOrNull := func(s string) types.String {
 		if s != "" {
 			return types.StringValue(s)
@@ -928,12 +934,6 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	} else {
 		data.Registry = nil
 	}
-	// Save prior source contents for normalization before overwriting data.Source
-	var priorSourceContents types.String
-	if data.Source != nil {
-		priorSourceContents = data.Source.Contents
-	}
-
 	// Git block: keep nil when all git fields are empty/default and caller didn't set it
 	if data.Source != nil || stack.Config.Repo != "" || stack.Config.Branch != "" ||
 		stack.Config.GitProvider != "" || stack.Config.GitAccount != "" || stack.Config.Commit != "" ||
@@ -980,22 +980,9 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 			Branch:        branchVal,
 			Commit:        commitVal,
 			CloneEnforced: types.BoolValue(stack.Config.Reclone),
-			Contents: func() types.String {
-				filePaths, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
-				_ = filePaths
-				norm := func(s string) string {
-					return strings.TrimRight(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
-				}
-				apiNorm := norm(stack.Config.FileContents)
-				if !priorSourceContents.IsNull() && !priorSourceContents.IsUnknown() {
-					if norm(priorSourceContents.ValueString()) == apiNorm {
-						return priorSourceContents
-					}
-				}
-				return strOrNull(apiNorm)
-			}(),
-			LocalEnabled: types.BoolValue(stack.Config.FilesOnHost),
-			Directory:    strOrNull(stack.Config.RunDirectory),
+			Contents:      trimmedOrNull(stack.Config.FileContents),
+			LocalEnabled:  types.BoolValue(stack.Config.FilesOnHost),
+			Directory:     strOrNull(stack.Config.RunDirectory),
 			FilePaths: func() types.List {
 				v, _ := types.ListValueFrom(ctx, types.StringType, stack.Config.FilePaths)
 				return v
@@ -1022,7 +1009,7 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	if stack.Config.PreDeploy.Path != "" || stack.Config.PreDeploy.Command != "" {
 		data.PreDeploy = &SystemCommandModel{
 			Path:    strOrNull(stack.Config.PreDeploy.Path),
-			Command: strOrNull(strings.TrimRight(stack.Config.PreDeploy.Command, "\n")),
+			Command: trimmedOrNull(strings.TrimRight(stack.Config.PreDeploy.Command, "\n")),
 		}
 	} else {
 		data.PreDeploy = nil
@@ -1030,7 +1017,7 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	if stack.Config.PostDeploy.Path != "" || stack.Config.PostDeploy.Command != "" {
 		data.PostDeploy = &SystemCommandModel{
 			Path:    strOrNull(stack.Config.PostDeploy.Path),
-			Command: strOrNull(strings.TrimRight(stack.Config.PostDeploy.Command, "\n")),
+			Command: trimmedOrNull(strings.TrimRight(stack.Config.PostDeploy.Command, "\n")),
 		}
 	} else {
 		data.PostDeploy = nil
@@ -1100,24 +1087,4 @@ func stackToModel(ctx context.Context, c *client.Client, stack *client.Stack, da
 	}
 	links, _ := types.ListValueFrom(ctx, types.StringType, linksSlice)
 	data.Links = links
-}
-
-// trimTrailingNewlinePlanModifier strips the trailing newline from a string plan
-// value. The Komodo API removes trailing newlines from command strings when
-// returning them, which would otherwise cause "inconsistent result" errors.
-type trimTrailingNewlinePlanModifier struct{}
-
-func (m trimTrailingNewlinePlanModifier) Description(_ context.Context) string {
-	return "Trims the trailing newline from the planned value."
-}
-
-func (m trimTrailingNewlinePlanModifier) MarkdownDescription(_ context.Context) string {
-	return "Trims the trailing newline from the planned value."
-}
-
-func (m trimTrailingNewlinePlanModifier) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
-		return
-	}
-	resp.PlanValue = types.StringValue(strings.TrimRight(req.PlanValue.ValueString(), "\n"))
 }

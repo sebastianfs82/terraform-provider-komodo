@@ -75,8 +75,8 @@ type DockerBuildModel struct {
 
 // DockerfileModel is the Terraform model for the dockerfile block of a build.
 type DockerfileModel struct {
-	Contents types.String `tfsdk:"contents"`
-	Path     types.String `tfsdk:"path"`
+	Contents TrimmedStringValue `tfsdk:"contents"`
+	Path     types.String       `tfsdk:"path"`
 }
 
 // BuildSourceModel is the Terraform model for the source block of a build.
@@ -110,7 +110,7 @@ type BuildResourceModel struct {
 	Build            *DockerBuildModel   `tfsdk:"build"`
 	SkipSecretInterp types.Bool          `tfsdk:"skip_secret_interpolation_enabled"`
 	PreBuild         *SystemCommandModel `tfsdk:"pre_build"`
-	Labels           types.String        `tfsdk:"labels"`
+	Labels           TrimmedStringValue  `tfsdk:"labels"`
 }
 
 func (r *BuildResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -125,6 +125,7 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 		},
 		"command": schema.StringAttribute{
 			Optional:            true,
+			CustomType:          TrimmedStringType{},
 			MarkdownDescription: "The shell command to run.",
 		},
 	}
@@ -178,6 +179,7 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"labels": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
+				CustomType:          TrimmedStringType{},
 				MarkdownDescription: "Docker image labels in `KEY=VALUE` format, newline-separated.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -262,6 +264,7 @@ func (r *BuildResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 							"contents": schema.StringAttribute{
 								Optional:            true,
 								Computed:            true,
+								CustomType:          TrimmedStringType{},
 								MarkdownDescription: "Inline Dockerfile contents. Overrides `path` when set.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
@@ -825,7 +828,7 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 		if data.Image.Dockerfile != nil {
 			docfile = &DockerfileModel{
 				Path:     types.StringValue(b.Config.DockerfilePath),
-				Contents: types.StringValue(strings.TrimRight(b.Config.Dockerfile, "\n\r")),
+				Contents: NewTrimmedStringValue(strings.TrimRight(b.Config.Dockerfile, "\n\r")),
 			}
 		}
 		data.Image = &BuildImageModel{
@@ -931,20 +934,20 @@ func buildToModel(ctx context.Context, c *client.Client, b *client.Build, data *
 	// pre_build: only show when non-empty.
 	if b.Config.PreBuild.Path != "" || b.Config.PreBuild.Command != "" {
 		data.PreBuild = &SystemCommandModel{
-			Path:    types.StringValue(b.Config.PreBuild.Path),
-			Command: types.StringValue(strings.TrimRight(b.Config.PreBuild.Command, "\n\r")),
+			Path:    strOrNull(b.Config.PreBuild.Path),
+			Command: NewTrimmedStringValue(strings.TrimRight(b.Config.PreBuild.Command, "\n\r")),
 		}
 	} else if data.PreBuild != nil {
 		// Preserve user-set block even if both fields were empty.
 		data.PreBuild = &SystemCommandModel{
-			Path:    types.StringValue(b.Config.PreBuild.Path),
-			Command: types.StringValue(strings.TrimRight(b.Config.PreBuild.Command, "\n\r")),
+			Path:    strOrNull(b.Config.PreBuild.Path),
+			Command: NewTrimmedStringValue(strings.TrimRight(b.Config.PreBuild.Command, "\n\r")),
 		}
 	} else {
 		data.PreBuild = nil
 	}
 
-	data.Labels = types.StringValue(strings.TrimRight(b.Config.Labels, "\n\r"))
+	data.Labels = NewTrimmedStringValue(strings.TrimRight(b.Config.Labels, "\n\r"))
 }
 
 // buildArgsToString serialises a slice of BuildArgumentModel to the KEY=VALUE\n

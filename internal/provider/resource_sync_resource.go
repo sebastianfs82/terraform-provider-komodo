@@ -37,15 +37,15 @@ type ResourceSyncResource struct {
 
 // ResourceSyncSourceModel groups source configuration for a resource sync.
 type ResourceSyncSourceModel struct {
-	RepoID        types.String `tfsdk:"repo_id"`
-	URL           types.String `tfsdk:"url"`
-	AccountID     types.String `tfsdk:"account_id"`
-	Path          types.String `tfsdk:"path"`
-	Branch        types.String `tfsdk:"branch"`
-	Commit        types.String `tfsdk:"commit"`
-	FilesOnHost   types.Bool   `tfsdk:"on_host_enabled"`
-	FileContents  types.String `tfsdk:"contents"`
-	ResourcePaths types.List   `tfsdk:"resource_paths"`
+	RepoID        types.String       `tfsdk:"repo_id"`
+	URL           types.String       `tfsdk:"url"`
+	AccountID     types.String       `tfsdk:"account_id"`
+	Path          types.String       `tfsdk:"path"`
+	Branch        types.String       `tfsdk:"branch"`
+	Commit        types.String       `tfsdk:"commit"`
+	FilesOnHost   types.Bool         `tfsdk:"on_host_enabled"`
+	FileContents  TrimmedStringValue `tfsdk:"contents"`
+	ResourcePaths types.List         `tfsdk:"resource_paths"`
 }
 
 // ResourceSyncManagedModeModel represents the managed_mode block.
@@ -165,6 +165,7 @@ func (r *ResourceSyncResource) Schema(_ context.Context, _ resource.SchemaReques
 					},
 					"contents": schema.StringAttribute{
 						Optional:            true,
+						CustomType:          TrimmedStringType{},
 						MarkdownDescription: "Manage resource file contents directly in Terraform state (UI-managed mode).",
 					},
 					"resource_paths": schema.ListAttribute{
@@ -413,11 +414,11 @@ func resourceSyncToModel(ctx context.Context, c *client.Client, rs *client.Resou
 				Branch:      types.StringNull(),
 				Commit:      types.StringNull(),
 				FilesOnHost: filesOnHostVal,
-				FileContents: func() types.String {
+				FileContents: func() TrimmedStringValue {
 					if cfg.FileContents != "" {
-						return types.StringValue(strings.TrimRight(cfg.FileContents, "\n"))
+						return NewTrimmedStringValue(strings.TrimRight(cfg.FileContents, "\n"))
 					}
-					return types.StringNull()
+					return NewTrimmedStringNull()
 				}(),
 				ResourcePaths: rpList,
 			}
@@ -442,14 +443,14 @@ func resourceSyncToModel(ctx context.Context, c *client.Client, rs *client.Resou
 				Branch:      branchVal,
 				Commit:      strOrNull(cfg.Commit),
 				FilesOnHost: filesOnHostVal,
-				FileContents: func() types.String {
+				FileContents: func() TrimmedStringValue {
 					if cfg.FileContents != "" {
-						return types.StringValue(strings.TrimRight(cfg.FileContents, "\n"))
+						return NewTrimmedStringValue(strings.TrimRight(cfg.FileContents, "\n"))
 					}
 					if m.Source != nil && !m.Source.FileContents.IsNull() {
-						return types.StringValue("")
+						return NewTrimmedStringValue("")
 					}
-					return types.StringNull()
+					return NewTrimmedStringNull()
 				}(),
 				ResourcePaths: rpList,
 			}

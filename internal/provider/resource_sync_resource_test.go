@@ -564,7 +564,7 @@ func TestUnitResourceSyncResource_resourceSyncToModel(t *testing.T) {
 			},
 		}
 		m := &ResourceSyncResourceModel{
-			Source: &ResourceSyncSourceModel{FileContents: types.StringNull()},
+			Source: &ResourceSyncSourceModel{FileContents: NewTrimmedStringNull()},
 		}
 		resourceSyncToModel(ctx, c, rs, m)
 		if m.Source == nil {
@@ -648,5 +648,70 @@ func TestUnitResourceSyncResource_resourceSyncToModel(t *testing.T) {
 		if len(tagItems) != 1 || tagItems[0] != "env:prod" {
 			t.Fatalf("expected tag_filter=[env:prod], got %v", tagItems)
 		}
+	})
+}
+
+// ─── Acceptance tests – line endings idempotency ─────────────────────────────
+
+// TestAccResourceSyncResource_contentsLineEndingsNoDrift verifies that
+// source.contents with trailing LF or CRLF is stored trimmed and does not drift
+// on re-plan.
+func TestAccResourceSyncResource_contentsLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-rsync-line-endings"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Apply with a trailing LF; state mirrors the config value (SemanticEquals keeps planned value).
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_resource_sync" "test" {
+  name = %q
+  source {
+    contents = "# managed by terraform\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_resource_sync.test", "source.contents", "# managed by terraform\n"),
+			},
+			// Re-plan with the same LF-trailing config – must produce an empty diff.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_resource_sync" "test" {
+  name = %q
+  source {
+    contents = "# managed by terraform\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Update to multiline CRLF content; state mirrors the config value (CRLF preserved).
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_resource_sync" "test" {
+  name = %q
+  source {
+    contents = "# line1\r\n# line2\r\n"
+  }
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_resource_sync.test", "source.contents", "# line1\r\n# line2\r\n"),
+			},
+			// Re-plan with the same CRLF-trailing config – must produce an empty diff.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_resource_sync" "test" {
+  name = %q
+  source {
+    contents = "# line1\r\n# line2\r\n"
+  }
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
 	})
 }

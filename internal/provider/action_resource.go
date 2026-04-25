@@ -54,16 +54,16 @@ type ScheduleModel struct {
 }
 
 type ActionResourceModel struct {
-	ID                        types.String    `tfsdk:"id"`
-	Name                      types.String    `tfsdk:"name"`
-	Tags                      types.List      `tfsdk:"tags"`
-	RunOnStartupEnabled       types.Bool      `tfsdk:"run_on_startup_enabled"`
-	Schedule                  *ScheduleModel  `tfsdk:"schedule"`
-	FailureAlert              types.Bool      `tfsdk:"failure_alert_enabled"`
-	Webhook                   *WebhookModel   `tfsdk:"webhook"`
-	ReloadDependenciesEnabled types.Bool      `tfsdk:"reload_dependencies_enabled"`
-	FileContents              types.String    `tfsdk:"file_contents"`
-	Arguments                 []ArgumentModel `tfsdk:"argument"`
+	ID                        types.String       `tfsdk:"id"`
+	Name                      types.String       `tfsdk:"name"`
+	Tags                      types.List         `tfsdk:"tags"`
+	RunOnStartupEnabled       types.Bool         `tfsdk:"run_on_startup_enabled"`
+	Schedule                  *ScheduleModel     `tfsdk:"schedule"`
+	FailureAlert              types.Bool         `tfsdk:"failure_alert_enabled"`
+	Webhook                   *WebhookModel      `tfsdk:"webhook"`
+	ReloadDependenciesEnabled types.Bool         `tfsdk:"reload_dependencies_enabled"`
+	FileContents              TrimmedStringValue `tfsdk:"file_contents"`
+	Arguments                 []ArgumentModel    `tfsdk:"argument"`
 }
 
 func (r *ActionResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -119,6 +119,7 @@ func (r *ActionResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"file_contents": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
+				CustomType:          TrimmedStringType{},
 				MarkdownDescription: "TypeScript file contents using the Komodo client.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -521,7 +522,7 @@ func actionToModel(a *client.Action, data *ActionResourceModel) {
 		data.Webhook = nil
 	}
 	data.ReloadDependenciesEnabled = types.BoolValue(a.Config.ReloadDenoDeps)
-	data.FileContents = types.StringValue(strings.TrimRight(a.Config.FileContents, "\n"))
+	data.FileContents = NewTrimmedStringValue(strings.TrimRight(a.Config.FileContents, "\n"))
 	data.Arguments = parseActionArguments(a.Config.ArgumentsFormat, a.Config.Arguments)
 }
 

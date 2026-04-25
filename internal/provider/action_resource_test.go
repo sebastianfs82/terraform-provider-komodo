@@ -16,6 +16,7 @@ import (
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -636,7 +637,7 @@ func TestUnitActionResource_partialActionConfigFromModel(t *testing.T) {
 		data := &ActionResourceModel{
 			FailureAlert:              types.BoolValue(true),
 			RunOnStartupEnabled:       types.BoolValue(false),
-			FileContents:              types.StringValue("console.log('hi');"),
+			FileContents:              NewTrimmedStringValue("console.log('hi');"),
 			ReloadDependenciesEnabled: types.BoolValue(true),
 			Schedule:                  nil,
 			Webhook:                   nil,
@@ -670,7 +671,7 @@ func TestUnitActionResource_partialActionConfigFromModel(t *testing.T) {
 		data := &ActionResourceModel{
 			FailureAlert:              types.BoolNull(),
 			RunOnStartupEnabled:       types.BoolNull(),
-			FileContents:              types.StringNull(),
+			FileContents:              NewTrimmedStringNull(),
 			ReloadDependenciesEnabled: types.BoolNull(),
 			Schedule: &ScheduleModel{
 				Format:       types.StringValue("Cron"),
@@ -701,7 +702,7 @@ func TestUnitActionResource_partialActionConfigFromModel(t *testing.T) {
 		data := &ActionResourceModel{
 			FailureAlert:              types.BoolNull(),
 			RunOnStartupEnabled:       types.BoolNull(),
-			FileContents:              types.StringNull(),
+			FileContents:              NewTrimmedStringNull(),
 			ReloadDependenciesEnabled: types.BoolNull(),
 			Schedule:                  nil,
 			Webhook: &WebhookModel{
@@ -723,7 +724,7 @@ func TestUnitActionResource_partialActionConfigFromModel(t *testing.T) {
 		data := &ActionResourceModel{
 			FailureAlert:              types.BoolNull(),
 			RunOnStartupEnabled:       types.BoolNull(),
-			FileContents:              types.StringNull(),
+			FileContents:              NewTrimmedStringNull(),
 			ReloadDependenciesEnabled: types.BoolNull(),
 			Schedule:                  nil,
 			Webhook:                   nil,
@@ -846,5 +847,121 @@ func TestUnitActionResource_actionToModel(t *testing.T) {
 		if data.Arguments[0].Value.ValueString() != "val" {
 			t.Fatalf("unexpected arg value: %s", data.Arguments[0].Value.ValueString())
 		}
+	})
+}
+
+// Unit tests – TrimmedStringValue.StringSemanticEquals
+// ---------------------------------------------------------------------------
+
+func TestUnitTrimmedStringValue_semanticEquals(t *testing.T) {
+	ctx := context.Background()
+
+	eq := func(a, b string) bool {
+		va := NewTrimmedStringValue(a)
+		vb := NewTrimmedStringValue(b)
+		equal, diags := va.StringSemanticEquals(ctx, vb)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		return equal
+	}
+
+	t.Run("identical_values_equal", func(t *testing.T) {
+		if !eq("hello", "hello") {
+			t.Fatal("expected equal")
+		}
+	})
+
+	t.Run("trailing_lf_semantically_equal", func(t *testing.T) {
+		if !eq("hello", "hello\n") {
+			t.Fatal("expected equal")
+		}
+	})
+
+	t.Run("trailing_crlf_semantically_equal", func(t *testing.T) {
+		if !eq("hello", "hello\r\n") {
+			t.Fatal("expected equal")
+		}
+	})
+
+	t.Run("internal_crlf_semantically_equal", func(t *testing.T) {
+		if !eq("line1\nline2", "line1\r\nline2\r\n") {
+			t.Fatal("expected equal")
+		}
+	})
+
+	t.Run("different_content_not_equal", func(t *testing.T) {
+		if eq("hello", "world") {
+			t.Fatal("expected not equal")
+		}
+	})
+
+	t.Run("non_trimmed_type_returns_false", func(t *testing.T) {
+		va := NewTrimmedStringValue("hello")
+		equal, diags := va.StringSemanticEquals(ctx, basetypes.NewStringValue("hello"))
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if equal {
+			t.Fatal("expected false for non-TrimmedStringValue")
+		}
+	})
+}
+
+// ─── Acceptance tests – line endings idempotency ─────────────────────────────
+
+// TestAccActionResource_fileContentsLineEndingsNoDrift verifies that file_contents
+// with trailing LF or CRLF line endings does not produce plan drift on re-plan.
+// With the TrimmedStringType custom type, SemanticEquals treats trailing newlines
+// as equivalent, so state mirrors the config value and no diff is generated.
+func TestAccActionResource_fileContentsLineEndingsNoDrift(t *testing.T) {
+	const name = "tf-acc-action-line-endings"
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Apply with a trailing LF; state mirrors the config value (SemanticEquals keeps planned value).
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_action" "test" {
+  name          = %q
+  file_contents = "console.log('hello');\n"
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_action.test", "file_contents", "console.log('hello');\n"),
+			},
+			// Re-plan with the same LF-trailing config – must produce an empty diff.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_action" "test" {
+  name          = %q
+  file_contents = "console.log('hello');\n"
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Update to multiline CRLF content; state mirrors the config value (CRLF preserved).
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_action" "test" {
+  name          = %q
+  file_contents = "line1\r\nline2\r\n"
+}
+`, name),
+				Check: resource.TestCheckResourceAttr("komodo_action.test", "file_contents", "line1\r\nline2\r\n"),
+			},
+			// Re-plan with the same CRLF-trailing config – must produce an empty diff.
+			{
+				Config: fmt.Sprintf(`
+resource "komodo_action" "test" {
+  name          = %q
+  file_contents = "line1\r\nline2\r\n"
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
 	})
 }

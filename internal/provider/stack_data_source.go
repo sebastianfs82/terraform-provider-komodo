@@ -76,6 +76,7 @@ func (d *StackDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 		},
 		"command": schema.StringAttribute{
 			Computed:            true,
+			CustomType:          TrimmedStringType{},
 			MarkdownDescription: "The shell command to run.",
 		},
 	}
@@ -139,6 +140,7 @@ func (d *StackDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 					},
 					"contents": schema.StringAttribute{
 						Computed:            true,
+						CustomType:          TrimmedStringType{},
 						MarkdownDescription: "Inline compose file contents.",
 					},
 					"on_host_enabled": schema.BoolAttribute{
@@ -351,6 +353,12 @@ func stackToDataSourceModel(ctx context.Context, c *client.Client, stack *client
 		}
 		return types.StringNull()
 	}
+	trimmedOrNull := func(s string) TrimmedStringValue {
+		if s != "" {
+			return NewTrimmedStringValue(s)
+		}
+		return NewTrimmedStringNull()
+	}
 
 	data.ID = types.StringValue(stack.ID.OID)
 	data.Name = types.StringValue(stack.Name)
@@ -400,7 +408,7 @@ func stackToDataSourceModel(ctx context.Context, c *client.Client, stack *client
 		Branch:        strOrNull(stack.Config.Branch),
 		Commit:        strOrNull(stack.Config.Commit),
 		CloneEnforced: types.BoolValue(stack.Config.Reclone),
-		Contents:      strOrNull(stack.Config.FileContents),
+		Contents:      trimmedOrNull(stack.Config.FileContents),
 		LocalEnabled:  types.BoolValue(stack.Config.FilesOnHost),
 		Directory:     strOrNull(stack.Config.RunDirectory),
 		FilePaths:     dsFilePaths,
@@ -414,11 +422,11 @@ func stackToDataSourceModel(ctx context.Context, c *client.Client, stack *client
 
 	data.PreDeploy = &SystemCommandModel{
 		Path:    types.StringValue(stack.Config.PreDeploy.Path),
-		Command: types.StringValue(strings.TrimRight(stack.Config.PreDeploy.Command, "\n")),
+		Command: NewTrimmedStringValue(strings.TrimRight(stack.Config.PreDeploy.Command, "\n")),
 	}
 	data.PostDeploy = &SystemCommandModel{
 		Path:    types.StringValue(stack.Config.PostDeploy.Path),
-		Command: types.StringValue(strings.TrimRight(stack.Config.PostDeploy.Command, "\n")),
+		Command: NewTrimmedStringValue(strings.TrimRight(stack.Config.PostDeploy.Command, "\n")),
 	}
 
 	envVars := envStringToMap(strings.TrimRight(stack.Config.Environment, "\n"))
