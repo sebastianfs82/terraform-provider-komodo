@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
@@ -441,4 +442,528 @@ func TestUnitServerResource_deleteStateGetError(t *testing.T) {
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected diagnostic error for malformed state")
 	}
+}
+
+func TestUnitServerResource_serverConfigFromModel(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("basic_fields", func(t *testing.T) {
+		data := &ServerResourceModel{
+			Tags:                              types.ListValueMust(types.StringType, nil),
+			Address:                           types.StringValue("192.168.1.10:8120"),
+			CertificateVerificationEnabled:    types.BoolValue(true),
+			ExternalAddress:                   types.StringValue(""),
+			Region:                            types.StringValue("eu-west"),
+			PublicKey:                         types.StringNull(),
+			Enabled:                           types.BoolValue(true),
+			AutoRotateKeysEnabled:             types.BoolValue(false),
+			AutoPruneImagesEnabled:            types.BoolValue(true),
+			HistoricalSystemStatisticsEnabled: types.BoolValue(false),
+			IgnoredDiskMounts:                 types.ListValueMust(types.StringType, nil),
+			Links:                             types.ListValueMust(types.StringType, nil),
+			Alerts:                            nil,
+			Maintenance:                       nil,
+		}
+		cfg, diags := serverConfigFromModel(ctx, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if cfg.Address == nil || *cfg.Address != "192.168.1.10:8120" {
+			t.Fatalf("expected Address=192.168.1.10:8120, got %v", cfg.Address)
+		}
+		// InsecureTLS is the inverse of CertificateVerificationEnabled.
+		if cfg.InsecureTLS == nil || *cfg.InsecureTLS {
+			t.Fatal("expected InsecureTLS=false when certificate_verification_enabled=true")
+		}
+		if cfg.Region == nil || *cfg.Region != "eu-west" {
+			t.Fatalf("expected Region=eu-west, got %v", cfg.Region)
+		}
+		if cfg.Enabled == nil || !*cfg.Enabled {
+			t.Fatal("expected Enabled=true")
+		}
+		if cfg.AutoPrune == nil || !*cfg.AutoPrune {
+			t.Fatal("expected AutoPrune=true")
+		}
+	})
+
+	t.Run("alerts_enabled_with_cpu_and_disk", func(t *testing.T) {
+		typesSet, _ := types.SetValueFrom(ctx, types.StringType, []string{"cpu", "disk"})
+		data := &ServerResourceModel{
+			Tags:                              types.ListValueMust(types.StringType, nil),
+			Address:                           types.StringNull(),
+			CertificateVerificationEnabled:    types.BoolNull(),
+			ExternalAddress:                   types.StringNull(),
+			Region:                            types.StringNull(),
+			PublicKey:                         types.StringNull(),
+			Enabled:                           types.BoolNull(),
+			AutoRotateKeysEnabled:             types.BoolNull(),
+			AutoPruneImagesEnabled:            types.BoolNull(),
+			HistoricalSystemStatisticsEnabled: types.BoolNull(),
+			IgnoredDiskMounts:                 types.ListValueMust(types.StringType, nil),
+			Links:                             types.ListValueMust(types.StringType, nil),
+			Alerts: &ServerAlertsModel{
+				Enabled:    types.BoolValue(true),
+				Types:      typesSet,
+				Thresholds: nil,
+			},
+			Maintenance: nil,
+		}
+		cfg, diags := serverConfigFromModel(ctx, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if cfg.SendCPUAlerts == nil || !*cfg.SendCPUAlerts {
+			t.Fatal("expected SendCPUAlerts=true")
+		}
+		if cfg.SendDiskAlerts == nil || !*cfg.SendDiskAlerts {
+			t.Fatal("expected SendDiskAlerts=true")
+		}
+		if cfg.SendMemAlerts == nil || *cfg.SendMemAlerts {
+			t.Fatal("expected SendMemAlerts=false (not in types list)")
+		}
+		if cfg.SendUnreachableAlerts == nil || *cfg.SendUnreachableAlerts {
+			t.Fatal("expected SendUnreachableAlerts=false")
+		}
+	})
+
+	t.Run("alerts_disabled_clears_all_send_flags", func(t *testing.T) {
+		emptySet, _ := types.SetValueFrom(ctx, types.StringType, []string{})
+		data := &ServerResourceModel{
+			Tags:                              types.ListValueMust(types.StringType, nil),
+			Address:                           types.StringNull(),
+			CertificateVerificationEnabled:    types.BoolNull(),
+			ExternalAddress:                   types.StringNull(),
+			Region:                            types.StringNull(),
+			PublicKey:                         types.StringNull(),
+			Enabled:                           types.BoolNull(),
+			AutoRotateKeysEnabled:             types.BoolNull(),
+			AutoPruneImagesEnabled:            types.BoolNull(),
+			HistoricalSystemStatisticsEnabled: types.BoolNull(),
+			IgnoredDiskMounts:                 types.ListValueMust(types.StringType, nil),
+			Links:                             types.ListValueMust(types.StringType, nil),
+			Alerts: &ServerAlertsModel{
+				Enabled:    types.BoolValue(false),
+				Types:      emptySet,
+				Thresholds: nil,
+			},
+			Maintenance: nil,
+		}
+		cfg, diags := serverConfigFromModel(ctx, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if cfg.SendCPUAlerts == nil || *cfg.SendCPUAlerts {
+			t.Fatal("expected SendCPUAlerts=false when alerts.enabled=false")
+		}
+		if cfg.SendDiskAlerts == nil || *cfg.SendDiskAlerts {
+			t.Fatal("expected SendDiskAlerts=false when alerts.enabled=false")
+		}
+		if cfg.SendMemAlerts == nil || *cfg.SendMemAlerts {
+			t.Fatal("expected SendMemAlerts=false when alerts.enabled=false")
+		}
+	})
+
+	t.Run("with_maintenance_window", func(t *testing.T) {
+		data := &ServerResourceModel{
+			Tags:                              types.ListValueMust(types.StringType, nil),
+			Address:                           types.StringNull(),
+			CertificateVerificationEnabled:    types.BoolNull(),
+			ExternalAddress:                   types.StringNull(),
+			Region:                            types.StringNull(),
+			PublicKey:                         types.StringNull(),
+			Enabled:                           types.BoolNull(),
+			AutoRotateKeysEnabled:             types.BoolNull(),
+			AutoPruneImagesEnabled:            types.BoolNull(),
+			HistoricalSystemStatisticsEnabled: types.BoolNull(),
+			IgnoredDiskMounts:                 types.ListValueMust(types.StringType, nil),
+			Links:                             types.ListValueMust(types.StringType, nil),
+			Alerts:                            nil,
+			Maintenance: []MaintenanceWindowModel{
+				{
+					Name:            types.StringValue("weekly"),
+					Description:     types.StringNull(),
+					ScheduleType:    types.StringValue("Weekly"),
+					DayOfWeek:       types.StringValue("Sunday"),
+					Date:            types.StringNull(),
+					Hour:            types.Int64Value(2),
+					Minute:          types.Int64Value(30),
+					DurationMinutes: types.Int64Value(60),
+					Timezone:        types.StringValue("UTC"),
+					Enabled:         types.BoolValue(true),
+				},
+			},
+		}
+		cfg, diags := serverConfigFromModel(ctx, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if cfg.MaintenanceWindows == nil || len(*cfg.MaintenanceWindows) != 1 {
+			t.Fatal("expected 1 maintenance window")
+		}
+		w := (*cfg.MaintenanceWindows)[0]
+		if w.Name != "weekly" {
+			t.Fatalf("expected window name=weekly, got %s", w.Name)
+		}
+		if w.ScheduleType != "Weekly" {
+			t.Fatalf("expected schedule_type=Weekly, got %s", w.ScheduleType)
+		}
+		if w.Hour != 2 || w.Minute != 30 {
+			t.Fatalf("unexpected hour/minute: %d:%d", w.Hour, w.Minute)
+		}
+		if !w.Enabled {
+			t.Fatal("expected maintenance window enabled=true")
+		}
+	})
+}
+
+func TestUnitServerResource_serverToResourceModel(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("basic_fields_inverse_insecure_tls", func(t *testing.T) {
+		s := &client.Server{
+			ID:   client.OID{OID: "srv-abc"},
+			Name: "my-server",
+			Tags: []string{"prod"},
+			Config: client.ServerConfig{
+				Address:         "192.168.1.5:8120",
+				InsecureTLS:     false,
+				Region:          "eu-west",
+				Enabled:         true,
+				AutoRotateKeys:  false,
+				AutoPrune:       true,
+				StatsMonitoring: false,
+			},
+		}
+		data := &ServerResourceModel{
+			PublicKey: types.StringNull(),
+		}
+		diags := serverToResourceModel(ctx, s, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if data.ID.ValueString() != "srv-abc" {
+			t.Fatalf("unexpected ID: %s", data.ID.ValueString())
+		}
+		if data.Name.ValueString() != "my-server" {
+			t.Fatalf("unexpected Name: %s", data.Name.ValueString())
+		}
+		if data.Address.ValueString() != "192.168.1.5:8120" {
+			t.Fatalf("unexpected Address: %s", data.Address.ValueString())
+		}
+		// CertificateVerificationEnabled = !InsecureTLS = !false = true
+		if !data.CertificateVerificationEnabled.ValueBool() {
+			t.Fatal("expected CertificateVerificationEnabled=true when InsecureTLS=false")
+		}
+		if data.Region.ValueString() != "eu-west" {
+			t.Fatalf("unexpected Region: %s", data.Region.ValueString())
+		}
+		if len(data.Tags.Elements()) != 1 {
+			t.Fatalf("expected 1 tag, got %d", len(data.Tags.Elements()))
+		}
+	})
+
+	t.Run("ignore_mounts_and_links_populated", func(t *testing.T) {
+		s := &client.Server{
+			ID:   client.OID{OID: "srv-mounts"},
+			Name: "mount-server",
+			Config: client.ServerConfig{
+				IgnoreMounts: []string{"/dev", "/proc"},
+				Links:        []string{"https://grafana.example.com"},
+			},
+		}
+		data := &ServerResourceModel{PublicKey: types.StringNull()}
+		diags := serverToResourceModel(ctx, s, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if len(data.IgnoredDiskMounts.Elements()) != 2 {
+			t.Fatalf("expected 2 ignored mounts, got %d", len(data.IgnoredDiskMounts.Elements()))
+		}
+		if len(data.Links.Elements()) != 1 {
+			t.Fatalf("expected 1 link, got %d", len(data.Links.Elements()))
+		}
+	})
+
+	t.Run("alerts_types_set_when_any_flag_enabled", func(t *testing.T) {
+		s := &client.Server{
+			ID:   client.OID{OID: "srv-alerts"},
+			Name: "alert-server",
+			Config: client.ServerConfig{
+				SendCPUAlerts:  true,
+				SendDiskAlerts: true,
+				CPUCritical:    90.0,
+				DiskWarning:    75.0,
+			},
+		}
+		// Alerts block must be non-nil in prior model for the Alerts block to be populated.
+		data := &ServerResourceModel{
+			PublicKey: types.StringNull(),
+			Alerts: &ServerAlertsModel{
+				Enabled: types.BoolValue(true),
+				Types:   types.SetValueMust(types.StringType, nil),
+			},
+		}
+		diags := serverToResourceModel(ctx, s, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if data.Alerts == nil {
+			t.Fatal("expected non-nil alerts block")
+		}
+		var alertTypes []string
+		_ = data.Alerts.Types.ElementsAs(ctx, &alertTypes, false)
+		found := map[string]bool{}
+		for _, a := range alertTypes {
+			found[a] = true
+		}
+		if !found["cpu"] {
+			t.Fatal("expected 'cpu' in alert types")
+		}
+		if !found["disk"] {
+			t.Fatal("expected 'disk' in alert types")
+		}
+		if found["memory"] {
+			t.Fatal("expected 'memory' not in alert types")
+		}
+		if data.Alerts.Thresholds == nil {
+			t.Fatal("expected non-nil thresholds")
+		}
+		if data.Alerts.Thresholds.CPUCritical.ValueFloat64() != 90.0 {
+			t.Fatalf("expected CPU critical=90.0, got %f", data.Alerts.Thresholds.CPUCritical.ValueFloat64())
+		}
+		if data.Alerts.Thresholds.DiskWarning.ValueFloat64() != 75.0 {
+			t.Fatalf("expected disk warning=75.0, got %f", data.Alerts.Thresholds.DiskWarning.ValueFloat64())
+		}
+	})
+
+	t.Run("maintenance_windows_populated", func(t *testing.T) {
+		s := &client.Server{
+			ID:   client.OID{OID: "srv-maint"},
+			Name: "maint-server",
+			Config: client.ServerConfig{
+				MaintenanceWindows: []client.MaintenanceWindow{
+					{
+						Name:            "nightly",
+						Description:     "",
+						ScheduleType:    "Daily",
+						Hour:            2,
+						Minute:          0,
+						DurationMinutes: 30,
+						Timezone:        "",
+						Enabled:         true,
+					},
+				},
+			},
+		}
+		data := &ServerResourceModel{PublicKey: types.StringNull()}
+		diags := serverToResourceModel(ctx, s, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diags: %v", diags)
+		}
+		if len(data.Maintenance) != 1 {
+			t.Fatalf("expected 1 maintenance window, got %d", len(data.Maintenance))
+		}
+		w := data.Maintenance[0]
+		if w.Name.ValueString() != "nightly" {
+			t.Fatalf("expected window name=nightly, got %s", w.Name.ValueString())
+		}
+		if w.ScheduleType.ValueString() != "Daily" {
+			t.Fatalf("expected schedule_type=Daily, got %s", w.ScheduleType.ValueString())
+		}
+		if w.Hour.ValueInt64() != 2 {
+			t.Fatalf("expected hour=2, got %d", w.Hour.ValueInt64())
+		}
+		// Empty Description and Timezone should be mapped to null.
+		if !w.Description.IsNull() {
+			t.Fatal("expected null description for empty string")
+		}
+		if !w.Timezone.IsNull() {
+			t.Fatal("expected null timezone for empty string")
+		}
+		if !w.Enabled.ValueBool() {
+			t.Fatal("expected window enabled=true")
+		}
+	})
+}
+
+func TestUnitServerResource_validateConfig_alertsTypesEmptyWhenEnabled(t *testing.T) {
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "komodo_server" "test" {
+  name = "tf-test-server"
+  alerts {
+    enabled = true
+    types   = []
+  }
+}`,
+				ExpectError: regexp.MustCompile(`types must not be empty`),
+			},
+		},
+	})
+}
+
+func TestUnitServerResource_validateConfig_alertsNilNoError(t *testing.T) {
+	// Validator should early-return without error when alerts block is absent.
+	r := &ServerResource{}
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	// Construct a minimal valid config (no alerts block)
+	val := tftypes.NewValue(
+		schemaResp.Schema.Type().TerraformType(ctx),
+		nil, // null — triggers HasError in Get, but validator should not panic
+	)
+	req := fwresource.ValidateConfigRequest{Config: tfsdk.Config{Raw: val, Schema: schemaResp.Schema}}
+	resp := &fwresource.ValidateConfigResponse{}
+	r.ValidateConfig(ctx, req, resp)
+	// null raw → Config.Get error, but validator should propagate that error gracefully
+	// (it returns after HasError). We just verify no panic occurs.
+	_ = resp.Diagnostics.HasError()
+}
+
+// ─── Mock-server unit tests ───────────────────────────────────────────────────
+
+// mockValidServerJSON is a minimal but complete Server JSON that satisfies
+// serverToResourceModel without diagnostics. ignore_mounts and links are non-null
+// arrays so types.ListValueFrom never receives a nil slice.
+const mockValidServerJSON = `{"_id":{"$oid":"507f1f77bcf86cd799439011"},"name":"tf-mock-server","tags":[],"config":{"address":"","insecure_tls":false,"external_address":"","region":"","enabled":false,"auto_rotate_keys":true,"passkey":"","auto_prune":false,"stats_monitoring":true,"ignore_mounts":[],"links":[]}}`
+
+func TestUnitServerResource_createClientError(t *testing.T) {
+	srv := newStatefulUserMockServer(t, func(typ string, _ int) (int, string) {
+		if typ == "CreateServer" {
+			return 500, `"create error"`
+		}
+		return 200, mockValidServerJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      mockUserProviderConfig(srv.URL) + `resource "komodo_server" "test" { name = "tf-mock-server" }`,
+				ExpectError: regexp.MustCompile(`(?i)error`),
+			},
+		},
+	})
+}
+
+func TestUnitServerResource_createMissingID(t *testing.T) {
+	srv := newStatefulUserMockServer(t, func(typ string, _ int) (int, string) {
+		if typ == "CreateServer" {
+			return 200, `{"_id":{"$oid":""},"name":"tf-mock-server","tags":[],"config":{"ignore_mounts":[],"links":[]}}`
+		}
+		return 200, mockValidServerJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      mockUserProviderConfig(srv.URL) + `resource "komodo_server" "test" { name = "tf-mock-server" }`,
+				ExpectError: regexp.MustCompile(`(?i)missing ID`),
+			},
+		},
+	})
+}
+
+func TestUnitServerResource_deleteClientError(t *testing.T) {
+	// Only the first DeleteServer call fails; subsequent cleanup calls succeed
+	// so the framework's post-test destroy doesn't leave dangling resources.
+	srv := newStatefulUserMockServer(t, func(typ string, n int) (int, string) {
+		if typ == "DeleteServer" && n == 1 {
+			return 500, `"delete error"`
+		}
+		return 200, mockValidServerJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: mockUserProviderConfig(srv.URL) + `resource "komodo_server" "test" { name = "tf-mock-server" }`,
+			},
+			{
+				Config:      mockUserProviderConfig(srv.URL),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile(`(?i)error`),
+			},
+		},
+	})
+}
+
+func TestUnitServerResource_updateRenameError(t *testing.T) {
+	srv := newStatefulUserMockServer(t, func(typ string, _ int) (int, string) {
+		if typ == "RenameServer" {
+			return 500, `"rename error"`
+		}
+		return 200, mockValidServerJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: mockUserProviderConfig(srv.URL) + `resource "komodo_server" "test" { name = "tf-mock-server" }`,
+			},
+			{
+				Config:      mockUserProviderConfig(srv.URL) + `resource "komodo_server" "test" { name = "tf-mock-server-v2" }`,
+				ExpectError: regexp.MustCompile(`(?i)error`),
+			},
+		},
+	})
+}
+
+func TestUnitServerResource_updateServerError(t *testing.T) {
+	srv := newStatefulUserMockServer(t, func(typ string, _ int) (int, string) {
+		if typ == "UpdateServer" {
+			return 500, `"server update error"`
+		}
+		return 200, mockValidServerJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: mockUserProviderConfig(srv.URL) + `resource "komodo_server" "test" { name = "tf-mock-server" }`,
+			},
+			{
+				// Same name (no rename), but explicit address triggers UpdateServer.
+				Config: mockUserProviderConfig(srv.URL) + `
+resource "komodo_server" "test" {
+  name    = "tf-mock-server"
+  address = "127.0.0.1:8120"
+}`,
+				ExpectError: regexp.MustCompile(`(?i)error`),
+			},
+		},
+	})
+}
+
+func TestUnitServerResource_updateGetAfterUpdateNil(t *testing.T) {
+	// UpdateServer succeeds but the subsequent GetServer returns nil (not found).
+	// n tracks per-type call count; the 3rd GetServer call is the post-update re-read.
+	srv := newStatefulUserMockServer(t, func(typ string, n int) (int, string) {
+		if typ == "GetServer" && n >= 3 {
+			return 404, `"not found"`
+		}
+		if typ == "UpdateServer" {
+			return 200, mockValidServerJSON
+		}
+		return 200, mockValidServerJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: mockUserProviderConfig(srv.URL) + `resource "komodo_server" "test" { name = "tf-mock-server" }`,
+			},
+			{
+				Config: mockUserProviderConfig(srv.URL) + `
+resource "komodo_server" "test" {
+  name    = "tf-mock-server"
+  address = "127.0.0.1:8120"
+}`,
+				ExpectError: regexp.MustCompile(`(?i)not found`),
+			},
+		},
+	})
 }

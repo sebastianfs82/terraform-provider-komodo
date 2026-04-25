@@ -6,6 +6,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -160,5 +162,112 @@ func TestUnitNetworkResource_importState_invalidFormat(t *testing.T) {
 	r.ImportState(context.Background(), req, resp)
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected diagnostic error for invalid import ID format")
+	}
+}
+
+// ─── Mock-HTTP-server unit tests ──────────────────────────────────────────────
+
+// networkTestClient returns a *client.Client backed by a one-shot mock server
+// that responds with the given HTTP status and body for every request.
+func networkTestClient(t *testing.T, status int, body string) (*client.Client, func()) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		fmt.Fprint(w, body)
+	}))
+	return client.NewClientWithApiKey(srv.URL, "key", "secret"), srv.Close
+}
+
+// networkReadState builds a valid tfsdk.State for NetworkResource Read/Delete tests.
+func networkReadState(t *testing.T, r *NetworkResource, serverID, name string) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	stateVal := tftypes.NewValue(schemaResp.Schema.Type().TerraformType(ctx), map[string]tftypes.Value{
+		"id":        tftypes.NewValue(tftypes.String, serverID+":"+name),
+		"server_id": tftypes.NewValue(tftypes.String, serverID),
+		"name":      tftypes.NewValue(tftypes.String, name),
+	})
+	return tfsdk.State{Schema: schemaResp.Schema, Raw: stateVal}
+}
+
+func TestUnitNetworkResource_createClientError(t *testing.T) {
+	c, close := networkTestClient(t, http.StatusInternalServerError, `"create error"`)
+	defer close()
+
+	r := &NetworkResource{client: c}
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	planVal := tftypes.NewValue(schemaResp.Schema.Type().TerraformType(ctx), map[string]tftypes.Value{
+		"id":        tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+		"server_id": tftypes.NewValue(tftypes.String, "server-1"),
+		"name":      tftypes.NewValue(tftypes.String, "test-net"),
+	})
+	req := fwresource.CreateRequest{Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planVal}}
+	resp := &fwresource.CreateResponse{}
+	r.Create(ctx, req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when CreateNetwork fails")
+	}
+}
+
+func TestUnitNetworkResource_readServerIDEmpty(t *testing.T) {
+	r := &NetworkResource{client: &client.Client{}}
+	ctx := context.Background()
+	state := networkReadState(t, r, "", "test-net")
+	req := fwresource.ReadRequest{State: state}
+	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
+	r.Read(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error on empty server_id path: %v", resp.Diagnostics)
+	}
+}
+
+func TestUnitNetworkResource_readListNetworksNotFound(t *testing.T) {
+	// body contains "did not find" → Read must call RemoveResource without an error diagnostic.
+	c, close := networkTestClient(t, http.StatusInternalServerError, `"did not find server"`)
+	defer close()
+
+	r := &NetworkResource{client: c}
+	ctx := context.Background()
+	state := networkReadState(t, r, "server-1", "test-net")
+	req := fwresource.ReadRequest{State: state}
+	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
+	r.Read(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostic on not-found path: %v", resp.Diagnostics)
+	}
+}
+
+func TestUnitNetworkResource_readListNetworksClientError(t *testing.T) {
+	// body does NOT contain a not-found phrase → Read must call AddError.
+	c, close := networkTestClient(t, http.StatusInternalServerError, `"internal error"`)
+	defer close()
+
+	r := &NetworkResource{client: c}
+	ctx := context.Background()
+	req := fwresource.ReadRequest{State: networkReadState(t, r, "server-1", "test-net")}
+	resp := &fwresource.ReadResponse{}
+	r.Read(ctx, req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when ListDockerNetworks fails with non-not-found error")
+	}
+}
+
+func TestUnitNetworkResource_readNetworkNotInList(t *testing.T) {
+	// Returns an empty network list → network not found → RemoveResource, no error.
+	c, close := networkTestClient(t, http.StatusOK, `[]`)
+	defer close()
+
+	r := &NetworkResource{client: c}
+	ctx := context.Background()
+	state := networkReadState(t, r, "server-1", "test-net")
+	req := fwresource.ReadRequest{State: state}
+	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
+	r.Read(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error when network not in list: %v", resp.Diagnostics)
 	}
 }

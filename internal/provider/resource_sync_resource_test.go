@@ -497,3 +497,156 @@ func TestUnitResourceSyncResource_partialConfigFromModel(t *testing.T) {
 		}
 	})
 }
+
+func TestUnitResourceSyncResource_resourceSyncToModel(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	t.Run("basic_fields", func(t *testing.T) {
+		rs := &client.ResourceSync{
+			ID:   client.OID{OID: "sync001"},
+			Name: "my-sync",
+			Tags: []string{"prod"},
+			Config: client.ResourceSyncConfig{
+				Delete:       true,
+				PendingAlert: true,
+			},
+		}
+		m := &ResourceSyncResourceModel{}
+		resourceSyncToModel(ctx, c, rs, m)
+		if m.ID.ValueString() != "sync001" {
+			t.Fatalf("unexpected ID: %s", m.ID.ValueString())
+		}
+		if m.Name.ValueString() != "my-sync" {
+			t.Fatalf("unexpected Name: %s", m.Name.ValueString())
+		}
+		if !m.Delete.ValueBool() {
+			t.Fatal("expected delete=true")
+		}
+		if !m.AlertsEnabled.ValueBool() {
+			t.Fatal("expected alerts_enabled=true")
+		}
+		if m.Source != nil {
+			t.Fatal("expected nil source when no git fields set")
+		}
+		if m.Webhook != nil {
+			t.Fatal("expected nil webhook when disabled")
+		}
+		if len(m.Tags.Elements()) != 1 {
+			t.Fatalf("expected 1 tag, got %d", len(m.Tags.Elements()))
+		}
+	})
+
+	t.Run("source_with_linked_repo", func(t *testing.T) {
+		rs := &client.ResourceSync{
+			ID:   client.OID{OID: "sync002"},
+			Name: "linked-sync",
+			Config: client.ResourceSyncConfig{
+				LinkedRepo: "repo-abc",
+			},
+		}
+		m := &ResourceSyncResourceModel{}
+		resourceSyncToModel(ctx, c, rs, m)
+		if m.Source == nil {
+			t.Fatal("expected non-nil source for linked_repo")
+		}
+		if m.Source.RepoID.ValueString() != "repo-abc" {
+			t.Fatalf("expected RepoID=repo-abc, got %s", m.Source.RepoID.ValueString())
+		}
+	})
+
+	t.Run("source_file_contents_trailing_newline_stripped", func(t *testing.T) {
+		rs := &client.ResourceSync{
+			ID:   client.OID{OID: "sync003"},
+			Name: "file-sync",
+			Config: client.ResourceSyncConfig{
+				FileContents: "resource: foo\n",
+			},
+		}
+		m := &ResourceSyncResourceModel{
+			Source: &ResourceSyncSourceModel{FileContents: types.StringNull()},
+		}
+		resourceSyncToModel(ctx, c, rs, m)
+		if m.Source == nil {
+			t.Fatal("expected non-nil source")
+		}
+		if m.Source.FileContents.ValueString() != "resource: foo" {
+			t.Fatalf("expected trailing newline stripped, got %q", m.Source.FileContents.ValueString())
+		}
+	})
+
+	t.Run("webhook_set_when_enabled", func(t *testing.T) {
+		rs := &client.ResourceSync{
+			ID:   client.OID{OID: "sync004"},
+			Name: "webhook-sync",
+			Config: client.ResourceSyncConfig{
+				WebhookEnabled: true,
+				WebhookSecret:  "tok",
+			},
+		}
+		m := &ResourceSyncResourceModel{}
+		resourceSyncToModel(ctx, c, rs, m)
+		if m.Webhook == nil {
+			t.Fatal("expected non-nil webhook block")
+		}
+		if !m.Webhook.Enabled.ValueBool() {
+			t.Fatal("expected webhook enabled=true")
+		}
+		if m.Webhook.Secret.ValueString() != "tok" {
+			t.Fatalf("expected webhook secret=tok, got %s", m.Webhook.Secret.ValueString())
+		}
+	})
+
+	t.Run("scope_from_include_booleans", func(t *testing.T) {
+		rs := &client.ResourceSync{
+			ID:   client.OID{OID: "sync005"},
+			Name: "scoped-sync",
+			Config: client.ResourceSyncConfig{
+				IncludeResources:  true,
+				IncludeVariables:  true,
+				IncludeUserGroups: false,
+			},
+		}
+		m := &ResourceSyncResourceModel{}
+		resourceSyncToModel(ctx, c, rs, m)
+		var scopeItems []string
+		_ = m.Scope.ElementsAs(ctx, &scopeItems, false)
+		found := map[string]bool{}
+		for _, s := range scopeItems {
+			found[s] = true
+		}
+		if !found["resources"] {
+			t.Fatal("expected 'resources' in scope list")
+		}
+		if !found["variables"] {
+			t.Fatal("expected 'variables' in scope list")
+		}
+		if found["user_groups"] {
+			t.Fatal("expected 'user_groups' not in scope list")
+		}
+	})
+
+	t.Run("managed_mode_block_set", func(t *testing.T) {
+		rs := &client.ResourceSync{
+			ID:   client.OID{OID: "sync006"},
+			Name: "managed-sync",
+			Config: client.ResourceSyncConfig{
+				Managed:   true,
+				MatchTags: []string{"env:prod"},
+			},
+		}
+		m := &ResourceSyncResourceModel{}
+		resourceSyncToModel(ctx, c, rs, m)
+		if m.ManagedMode == nil {
+			t.Fatal("expected non-nil managed_mode block")
+		}
+		if !m.ManagedMode.Enabled.ValueBool() {
+			t.Fatal("expected managed_mode.enabled=true")
+		}
+		var tagItems []string
+		_ = m.ManagedMode.TagFilter.ElementsAs(ctx, &tagItems, false)
+		if len(tagItems) != 1 || tagItems[0] != "env:prod" {
+			t.Fatalf("expected tag_filter=[env:prod], got %v", tagItems)
+		}
+	})
+}

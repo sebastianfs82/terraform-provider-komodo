@@ -15,6 +15,7 @@ import (
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -626,6 +627,224 @@ func TestUnitActionResource_parseActionArguments(t *testing.T) {
 		result := parseActionArguments("key_value", "\n\nK=V\n\n")
 		if len(result) != 1 {
 			t.Fatalf("expected 1 arg, got %d", len(result))
+		}
+	})
+}
+
+func TestUnitActionResource_partialActionConfigFromModel(t *testing.T) {
+	t.Run("no_schedule_no_webhook_clears_fields", func(t *testing.T) {
+		data := &ActionResourceModel{
+			FailureAlert:              types.BoolValue(true),
+			RunOnStartupEnabled:       types.BoolValue(false),
+			FileContents:              types.StringValue("console.log('hi');"),
+			ReloadDependenciesEnabled: types.BoolValue(true),
+			Schedule:                  nil,
+			Webhook:                   nil,
+			Arguments:                 nil,
+		}
+		cfg := partialActionConfigFromModel(data)
+		if cfg.FailureAlert == nil || !*cfg.FailureAlert {
+			t.Fatal("expected failure_alert=true")
+		}
+		if cfg.FileContents == nil || *cfg.FileContents != "console.log('hi');" {
+			t.Fatalf("expected file_contents, got %v", cfg.FileContents)
+		}
+		// No schedule block → ScheduleEnabled and Schedule expression cleared.
+		if cfg.ScheduleEnabled == nil || *cfg.ScheduleEnabled {
+			t.Fatal("expected ScheduleEnabled=false when no schedule block")
+		}
+		if cfg.Schedule == nil || *cfg.Schedule != "" {
+			t.Fatal("expected empty schedule expression")
+		}
+		// No webhook block → disabled.
+		if cfg.WebhookEnabled == nil || *cfg.WebhookEnabled {
+			t.Fatal("expected WebhookEnabled=false when no webhook block")
+		}
+		// No arguments → empty JSON object.
+		if cfg.Arguments == nil || *cfg.Arguments != "{}" {
+			t.Fatalf("expected arguments={}, got %v", cfg.Arguments)
+		}
+	})
+
+	t.Run("with_schedule", func(t *testing.T) {
+		data := &ActionResourceModel{
+			FailureAlert:              types.BoolNull(),
+			RunOnStartupEnabled:       types.BoolNull(),
+			FileContents:              types.StringNull(),
+			ReloadDependenciesEnabled: types.BoolNull(),
+			Schedule: &ScheduleModel{
+				Format:       types.StringValue("Cron"),
+				Expression:   types.StringValue("0 0 * * * *"),
+				Enabled:      types.BoolValue(true),
+				Timezone:     types.StringValue("Europe/Berlin"),
+				AlertEnabled: types.BoolValue(true),
+			},
+			Webhook:   nil,
+			Arguments: nil,
+		}
+		cfg := partialActionConfigFromModel(data)
+		if cfg.ScheduleFormat == nil || *cfg.ScheduleFormat != "Cron" {
+			t.Fatal("expected ScheduleFormat=Cron")
+		}
+		if cfg.Schedule == nil || *cfg.Schedule != "0 0 * * * *" {
+			t.Fatal("expected schedule expression")
+		}
+		if cfg.ScheduleTimezone == nil || *cfg.ScheduleTimezone != "Europe/Berlin" {
+			t.Fatal("expected timezone=Europe/Berlin")
+		}
+		if cfg.ScheduleEnabled == nil || !*cfg.ScheduleEnabled {
+			t.Fatal("expected ScheduleEnabled=true")
+		}
+	})
+
+	t.Run("with_webhook", func(t *testing.T) {
+		data := &ActionResourceModel{
+			FailureAlert:              types.BoolNull(),
+			RunOnStartupEnabled:       types.BoolNull(),
+			FileContents:              types.StringNull(),
+			ReloadDependenciesEnabled: types.BoolNull(),
+			Schedule:                  nil,
+			Webhook: &WebhookModel{
+				Enabled: types.BoolValue(true),
+				Secret:  types.StringValue("mysecret"),
+			},
+			Arguments: nil,
+		}
+		cfg := partialActionConfigFromModel(data)
+		if cfg.WebhookEnabled == nil || !*cfg.WebhookEnabled {
+			t.Fatal("expected WebhookEnabled=true")
+		}
+		if cfg.WebhookSecret == nil || *cfg.WebhookSecret != "mysecret" {
+			t.Fatalf("expected WebhookSecret=mysecret, got %v", cfg.WebhookSecret)
+		}
+	})
+
+	t.Run("with_arguments", func(t *testing.T) {
+		data := &ActionResourceModel{
+			FailureAlert:              types.BoolNull(),
+			RunOnStartupEnabled:       types.BoolNull(),
+			FileContents:              types.StringNull(),
+			ReloadDependenciesEnabled: types.BoolNull(),
+			Schedule:                  nil,
+			Webhook:                   nil,
+			Arguments: []ArgumentModel{
+				{Name: types.StringValue("FOO"), Value: types.StringValue("bar")},
+			},
+		}
+		cfg := partialActionConfigFromModel(data)
+		if cfg.Arguments == nil || *cfg.Arguments == "{}" {
+			t.Fatal("expected non-empty arguments JSON")
+		}
+	})
+}
+
+func TestUnitActionResource_actionToModel(t *testing.T) {
+	t.Run("basic_fields", func(t *testing.T) {
+		a := &client.Action{
+			ID:   client.OID{OID: "abc123"},
+			Name: "my-action",
+			Tags: []string{"t1"},
+			Config: client.ActionConfig{
+				FailureAlert: true,
+				FileContents: "console.log('hi');\n",
+			},
+		}
+		var data ActionResourceModel
+		actionToModel(a, &data)
+
+		if data.ID.ValueString() != "abc123" {
+			t.Fatalf("unexpected id: %s", data.ID.ValueString())
+		}
+		if data.Name.ValueString() != "my-action" {
+			t.Fatalf("unexpected name: %s", data.Name.ValueString())
+		}
+		if !data.FailureAlert.ValueBool() {
+			t.Fatal("expected failure_alert=true")
+		}
+		// Trailing newline should be stripped.
+		if data.FileContents.ValueString() != "console.log('hi');" {
+			t.Fatalf("expected trailing newline stripped, got %q", data.FileContents.ValueString())
+		}
+		if data.Schedule != nil {
+			t.Fatal("expected nil schedule when not active")
+		}
+		if data.Webhook != nil {
+			t.Fatal("expected nil webhook when not active")
+		}
+		if len(data.Tags.Elements()) != 1 {
+			t.Fatalf("expected 1 tag, got %d", len(data.Tags.Elements()))
+		}
+	})
+
+	t.Run("with_active_schedule", func(t *testing.T) {
+		a := &client.Action{
+			ID:   client.OID{OID: "abc456"},
+			Name: "scheduled-action",
+			Config: client.ActionConfig{
+				ScheduleEnabled:  true,
+				ScheduleFormat:   "Cron",
+				Schedule:         "0 0 * * * *",
+				ScheduleTimezone: "UTC",
+				ScheduleAlert:    true,
+			},
+		}
+		var data ActionResourceModel
+		actionToModel(a, &data)
+
+		if data.Schedule == nil {
+			t.Fatal("expected non-nil schedule block when ScheduleEnabled=true")
+		}
+		if data.Schedule.Format.ValueString() != "Cron" {
+			t.Fatalf("unexpected schedule format: %s", data.Schedule.Format.ValueString())
+		}
+		if data.Schedule.Expression.ValueString() != "0 0 * * * *" {
+			t.Fatalf("unexpected schedule expression: %s", data.Schedule.Expression.ValueString())
+		}
+	})
+
+	t.Run("with_webhook", func(t *testing.T) {
+		a := &client.Action{
+			ID:   client.OID{OID: "abc789"},
+			Name: "webhook-action",
+			Config: client.ActionConfig{
+				WebhookEnabled: true,
+				WebhookSecret:  "s3cr3t",
+			},
+		}
+		var data ActionResourceModel
+		actionToModel(a, &data)
+
+		if data.Webhook == nil {
+			t.Fatal("expected non-nil webhook block")
+		}
+		if !data.Webhook.Enabled.ValueBool() {
+			t.Fatal("expected webhook enabled=true")
+		}
+		if data.Webhook.Secret.ValueString() != "s3cr3t" {
+			t.Fatalf("unexpected webhook secret: %s", data.Webhook.Secret.ValueString())
+		}
+	})
+
+	t.Run("with_json_arguments", func(t *testing.T) {
+		a := &client.Action{
+			ID:   client.OID{OID: "abc999"},
+			Name: "args-action",
+			Config: client.ActionConfig{
+				ArgumentsFormat: "json",
+				Arguments:       `{"KEY":"val"}`,
+			},
+		}
+		var data ActionResourceModel
+		actionToModel(a, &data)
+
+		if len(data.Arguments) != 1 {
+			t.Fatalf("expected 1 argument, got %d", len(data.Arguments))
+		}
+		if data.Arguments[0].Name.ValueString() != "KEY" {
+			t.Fatalf("unexpected arg name: %s", data.Arguments[0].Name.ValueString())
+		}
+		if data.Arguments[0].Value.ValueString() != "val" {
+			t.Fatalf("unexpected arg value: %s", data.Arguments[0].Value.ValueString())
 		}
 	})
 }

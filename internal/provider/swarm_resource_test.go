@@ -462,3 +462,130 @@ func TestUnitSwarmResource_deleteStateGetError(t *testing.T) {
 		t.Fatal("expected diagnostic error for malformed state")
 	}
 }
+
+func TestSwarmResource_swarmConfigFromModel_maintenanceWindows(t *testing.T) {
+	ctx := context.Background()
+	data := &SwarmResourceModel{
+		ServerIDs:     types.ListValueMust(types.StringType, nil),
+		Links:         types.ListValueMust(types.StringType, nil),
+		AlertsEnabled: types.BoolNull(),
+		Maintenance: []MaintenanceWindowModel{
+			{
+				Name:            types.StringValue("win1"),
+				Description:     types.StringValue("desc"),
+				ScheduleType:    types.StringValue("Daily"),
+				DayOfWeek:       types.StringValue(""),
+				Date:            types.StringValue(""),
+				Hour:            types.Int64Value(2),
+				Minute:          types.Int64Value(30),
+				DurationMinutes: types.Int64Value(60),
+				Timezone:        types.StringValue("UTC"),
+				Enabled:         types.BoolValue(true),
+			},
+		},
+	}
+	cfg, diags := swarmConfigFromModel(ctx, data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if cfg.MaintenanceWindows == nil || len(*cfg.MaintenanceWindows) != 1 {
+		t.Fatalf("expected 1 maintenance window, got %v", cfg.MaintenanceWindows)
+	}
+	w := (*cfg.MaintenanceWindows)[0]
+	if w.Name != "win1" {
+		t.Fatalf("unexpected Name: %s", w.Name)
+	}
+	if !w.Enabled {
+		t.Fatal("expected window Enabled=true")
+	}
+}
+
+func TestSwarmResource_swarmToResourceModel_maintenanceWindows(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("non_empty_windows_mapped", func(t *testing.T) {
+		s := &client.Swarm{
+			ID:   client.OID{OID: "swarm-maint"},
+			Name: "test-swarm",
+			Tags: []string{},
+			Config: client.SwarmConfig{
+				MaintenanceWindows: []client.MaintenanceWindow{
+					{
+						Name:            "win1",
+						Description:     "",
+						ScheduleType:    "Daily",
+						DayOfWeek:       "",
+						Date:            "",
+						Hour:            2,
+						Minute:          30,
+						DurationMinutes: 60,
+						Timezone:        "",
+						Enabled:         true,
+					},
+				},
+			},
+		}
+		data := &SwarmResourceModel{}
+		diags := swarmToResourceModel(ctx, s, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if len(data.Maintenance) != 1 {
+			t.Fatalf("expected 1 maintenance window, got %d", len(data.Maintenance))
+		}
+		w := data.Maintenance[0]
+		// Description empty → should be null
+		if !w.Description.IsNull() {
+			t.Fatalf("expected Description null, got %s", w.Description.ValueString())
+		}
+		// Date empty → should be null
+		if !w.Date.IsNull() {
+			t.Fatalf("expected Date null, got %s", w.Date.ValueString())
+		}
+		// Timezone empty → should be null
+		if !w.Timezone.IsNull() {
+			t.Fatalf("expected Timezone null, got %s", w.Timezone.ValueString())
+		}
+	})
+
+	t.Run("nil_tags_handled", func(t *testing.T) {
+		s := &client.Swarm{
+			ID:     client.OID{OID: "swarm-notags"},
+			Name:   "no-tags-swarm",
+			Tags:   nil, // nil tags slice
+			Config: client.SwarmConfig{},
+		}
+		data := &SwarmResourceModel{}
+		diags := swarmToResourceModel(ctx, s, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if data.Tags.IsNull() || len(data.Tags.Elements()) != 0 {
+			t.Fatalf("expected empty tags list, got %v", data.Tags)
+		}
+	})
+
+	t.Run("empty_maintenance_with_prior_empty_keeps_empty_slice", func(t *testing.T) {
+		s := &client.Swarm{
+			ID:     client.OID{OID: "swarm-empty-maint"},
+			Name:   "empty-maint",
+			Tags:   []string{},
+			Config: client.SwarmConfig{MaintenanceWindows: nil},
+		}
+		// Prior state has an empty (non-nil) slice.
+		data := &SwarmResourceModel{
+			Maintenance: []MaintenanceWindowModel{},
+		}
+		diags := swarmToResourceModel(ctx, s, data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		// Should remain non-nil empty slice.
+		if data.Maintenance == nil {
+			t.Fatal("expected non-nil empty maintenance slice when prior was empty slice")
+		}
+		if len(data.Maintenance) != 0 {
+			t.Fatalf("expected 0 maintenance windows, got %d", len(data.Maintenance))
+		}
+	})
+}

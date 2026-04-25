@@ -737,3 +737,540 @@ func TestUnitDeploymentResource_imageModelToClient_imageType(t *testing.T) {
 		t.Fatal("expected Build to be nil for Image type")
 	}
 }
+
+func TestUnitDeploymentResource_deploymentToModel_externalImage(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	d := &client.Deployment{
+		ID:   client.OID{OID: "dep123"},
+		Name: "my-deployment",
+		Tags: []string{},
+		Config: client.DeploymentConfig{
+			ServerID: "server-1",
+			Image: client.DeploymentImage{
+				Image: &client.DeploymentImageExternal{Image: "nginx:latest"},
+			},
+		},
+	}
+	// Pre-set Image block to trigger the "update existing image" path in deploymentToModel.
+	data := &DeploymentResourceModel{
+		Tags:  types.ListValueMust(types.StringType, nil),
+		Image: &DeploymentImageModel{},
+	}
+
+	deploymentToModel(ctx, c, d, data)
+
+	if data.ID.ValueString() != "dep123" {
+		t.Fatalf("unexpected id: %s", data.ID.ValueString())
+	}
+	if data.Name.ValueString() != "my-deployment" {
+		t.Fatalf("unexpected name: %s", data.Name.ValueString())
+	}
+	if data.ServerID.ValueString() != "server-1" {
+		t.Fatalf("unexpected server_id: %s", data.ServerID.ValueString())
+	}
+	if data.Image == nil {
+		t.Fatal("expected image block")
+	}
+	if data.Image.Type.ValueString() != "Image" {
+		t.Fatalf("expected image type=Image, got %s", data.Image.Type.ValueString())
+	}
+	if data.Image.Image.ValueString() != "nginx:latest" {
+		t.Fatalf("expected image=nginx:latest, got %s", data.Image.Image.ValueString())
+	}
+}
+
+func TestUnitDeploymentResource_deploymentToModel_buildImage(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	d := &client.Deployment{
+		ID:   client.OID{OID: "dep456"},
+		Name: "build-deployment",
+		Tags: []string{},
+		Config: client.DeploymentConfig{
+			Image: client.DeploymentImage{
+				Build: &client.DeploymentImageBuild{
+					BuildID: "build-xyz",
+					Version: client.BuildVersion{Major: 1, Minor: 2, Patch: 3},
+				},
+			},
+		},
+	}
+	data := &DeploymentResourceModel{
+		Tags:  types.ListValueMust(types.StringType, nil),
+		Image: &DeploymentImageModel{Version: types.StringNull()},
+	}
+
+	deploymentToModel(ctx, c, d, data)
+
+	if data.Image == nil {
+		t.Fatal("expected image block")
+	}
+	if data.Image.Type.ValueString() != "Build" {
+		t.Fatalf("expected image type=Build, got %s", data.Image.Type.ValueString())
+	}
+	if data.Image.BuildID.ValueString() != "build-xyz" {
+		t.Fatalf("expected build_id=build-xyz, got %s", data.Image.BuildID.ValueString())
+	}
+	if data.Image.Version.ValueString() != "1.2.3" {
+		t.Fatalf("expected version=1.2.3, got %s", data.Image.Version.ValueString())
+	}
+}
+
+func TestUnitDeploymentResource_partialDeploymentConfigFromModel_serverOnly(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	data := &DeploymentResourceModel{
+		ServerID:                       types.StringValue("srv-1"),
+		SwarmID:                        types.StringNull(),
+		SkipSecretInterpolationEnabled: types.BoolValue(true),
+		PollForUpdatesEnabled:          types.BoolValue(false),
+		AutoUpdateEnabled:              types.BoolValue(false),
+		SendAlertsEnabled:              types.BoolValue(true),
+		Image:                          nil,
+		Container:                      nil,
+		Termination:                    nil,
+	}
+
+	cfg := partialDeploymentConfigFromModel(ctx, c, data)
+
+	if cfg.ServerID == nil || *cfg.ServerID != "srv-1" {
+		t.Fatalf("expected server_id=srv-1, got %v", cfg.ServerID)
+	}
+	// SkipSecretInterpolation is the logical inverse of secret_interpolation_enabled.
+	if cfg.SkipSecretInterpolation == nil || *cfg.SkipSecretInterpolation {
+		t.Fatal("expected SkipSecretInterpolation=false when secret_interpolation_enabled=true")
+	}
+	if cfg.Image != nil {
+		t.Fatal("expected no image in config when data.Image=nil")
+	}
+	if cfg.SendAlerts == nil || !*cfg.SendAlerts {
+		t.Fatal("expected send_alerts=true")
+	}
+}
+
+func TestUnitDeploymentResource_partialDeploymentConfigFromModel_withImageAndContainer(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	data := &DeploymentResourceModel{
+		ServerID:                       types.StringValue("srv-1"),
+		SwarmID:                        types.StringNull(),
+		SkipSecretInterpolationEnabled: types.BoolNull(),
+		PollForUpdatesEnabled:          types.BoolNull(),
+		AutoUpdateEnabled:              types.BoolNull(),
+		SendAlertsEnabled:              types.BoolNull(),
+		Image: &DeploymentImageModel{
+			Type:            types.StringValue("Image"),
+			Image:           types.StringValue("redis:7"),
+			BuildID:         types.StringNull(),
+			Version:         types.StringNull(),
+			RegistryAccount: types.StringNull(),
+			RedeployEnabled: types.BoolValue(false),
+		},
+		Container: &DeploymentContainerModel{
+			Network:        types.StringValue("bridge"),
+			Restart:        types.StringValue("unless-stopped"),
+			Command:        types.StringNull(),
+			Replicas:       types.Int64Value(2),
+			ExtraArguments: types.ListValueMust(types.StringType, nil),
+			Ports:          types.ListValueMust(types.StringType, nil),
+			Volumes:        types.ListValueMust(types.StringType, nil),
+			Environment:    types.MapNull(types.StringType),
+			Labels:         types.ListValueMust(types.StringType, nil),
+			Links:          types.ListValueMust(types.StringType, nil),
+		},
+		Termination: nil,
+	}
+
+	cfg := partialDeploymentConfigFromModel(ctx, c, data)
+
+	if cfg.Image == nil {
+		t.Fatal("expected image in config")
+	}
+	if cfg.Network == nil || *cfg.Network != "bridge" {
+		t.Fatalf("expected network=bridge, got %v", cfg.Network)
+	}
+	if cfg.Restart == nil || *cfg.Restart != "unless-stopped" {
+		t.Fatalf("expected restart=unless-stopped, got %v", cfg.Restart)
+	}
+	if cfg.Replicas == nil || *cfg.Replicas != 2 {
+		t.Fatalf("expected replicas=2, got %v", cfg.Replicas)
+	}
+}
+
+func TestUnitDeploymentResource_deploymentToModel_containerBlock(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	d := &client.Deployment{
+		ID:   client.OID{OID: "dep-container"},
+		Name: "container-dep",
+		Config: client.DeploymentConfig{
+			ServerID:    "srv-1",
+			Network:     "bridge",
+			Restart:     "unless-stopped",
+			Command:     "./start.sh",
+			Replicas:    3,
+			Ports:       "8080:80\n443:443",
+			Volumes:     "/data:/app/data",
+			Environment: "DATABASE_URL=postgres://localhost/db\nDEBUG=false",
+			Labels:      "app=myapp",
+			Image:       client.DeploymentImage{Image: &client.DeploymentImageExternal{Image: "nginx:latest"}},
+		},
+	}
+	data := &DeploymentResourceModel{
+		Tags: types.ListValueMust(types.StringType, nil),
+	}
+	deploymentToModel(ctx, c, d, data)
+
+	if data.Container == nil {
+		t.Fatal("expected non-nil container block")
+	}
+	if data.Container.Network.ValueString() != "bridge" {
+		t.Fatalf("expected network=bridge, got %s", data.Container.Network.ValueString())
+	}
+	if data.Container.Restart.ValueString() != "unless-stopped" {
+		t.Fatalf("expected restart=unless-stopped, got %s", data.Container.Restart.ValueString())
+	}
+	if data.Container.Command.ValueString() != "./start.sh" {
+		t.Fatalf("expected command=./start.sh, got %s", data.Container.Command.ValueString())
+	}
+	if data.Container.Replicas.ValueInt64() != 3 {
+		t.Fatalf("expected replicas=3, got %d", data.Container.Replicas.ValueInt64())
+	}
+	if len(data.Container.Ports.Elements()) != 2 {
+		t.Fatalf("expected 2 ports, got %d", len(data.Container.Ports.Elements()))
+	}
+	if len(data.Container.Volumes.Elements()) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(data.Container.Volumes.Elements()))
+	}
+	if len(data.Container.Environment.Elements()) != 2 {
+		t.Fatalf("expected 2 env vars, got %d", len(data.Container.Environment.Elements()))
+	}
+	if len(data.Container.Labels.Elements()) != 1 {
+		t.Fatalf("expected 1 label, got %d", len(data.Container.Labels.Elements()))
+	}
+}
+
+func TestUnitDeploymentResource_deploymentToModel_terminationBlock(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	d := &client.Deployment{
+		ID:   client.OID{OID: "dep-term"},
+		Name: "term-dep",
+		Config: client.DeploymentConfig{
+			TerminationSignal:       "SIGTERM",
+			TerminationTimeout:      30,
+			TerminationSignalLabels: "traefik.enable=false",
+			Image:                   client.DeploymentImage{Image: &client.DeploymentImageExternal{}},
+		},
+	}
+	data := &DeploymentResourceModel{
+		Tags: types.ListValueMust(types.StringType, nil),
+	}
+	deploymentToModel(ctx, c, d, data)
+
+	if data.Termination == nil {
+		t.Fatal("expected non-nil termination block")
+	}
+	if data.Termination.Signal.ValueString() != "SIGTERM" {
+		t.Fatalf("expected signal=SIGTERM, got %s", data.Termination.Signal.ValueString())
+	}
+	if data.Termination.Timeout.ValueInt64() != 30 {
+		t.Fatalf("expected timeout=30, got %d", data.Termination.Timeout.ValueInt64())
+	}
+	if data.Termination.SignalLabels.ValueString() != "traefik.enable=false" {
+		t.Fatalf("expected signal_labels=traefik.enable=false, got %s", data.Termination.SignalLabels.ValueString())
+	}
+}
+
+func TestUnitDeploymentResource_deploymentToModel_imagePreserveExisting(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	// API returns neither Build nor Image (both nil) — prior model has an image block.
+	// Expect: RegistryAccount and RedeployEnabled updated, rest preserved.
+	d := &client.Deployment{
+		ID:   client.OID{OID: "dep-preserve"},
+		Name: "preserve-dep",
+		Config: client.DeploymentConfig{
+			RedeployOnBuild: true,
+		},
+	}
+	data := &DeploymentResourceModel{
+		Tags: types.ListValueMust(types.StringType, nil),
+		Image: &DeploymentImageModel{
+			Type:            types.StringValue("Image"),
+			Image:           types.StringValue("nginx:latest"),
+			BuildID:         types.StringNull(),
+			Version:         types.StringNull(),
+			RegistryAccount: types.StringNull(),
+			RedeployEnabled: types.BoolValue(false),
+		},
+	}
+	deploymentToModel(ctx, c, d, data)
+
+	if data.Image == nil {
+		t.Fatal("expected image block preserved when API returns neither variant")
+	}
+	if !data.Image.RedeployEnabled.ValueBool() {
+		t.Fatal("expected RedeployEnabled updated to true from API")
+	}
+	if data.Image.Type.ValueString() != "Image" {
+		t.Fatal("expected image type preserved")
+	}
+}
+
+func TestUnitDeploymentResource_deploymentToModel_imageNilWhenNoConfig(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	// API returns no image config and prior data.Image is nil — image stays nil.
+	d := &client.Deployment{
+		ID:     client.OID{OID: "dep-noimg"},
+		Name:   "noimg-dep",
+		Config: client.DeploymentConfig{},
+	}
+	data := &DeploymentResourceModel{
+		Tags:  types.ListValueMust(types.StringType, nil),
+		Image: nil,
+	}
+	deploymentToModel(ctx, c, d, data)
+
+	if data.Image != nil {
+		t.Fatal("expected nil image when API returns no image and prior is nil")
+	}
+}
+
+func TestUnitDeploymentResource_partialDeploymentConfigFromModel_terminationBlock(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	data := &DeploymentResourceModel{
+		Tags: types.ListValueMust(types.StringType, nil),
+		Termination: &DeploymentTerminationModel{
+			Signal:       types.StringValue("SIGTERM"),
+			Timeout:      types.Int64Value(30),
+			SignalLabels: types.StringValue("foo=bar"),
+		},
+	}
+	cfg := partialDeploymentConfigFromModel(ctx, c, data)
+	if cfg.TerminationSignal == nil || *cfg.TerminationSignal != "SIGTERM" {
+		t.Fatalf("unexpected TerminationSignal: %v", cfg.TerminationSignal)
+	}
+	if cfg.TerminationTimeout == nil || *cfg.TerminationTimeout != 30 {
+		t.Fatalf("unexpected TerminationTimeout: %v", cfg.TerminationTimeout)
+	}
+	if cfg.TerminationSignalLabels == nil || *cfg.TerminationSignalLabels != "foo=bar" {
+		t.Fatalf("unexpected TerminationSignalLabels: %v", cfg.TerminationSignalLabels)
+	}
+}
+
+func TestUnitDeploymentResource_partialDeploymentConfigFromModel_containerLinks(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	links, _ := types.ListValueFrom(ctx, types.StringType, []string{"container1", "container2"})
+	data := &DeploymentResourceModel{
+		Tags: types.ListValueMust(types.StringType, nil),
+		Container: &DeploymentContainerModel{
+			Links: links,
+		},
+	}
+	cfg := partialDeploymentConfigFromModel(ctx, c, data)
+	if cfg.Links == nil || len(*cfg.Links) != 2 {
+		t.Fatalf("unexpected Links: %v", cfg.Links)
+	}
+}
+
+func TestUnitDeploymentResource_imageValidator_typeRequired(t *testing.T) {
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "komodo_deployment" "test" {
+  name      = "tf-test-dep"
+  server_id = "srv"
+  image {}
+}`,
+				ExpectError: regexp.MustCompile(`image\.type is required`),
+			},
+		},
+	})
+}
+
+func TestUnitDeploymentResource_imageValidator_nameRequiredForImage(t *testing.T) {
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "komodo_deployment" "test" {
+  name      = "tf-test-dep"
+  server_id = "srv"
+  image {
+    type = "Image"
+  }
+}`,
+				ExpectError: regexp.MustCompile(`image\.name is required`),
+			},
+		},
+	})
+}
+
+func TestUnitDeploymentResource_imageValidator_buildIDRequiredForBuild(t *testing.T) {
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "komodo_deployment" "test" {
+  name      = "tf-test-dep"
+  server_id = "srv"
+  image {
+    type = "Build"
+  }
+}`,
+				ExpectError: regexp.MustCompile(`image\.build_id is required`),
+			},
+		},
+	})
+}
+
+// ─── Mock-server unit tests ───────────────────────────────────────────────────
+
+// mockValidDeploymentJSON is a minimal but complete Deployment JSON that satisfies
+// deploymentToModel without panicking. network="host" and restart="no" ensure the
+// container block is populated so the state round-trips cleanly.
+const mockValidDeploymentJSON = `{"_id":{"$oid":"507f1f77bcf86cd799439011"},"name":"tf-mock-dep","tags":[],"config":{"server_id":"","swarm_id":"","image":{},"image_registry_account":"","skip_secret_interp":false,"redeploy_on_build":false,"poll_for_updates":false,"auto_update":false,"send_alerts":false,"links":[],"network":"host","restart":"no","command":"","replicas":1,"termination_signal":"SIGTERM","termination_timeout":10,"extra_args":[],"term_signal_labels":"","ports":"","volumes":"","environment":"","labels":""}}`
+
+func TestUnitDeploymentResource_createClientError(t *testing.T) {
+	srv := newStatefulUserMockServer(t, func(typ string, _ int) (int, string) {
+		if typ == "CreateDeployment" {
+			return 500, `"create error"`
+		}
+		return 200, mockValidDeploymentJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      mockUserProviderConfig(srv.URL) + `resource "komodo_deployment" "test" { name = "tf-mock-dep" }`,
+				ExpectError: regexp.MustCompile(`(?i)error`),
+			},
+		},
+	})
+}
+
+func TestUnitDeploymentResource_createMissingID(t *testing.T) {
+	srv := newStatefulUserMockServer(t, func(typ string, _ int) (int, string) {
+		if typ == "CreateDeployment" {
+			return 200, `{"_id":{"$oid":""},"name":"tf-mock-dep","tags":[],"config":{}}`
+		}
+		return 200, mockValidDeploymentJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      mockUserProviderConfig(srv.URL) + `resource "komodo_deployment" "test" { name = "tf-mock-dep" }`,
+				ExpectError: regexp.MustCompile(`(?i)missing ID`),
+			},
+		},
+	})
+}
+
+func TestUnitDeploymentResource_deleteClientError(t *testing.T) {
+	// Only the first DeleteDeployment call fails; subsequent cleanup calls succeed
+	// so the framework's post-test destroy doesn't leave dangling resources.
+	srv := newStatefulUserMockServer(t, func(typ string, n int) (int, string) {
+		if typ == "DeleteDeployment" && n == 1 {
+			return 500, `"delete error"`
+		}
+		return 200, mockValidDeploymentJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: mockUserProviderConfig(srv.URL) + `resource "komodo_deployment" "test" { name = "tf-mock-dep" }`,
+			},
+			{
+				Config:      mockUserProviderConfig(srv.URL),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile(`(?i)error`),
+			},
+		},
+	})
+}
+
+func TestUnitDeploymentResource_updateRenameError(t *testing.T) {
+	srv := newStatefulUserMockServer(t, func(typ string, _ int) (int, string) {
+		if typ == "RenameDeployment" {
+			return 500, `"rename error"`
+		}
+		return 200, mockValidDeploymentJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: mockUserProviderConfig(srv.URL) + `resource "komodo_deployment" "test" { name = "tf-mock-dep" }`,
+			},
+			{
+				Config:      mockUserProviderConfig(srv.URL) + `resource "komodo_deployment" "test" { name = "tf-mock-dep-v2" }`,
+				ExpectError: regexp.MustCompile(`(?i)error`),
+			},
+		},
+	})
+}
+
+func TestUnitDeploymentResource_updateDeploymentError(t *testing.T) {
+	srv := newStatefulUserMockServer(t, func(typ string, _ int) (int, string) {
+		if typ == "UpdateDeployment" {
+			return 500, `"update error"`
+		}
+		return 200, mockValidDeploymentJSON
+	})
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: mockUserProviderConfig(srv.URL) + `resource "komodo_deployment" "test" { name = "tf-mock-dep" }`,
+			},
+			{
+				// Same name (no rename), but explicit server_id triggers UpdateDeployment.
+				Config: mockUserProviderConfig(srv.URL) + `
+resource "komodo_deployment" "test" {
+  name      = "tf-mock-dep"
+  server_id = "my-server"
+}`,
+				ExpectError: regexp.MustCompile(`(?i)error`),
+			},
+		},
+	})
+}
+
+func TestUnitDeploymentResource_autoUpdateValidator_requiresPollUpdates(t *testing.T) {
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "komodo_deployment" "test" {
+  name                  = "tf-test-dep"
+  server_id             = "srv"
+  auto_update_enabled   = true
+  poll_updates_enabled  = false
+}`,
+				ExpectError: regexp.MustCompile(`poll_updates_enabled required`),
+			},
+		},
+	})
+}

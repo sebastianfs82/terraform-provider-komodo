@@ -8,13 +8,13 @@ import (
 	"time"
 )
 
-func TestMsToRFC3339_zero(t *testing.T) {
+func TestTimestamps_msToRFC3339_zero(t *testing.T) {
 	if got := msToRFC3339(0); got != "" {
 		t.Errorf("msToRFC3339(0) = %q, want empty string", got)
 	}
 }
 
-func TestMsToRFC3339_nonZero(t *testing.T) {
+func TestTimestamps_msToRFC3339_nonZero(t *testing.T) {
 	// 2024-01-15T12:00:00Z in milliseconds
 	ms := int64(1705320000000)
 	got := msToRFC3339(ms)
@@ -31,7 +31,7 @@ func TestMsToRFC3339_nonZero(t *testing.T) {
 	}
 }
 
-func TestRfc3339ToMs_empty(t *testing.T) {
+func TestTimestamps_rfc3339ToMs_empty(t *testing.T) {
 	ms, err := rfc3339ToMs("")
 	if err != nil {
 		t.Fatalf("rfc3339ToMs(\"\") returned error: %v", err)
@@ -41,7 +41,7 @@ func TestRfc3339ToMs_empty(t *testing.T) {
 	}
 }
 
-func TestRfc3339ToMs_valid(t *testing.T) {
+func TestTimestamps_rfc3339ToMs_valid(t *testing.T) {
 	const s = "2024-01-15T12:00:00Z"
 	ms, err := rfc3339ToMs(s)
 	if err != nil {
@@ -57,14 +57,14 @@ func TestRfc3339ToMs_valid(t *testing.T) {
 	}
 }
 
-func TestRfc3339ToMs_invalid(t *testing.T) {
+func TestTimestamps_rfc3339ToMs_invalid(t *testing.T) {
 	_, err := rfc3339ToMs("not-a-date")
 	if err == nil {
 		t.Error("rfc3339ToMs expected error for invalid input, got nil")
 	}
 }
 
-func TestMsToRFC3339RoundTrip(t *testing.T) {
+func TestTimestamps_msToRFC3339RoundTrip(t *testing.T) {
 	cases := []string{
 		"2024-01-01T00:00:00Z",
 		"2025-12-31T23:59:59Z",

@@ -6,6 +6,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -517,5 +519,163 @@ func TestUnitTerminalResource_updateIsNoop(t *testing.T) {
 	r.Update(context.Background(), req, resp)
 	if resp.Diagnostics.HasError() {
 		t.Fatalf("unexpected error in no-op Update: %v", resp.Diagnostics)
+	}
+}
+
+// TestUnitTerminalResource_ValidateConfig_execModeNeverErrors verifies that
+// mode="exec" never produces a validation error, regardless of target_type.
+// This covers the non-attach code path in ValidateConfig.
+func TestUnitTerminalResource_ValidateConfig_execModeNeverErrors(t *testing.T) {
+	ctx := context.Background()
+	r := &TerminalResource{}
+
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+
+	for _, tt := range []string{"Server", "Container", "Stack", "Deployment"} {
+		rawVal := tftypes.NewValue(
+			schemaResp.Schema.Type().TerraformType(ctx),
+			map[string]tftypes.Value{
+				"id":             tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+				"name":           tftypes.NewValue(tftypes.String, "test"),
+				"target_type":    tftypes.NewValue(tftypes.String, tt),
+				"target_id":      tftypes.NewValue(tftypes.String, "target-1"),
+				"container":      tftypes.NewValue(tftypes.String, ""),
+				"service":        tftypes.NewValue(tftypes.String, ""),
+				"mode":           tftypes.NewValue(tftypes.String, "exec"),
+				"command":        tftypes.NewValue(tftypes.String, ""),
+				"created_at":     tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+				"stored_size_kb": tftypes.NewValue(tftypes.Number, tftypes.UnknownValue),
+			},
+		)
+		req := fwresource.ValidateConfigRequest{
+			Config: tfsdk.Config{Raw: rawVal, Schema: schemaResp.Schema},
+		}
+		resp := &fwresource.ValidateConfigResponse{}
+		r.ValidateConfig(ctx, req, resp)
+		if resp.Diagnostics.HasError() {
+			t.Errorf("unexpected error for mode=exec on target_type=%s: %s", tt, resp.Diagnostics)
+		}
+	}
+}
+
+// ─── Mock-HTTP-server unit tests ──────────────────────────────────────────────
+
+// terminalTestClient returns a *client.Client backed by a one-shot mock server
+// that responds with the given HTTP status and body for every request.
+func terminalTestClient(t *testing.T, status int, body string) (*client.Client, func()) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		fmt.Fprint(w, body)
+	}))
+	return client.NewClientWithApiKey(srv.URL, "key", "secret"), srv.Close
+}
+
+// terminalReadState builds a valid tfsdk.State for TerminalResource Read/Delete tests.
+func terminalReadState(t *testing.T, r *TerminalResource, targetType, targetID, name string) tfsdk.State {
+	t.Helper()
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	stateVal := tftypes.NewValue(schemaResp.Schema.Type().TerraformType(ctx), map[string]tftypes.Value{
+		"id":             tftypes.NewValue(tftypes.String, targetID+":"+name),
+		"name":           tftypes.NewValue(tftypes.String, name),
+		"target_type":    tftypes.NewValue(tftypes.String, targetType),
+		"target_id":      tftypes.NewValue(tftypes.String, targetID),
+		"container":      tftypes.NewValue(tftypes.String, ""),
+		"service":        tftypes.NewValue(tftypes.String, ""),
+		"mode":           tftypes.NewValue(tftypes.String, "exec"),
+		"command":        tftypes.NewValue(tftypes.String, ""),
+		"created_at":     tftypes.NewValue(tftypes.String, "2025-01-01T00:00:00Z"),
+		"stored_size_kb": tftypes.NewValue(tftypes.Number, tftypes.UnknownValue),
+	})
+	return tfsdk.State{Schema: schemaResp.Schema, Raw: stateVal}
+}
+
+func TestUnitTerminalResource_readTargetIDEmpty(t *testing.T) {
+	r := &TerminalResource{client: &client.Client{}}
+	ctx := context.Background()
+	state := terminalReadState(t, r, "Server", "", "test-term")
+	req := fwresource.ReadRequest{State: state}
+	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
+	r.Read(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error on empty target_id path: %v", resp.Diagnostics)
+	}
+}
+
+func TestUnitTerminalResource_readListTerminalsNotFound(t *testing.T) {
+	// body contains "did not find" → Read must RemoveResource without an error diagnostic.
+	c, close := terminalTestClient(t, http.StatusInternalServerError, `"did not find target"`)
+	defer close()
+
+	r := &TerminalResource{client: c}
+	ctx := context.Background()
+	state := terminalReadState(t, r, "Server", "server-1", "test-term")
+	req := fwresource.ReadRequest{State: state}
+	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
+	r.Read(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostic on not-found path: %v", resp.Diagnostics)
+	}
+}
+
+func TestUnitTerminalResource_readListTerminalsClientError(t *testing.T) {
+	// body does NOT contain a not-found phrase → Read must call AddError.
+	c, close := terminalTestClient(t, http.StatusInternalServerError, `"internal error"`)
+	defer close()
+
+	r := &TerminalResource{client: c}
+	ctx := context.Background()
+	req := fwresource.ReadRequest{State: terminalReadState(t, r, "Server", "server-1", "test-term")}
+	resp := &fwresource.ReadResponse{}
+	r.Read(ctx, req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when ListTerminals fails with non-not-found error")
+	}
+}
+
+func TestUnitTerminalResource_readTerminalNotInList(t *testing.T) {
+	// Returns an empty terminal list → terminal not found → RemoveResource, no error.
+	c, close := terminalTestClient(t, http.StatusOK, `[]`)
+	defer close()
+
+	r := &TerminalResource{client: c}
+	ctx := context.Background()
+	state := terminalReadState(t, r, "Server", "server-1", "test-term")
+	req := fwresource.ReadRequest{State: state}
+	resp := &fwresource.ReadResponse{State: tfsdk.State{Schema: state.Schema}}
+	r.Read(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error when terminal not in list: %v", resp.Diagnostics)
+	}
+}
+
+func TestUnitTerminalResource_deleteClientError(t *testing.T) {
+	c, close := terminalTestClient(t, http.StatusInternalServerError, `"delete error"`)
+	defer close()
+
+	r := &TerminalResource{client: c}
+	ctx := context.Background()
+	req := fwresource.DeleteRequest{State: terminalReadState(t, r, "Server", "server-1", "test-term")}
+	resp := &fwresource.DeleteResponse{}
+	r.Delete(ctx, req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when DeleteTerminal fails")
+	}
+}
+
+func TestUnitTerminalResource_importStateInvalidFormat(t *testing.T) {
+	r := &TerminalResource{}
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+	// "badid" has no colon → SplitN returns len=1 → targetID=="" → AddError.
+	req := fwresource.ImportStateRequest{ID: "badid"}
+	resp := &fwresource.ImportStateResponse{State: tfsdk.State{Schema: schemaResp.Schema}}
+	r.ImportState(ctx, req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error for import ID with no colon")
 	}
 }

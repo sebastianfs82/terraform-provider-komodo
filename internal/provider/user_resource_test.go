@@ -760,23 +760,36 @@ func TestAccUserResource_createSecondFindUserError(t *testing.T) {
 	})
 }
 
-func TestAccUserResource_createSecondFindUserNil(t *testing.T) {
-	// First FindUser succeeds; second returns 404 (nil).
+func TestUnitUserResource_createSecondFindUserNilDirect(t *testing.T) {
+	// First FindUser (by username after create) succeeds; second (by OID after perms) returns nil.
 	srv := newStatefulUserMockServer(t, func(typ string, n int) (int, string) {
 		if typ == "FindUser" && n >= 2 {
 			return http.StatusNotFound, `"not found"`
 		}
 		return http.StatusOK, mockValidUserJSON
 	})
-	resource.UnitTest(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config:      mockUserProviderConfig(srv.URL) + mockUserResourceConfig,
-				ExpectError: regexp.MustCompile(`(?i)not found`),
-			},
-		},
+	c := client.NewClient(srv.URL, "mock-user", "mock-pass")
+	r := &UserResource{client: c}
+	ctx := context.Background()
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+
+	planVal := tftypes.NewValue(schemaResp.Schema.Type().TerraformType(ctx), map[string]tftypes.Value{
+		"id":                    tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+		"username":              tftypes.NewValue(tftypes.String, "tf-mock-user"),
+		"password":              tftypes.NewValue(tftypes.String, "Password1!"),
+		"enabled":               tftypes.NewValue(tftypes.Bool, true),
+		"admin_enabled":         tftypes.NewValue(tftypes.Bool, false),
+		"create_server_enabled": tftypes.NewValue(tftypes.Bool, false),
+		"create_build_enabled":  tftypes.NewValue(tftypes.Bool, false),
 	})
+	plan := tfsdk.Plan{Schema: schemaResp.Schema, Raw: planVal}
+	req := fwresource.CreateRequest{Plan: plan}
+	resp := &fwresource.CreateResponse{State: tfsdk.State{Schema: schemaResp.Schema}}
+	r.Create(ctx, req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected diagnostic error when second FindUser returns nil in Create")
+	}
 }
 
 // ─── Update error tests ───────────────────────────────────────────────────────

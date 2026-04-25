@@ -220,3 +220,51 @@ func TestUnitOnboardingKeyResource_deleteStateGetError(t *testing.T) {
 		t.Fatal("expected diagnostic error for malformed state")
 	}
 }
+
+func TestUnitOnboardingKey_versionAtLeast(t *testing.T) {
+	cases := []struct {
+		version string
+		major   int
+		minor   int
+		patch   int
+		want    bool
+	}{
+		// Exact match
+		{"2.0.0", 2, 0, 0, true},
+		{"1.5.3", 1, 5, 3, true},
+		// Higher major
+		{"3.0.0", 2, 0, 0, true},
+		// Lower major
+		{"1.9.9", 2, 0, 0, false},
+		// Same major higher minor
+		{"2.1.0", 2, 0, 0, true},
+		// Same major lower minor
+		{"2.0.0", 2, 1, 0, false},
+		// Same major.minor higher patch
+		{"2.0.5", 2, 0, 3, true},
+		// Same major.minor lower patch
+		{"2.0.2", 2, 0, 3, false},
+		// Pre-release suffix is stripped — "2.0.0-beta" treated same as "2.0.0"
+		{"2.0.0-beta", 2, 0, 0, true},
+		// Build metadata suffix
+		{"2.1.0+build42", 2, 1, 0, true},
+		// Two-part version (missing patch defaults to 0)
+		{"2.1", 2, 1, 0, true},
+		// One-part version (missing minor/patch default to 0)
+		{"2", 2, 0, 0, true},
+		// Empty string
+		{"", 1, 0, 0, false},
+		// Non-numeric version
+		{"invalid", 1, 0, 0, false},
+	}
+	for _, tc := range cases {
+		name := fmt.Sprintf("%s>=%d.%d.%d", tc.version, tc.major, tc.minor, tc.patch)
+		t.Run(name, func(t *testing.T) {
+			got := versionAtLeast(tc.version, tc.major, tc.minor, tc.patch)
+			if got != tc.want {
+				t.Fatalf("versionAtLeast(%q, %d, %d, %d) = %v, want %v",
+					tc.version, tc.major, tc.minor, tc.patch, got, tc.want)
+			}
+		})
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -1083,5 +1084,572 @@ func TestUnitBuildResource_deleteStateGetError(t *testing.T) {
 	r.Delete(context.Background(), req, resp)
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected diagnostic error for malformed state")
+	}
+}
+
+func TestUnitBuildResource_matchPriorOrder(t *testing.T) {
+	makeArgs := func(names ...string) []BuildArgumentModel {
+		out := make([]BuildArgumentModel, len(names))
+		for i, n := range names {
+			out[i] = BuildArgumentModel{
+				Name:          types.StringValue(n),
+				Value:         types.StringValue(n + "_val"),
+				SecretEnabled: types.BoolValue(false),
+			}
+		}
+		return out
+	}
+
+	t.Run("empty_prior_returns_api_order", func(t *testing.T) {
+		api := makeArgs("B", "A")
+		result := matchPriorOrder(nil, api)
+		if len(result) != 2 || result[0].Name.ValueString() != "B" || result[1].Name.ValueString() != "A" {
+			t.Fatal("expected original B,A order preserved when prior is nil")
+		}
+	})
+
+	t.Run("prior_order_applied", func(t *testing.T) {
+		prior := makeArgs("A", "B", "C")
+		api := makeArgs("C", "B", "A")
+		result := matchPriorOrder(prior, api)
+		if result[0].Name.ValueString() != "A" || result[1].Name.ValueString() != "B" || result[2].Name.ValueString() != "C" {
+			t.Fatalf("expected prior order A,B,C but got %s,%s,%s",
+				result[0].Name.ValueString(), result[1].Name.ValueString(), result[2].Name.ValueString())
+		}
+	})
+
+	t.Run("new_args_appended_after_prior", func(t *testing.T) {
+		prior := makeArgs("A")
+		api := makeArgs("B", "A")
+		result := matchPriorOrder(prior, api)
+		if len(result) != 2 || result[0].Name.ValueString() != "A" || result[1].Name.ValueString() != "B" {
+			t.Fatalf("expected A first then B, got %v", result)
+		}
+	})
+
+	t.Run("prior_entries_absent_in_api_are_skipped", func(t *testing.T) {
+		prior := makeArgs("A", "REMOVED")
+		api := makeArgs("A")
+		result := matchPriorOrder(prior, api)
+		if len(result) != 1 || result[0].Name.ValueString() != "A" {
+			t.Fatalf("expected only A in result, got %v", result)
+		}
+	})
+}
+
+func TestUnitBuildResource_partialBuildConfigFromModel(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	t.Run("no_version_block_resets_to_zero_with_auto_increment", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID:        types.StringNull(),
+			Version:          nil,
+			Image:            nil,
+			Links:            types.ListNull(types.StringType),
+			Source:           nil,
+			Webhook:          nil,
+			Build:            nil,
+			PreBuild:         nil,
+			Labels:           types.StringNull(),
+			SkipSecretInterp: types.BoolNull(),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.Version == nil || cfg.Version.Major != 0 || cfg.Version.Minor != 0 || cfg.Version.Patch != 0 {
+			t.Fatal("expected version reset to 0.0.0 when no version block")
+		}
+		if cfg.AutoIncrementVersion == nil || !*cfg.AutoIncrementVersion {
+			t.Fatal("expected AutoIncrementVersion=true when no version block")
+		}
+	})
+
+	t.Run("with_version_string_parsed", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID: types.StringNull(),
+			Version: &BuildVersionModel{
+				Value:                types.StringValue("2.3.4"),
+				AutoIncrementEnabled: types.BoolValue(false),
+			},
+			Image:            nil,
+			Links:            types.ListNull(types.StringType),
+			Source:           nil,
+			Webhook:          nil,
+			Build:            nil,
+			PreBuild:         nil,
+			Labels:           types.StringNull(),
+			SkipSecretInterp: types.BoolNull(),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.Version == nil || cfg.Version.Major != 2 || cfg.Version.Minor != 3 || cfg.Version.Patch != 4 {
+			t.Fatalf("expected version 2.3.4, got %v", cfg.Version)
+		}
+		if cfg.AutoIncrementVersion == nil || *cfg.AutoIncrementVersion {
+			t.Fatal("expected AutoIncrementVersion=false")
+		}
+	})
+
+	t.Run("no_source_block_clears_git_fields", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID:        types.StringNull(),
+			Version:          nil,
+			Image:            nil,
+			Links:            types.ListNull(types.StringType),
+			Source:           nil,
+			Webhook:          nil,
+			Build:            nil,
+			PreBuild:         nil,
+			Labels:           types.StringNull(),
+			SkipSecretInterp: types.BoolNull(),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.LinkedRepo == nil || *cfg.LinkedRepo != "" {
+			t.Fatalf("expected empty LinkedRepo, got %v", cfg.LinkedRepo)
+		}
+		if cfg.GitProvider == nil || *cfg.GitProvider != "" {
+			t.Fatalf("expected empty GitProvider, got %v", cfg.GitProvider)
+		}
+		if cfg.Repo == nil || *cfg.Repo != "" {
+			t.Fatalf("expected empty Repo, got %v", cfg.Repo)
+		}
+	})
+
+	t.Run("with_https_source_url", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID: types.StringNull(),
+			Version:   nil,
+			Image:     nil,
+			Links:     types.ListNull(types.StringType),
+			Source: &BuildSourceModel{
+				RepoID:      types.StringNull(),
+				URL:         types.StringValue("https://github.com"),
+				AccountID:   types.StringNull(),
+				Path:        types.StringValue("owner/repo"),
+				Branch:      types.StringValue("main"),
+				Commit:      types.StringNull(),
+				FilesOnHost: types.BoolValue(false),
+			},
+			Webhook:          nil,
+			Build:            nil,
+			PreBuild:         nil,
+			Labels:           types.StringNull(),
+			SkipSecretInterp: types.BoolNull(),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.GitProvider == nil || *cfg.GitProvider != "github.com" {
+			t.Fatalf("expected GitProvider=github.com, got %v", cfg.GitProvider)
+		}
+		if cfg.GitHttps == nil || !*cfg.GitHttps {
+			t.Fatal("expected GitHttps=true for https URL")
+		}
+		if cfg.Repo == nil || *cfg.Repo != "owner/repo" {
+			t.Fatalf("expected Repo=owner/repo, got %v", cfg.Repo)
+		}
+		if cfg.Branch == nil || *cfg.Branch != "main" {
+			t.Fatalf("expected Branch=main, got %v", cfg.Branch)
+		}
+	})
+
+	t.Run("with_build_args_split_plain_and_secret", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID: types.StringNull(),
+			Version:   nil,
+			Image:     nil,
+			Links:     types.ListNull(types.StringType),
+			Source:    nil,
+			Webhook:   nil,
+			Build: &DockerBuildModel{
+				Path:           types.StringValue("."),
+				ExtraArguments: types.ListNull(types.StringType),
+				Arguments: []BuildArgumentModel{
+					{Name: types.StringValue("FOO"), Value: types.StringValue("bar"), SecretEnabled: types.BoolValue(false)},
+					{Name: types.StringValue("SEC"), Value: types.StringValue("s3cr3t"), SecretEnabled: types.BoolValue(true)},
+				},
+				UseBuildx: types.BoolNull(),
+			},
+			PreBuild:         nil,
+			Labels:           types.StringNull(),
+			SkipSecretInterp: types.BoolNull(),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.BuildArgs == nil || !strings.Contains(*cfg.BuildArgs, "FOO=bar") {
+			t.Fatalf("expected FOO=bar in build_args, got %v", cfg.BuildArgs)
+		}
+		if cfg.SecretArgs == nil || !strings.Contains(*cfg.SecretArgs, "SEC=s3cr3t") {
+			t.Fatalf("expected SEC=s3cr3t in secret_args, got %v", cfg.SecretArgs)
+		}
+	})
+
+	t.Run("with_pre_build_command", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID: types.StringNull(),
+			Version:   nil,
+			Image:     nil,
+			Links:     types.ListNull(types.StringType),
+			Source:    nil,
+			Webhook:   nil,
+			Build:     nil,
+			PreBuild: &SystemCommandModel{
+				Path:    types.StringValue("/scripts"),
+				Command: types.StringValue("./build.sh"),
+			},
+			Labels:           types.StringNull(),
+			SkipSecretInterp: types.BoolNull(),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.PreBuild == nil || cfg.PreBuild.Path != "/scripts" || cfg.PreBuild.Command != "./build.sh" {
+			t.Fatalf("unexpected pre_build: %v", cfg.PreBuild)
+		}
+	})
+
+	t.Run("with_labels", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID:        types.StringNull(),
+			Version:          nil,
+			Image:            nil,
+			Links:            types.ListNull(types.StringType),
+			Source:           nil,
+			Webhook:          nil,
+			Build:            nil,
+			PreBuild:         nil,
+			Labels:           types.StringValue("env=prod\nteam=infra"),
+			SkipSecretInterp: types.BoolNull(),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.Labels == nil || *cfg.Labels != "env=prod\nteam=infra" {
+			t.Fatalf("unexpected labels: %v", cfg.Labels)
+		}
+	})
+}
+
+func TestUnitBuildResource_buildToModel(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	t.Run("basic_fields", func(t *testing.T) {
+		b := &client.Build{
+			ID:   client.OID{OID: "build001"},
+			Name: "my-build",
+			Tags: []string{"t1"},
+			Config: client.BuildConfig{
+				BuilderID: "builder-xyz",
+				Labels:    "env=prod",
+			},
+		}
+		data := &BuildResourceModel{Tags: types.ListValueMust(types.StringType, nil)}
+		buildToModel(ctx, c, b, data)
+		if data.ID.ValueString() != "build001" {
+			t.Fatalf("unexpected ID: %s", data.ID.ValueString())
+		}
+		if data.Name.ValueString() != "my-build" {
+			t.Fatalf("unexpected Name: %s", data.Name.ValueString())
+		}
+		if data.BuilderID.ValueString() != "builder-xyz" {
+			t.Fatalf("unexpected BuilderID: %s", data.BuilderID.ValueString())
+		}
+		if data.Labels.ValueString() != "env=prod" {
+			t.Fatalf("unexpected Labels: %s", data.Labels.ValueString())
+		}
+		if len(data.Tags.Elements()) != 1 {
+			t.Fatalf("expected 1 tag, got %d", len(data.Tags.Elements()))
+		}
+	})
+
+	t.Run("version_block_populated_when_set", func(t *testing.T) {
+		b := &client.Build{
+			ID:   client.OID{OID: "build002"},
+			Name: "versioned",
+			Tags: []string{},
+			Config: client.BuildConfig{
+				Version:              client.BuildVersion{Major: 2, Minor: 3, Patch: 4},
+				AutoIncrementVersion: false,
+			},
+		}
+		data := &BuildResourceModel{
+			Tags:    types.ListValueMust(types.StringType, nil),
+			Version: &BuildVersionModel{},
+		}
+		buildToModel(ctx, c, b, data)
+		if data.Version == nil {
+			t.Fatal("expected non-nil version block")
+		}
+		if data.Version.Value.ValueString() != "2.3.4" {
+			t.Fatalf("expected version=2.3.4, got %s", data.Version.Value.ValueString())
+		}
+		if data.Version.AutoIncrementEnabled.ValueBool() {
+			t.Fatal("expected auto_increment_enabled=false")
+		}
+	})
+
+	t.Run("version_block_stays_nil_when_not_set", func(t *testing.T) {
+		b := &client.Build{
+			ID:   client.OID{OID: "build003"},
+			Name: "no-version",
+			Tags: []string{},
+			Config: client.BuildConfig{
+				Version: client.BuildVersion{Major: 1, Minor: 0, Patch: 0},
+			},
+		}
+		data := &BuildResourceModel{
+			Tags:    types.ListValueMust(types.StringType, nil),
+			Version: nil,
+		}
+		buildToModel(ctx, c, b, data)
+		if data.Version != nil {
+			t.Fatal("expected nil version block when not previously set in model")
+		}
+	})
+
+	t.Run("source_set_when_repo_non_empty", func(t *testing.T) {
+		b := &client.Build{
+			ID:   client.OID{OID: "build004"},
+			Name: "repo-build",
+			Tags: []string{},
+			Config: client.BuildConfig{
+				Repo:   "owner/myrepo",
+				Branch: "main",
+			},
+		}
+		data := &BuildResourceModel{
+			Tags:   types.ListValueMust(types.StringType, nil),
+			Source: nil,
+		}
+		buildToModel(ctx, c, b, data)
+		if data.Source == nil {
+			t.Fatal("expected source block set when Repo is non-empty")
+		}
+		if data.Source.Path.ValueString() != "owner/myrepo" {
+			t.Fatalf("expected source.path=owner/myrepo, got %s", data.Source.Path.ValueString())
+		}
+		if data.Source.Branch.ValueString() != "main" {
+			t.Fatalf("expected source.branch=main, got %s", data.Source.Branch.ValueString())
+		}
+	})
+
+	t.Run("source_nil_when_git_empty_and_prior_nil", func(t *testing.T) {
+		b := &client.Build{
+			ID:     client.OID{OID: "build005"},
+			Name:   "no-source",
+			Tags:   []string{},
+			Config: client.BuildConfig{},
+		}
+		data := &BuildResourceModel{
+			Tags:   types.ListValueMust(types.StringType, nil),
+			Source: nil,
+		}
+		buildToModel(ctx, c, b, data)
+		if data.Source != nil {
+			t.Fatal("expected nil source when all git fields empty and prior Source nil")
+		}
+	})
+
+	t.Run("pre_build_set_when_non_empty", func(t *testing.T) {
+		b := &client.Build{
+			ID:   client.OID{OID: "build006"},
+			Name: "pre-build",
+			Tags: []string{},
+			Config: client.BuildConfig{
+				PreBuild: client.SystemCommand{Path: "/src", Command: "make build\n"},
+			},
+		}
+		data := &BuildResourceModel{Tags: types.ListValueMust(types.StringType, nil)}
+		buildToModel(ctx, c, b, data)
+		if data.PreBuild == nil {
+			t.Fatal("expected non-nil pre_build block")
+		}
+		if data.PreBuild.Path.ValueString() != "/src" {
+			t.Fatalf("expected pre_build.path=/src, got %s", data.PreBuild.Path.ValueString())
+		}
+		// Trailing newline stripped from Command.
+		if data.PreBuild.Command.ValueString() != "make build" {
+			t.Fatalf("expected trailing newline stripped, got %q", data.PreBuild.Command.ValueString())
+		}
+	})
+
+	t.Run("build_block_args_round_trip", func(t *testing.T) {
+		b := &client.Build{
+			ID:   client.OID{OID: "build007"},
+			Name: "with-args",
+			Tags: []string{},
+			Config: client.BuildConfig{
+				BuildPath: ".",
+				BuildArgs: "BAZ=qux\nFOO=bar",
+			},
+		}
+		data := &BuildResourceModel{
+			Tags:  types.ListValueMust(types.StringType, nil),
+			Build: &DockerBuildModel{},
+		}
+		buildToModel(ctx, c, b, data)
+		if data.Build == nil {
+			t.Fatal("expected non-nil build block")
+		}
+		if len(data.Build.Arguments) != 2 {
+			t.Fatalf("expected 2 arguments, got %d", len(data.Build.Arguments))
+		}
+		names := map[string]bool{}
+		for _, a := range data.Build.Arguments {
+			names[a.Name.ValueString()] = true
+		}
+		if !names["FOO"] || !names["BAZ"] {
+			t.Fatalf("expected FOO and BAZ in arguments, got %v", names)
+		}
+	})
+
+	t.Run("linked_repo_clears_direct_fields", func(t *testing.T) {
+		b := &client.Build{
+			ID:   client.OID{OID: "build-linked"},
+			Name: "linked-build",
+			Tags: []string{},
+			Config: client.BuildConfig{
+				LinkedRepo: "my-repo-id",
+			},
+		}
+		data := &BuildResourceModel{
+			Tags:   types.ListValueMust(types.StringType, nil),
+			Source: &BuildSourceModel{},
+		}
+		buildToModel(ctx, c, b, data)
+		if data.Source == nil {
+			t.Fatal("expected source block when LinkedRepo is set")
+		}
+		if data.Source.RepoID.ValueString() != "my-repo-id" {
+			t.Fatalf("expected repo_id=my-repo-id, got %s", data.Source.RepoID.ValueString())
+		}
+		// Direct fields should be null when linked repo is used.
+		if !data.Source.URL.IsNull() {
+			t.Fatalf("expected url null for linked repo, got %s", data.Source.URL.ValueString())
+		}
+	})
+
+	t.Run("files_on_host_set", func(t *testing.T) {
+		b := &client.Build{
+			ID:   client.OID{OID: "build-foh"},
+			Name: "foh-build",
+			Tags: []string{},
+			Config: client.BuildConfig{
+				FilesOnHost: true,
+			},
+		}
+		data := &BuildResourceModel{
+			Tags:   types.ListValueMust(types.StringType, nil),
+			Source: &BuildSourceModel{},
+		}
+		buildToModel(ctx, c, b, data)
+		if data.Source == nil {
+			t.Fatal("expected source block when FilesOnHost is true")
+		}
+		if !data.Source.FilesOnHost.ValueBool() {
+			t.Fatal("expected files_on_host=true")
+		}
+	})
+}
+
+func TestUnitBuildResource_partialBuildConfigFromModel_nilBranches(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	t.Run("version_nil_resets_to_zero", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID: types.StringNull(),
+			Version:   nil, // no version block → should reset to 0.0.0
+			Links:     types.ListNull(types.StringType),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.Version == nil {
+			t.Fatal("expected non-nil version when Version block is nil")
+		}
+		if cfg.Version.Major != 0 || cfg.Version.Minor != 0 || cfg.Version.Patch != 0 {
+			t.Fatalf("expected 0.0.0, got %d.%d.%d", cfg.Version.Major, cfg.Version.Minor, cfg.Version.Patch)
+		}
+		if cfg.AutoIncrementVersion == nil || !*cfg.AutoIncrementVersion {
+			t.Fatal("expected AutoIncrementVersion=true when version block is nil")
+		}
+	})
+
+	t.Run("source_nil_clears_all_git_fields", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID: types.StringNull(),
+			Source:    nil,
+			Links:     types.ListNull(types.StringType),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.LinkedRepo == nil || *cfg.LinkedRepo != "" {
+			t.Fatal("expected empty LinkedRepo when Source is nil")
+		}
+		if cfg.Repo == nil || *cfg.Repo != "" {
+			t.Fatal("expected empty Repo when Source is nil")
+		}
+		if cfg.Branch == nil || *cfg.Branch != "" {
+			t.Fatal("expected empty Branch when Source is nil")
+		}
+	})
+
+	t.Run("webhook_nil_clears_webhook_fields", func(t *testing.T) {
+		data := &BuildResourceModel{
+			BuilderID: types.StringNull(),
+			Webhook:   nil,
+			Links:     types.ListNull(types.StringType),
+		}
+		cfg := partialBuildConfigFromModel(ctx, c, data)
+		if cfg.WebhookEnabled == nil || *cfg.WebhookEnabled {
+			t.Fatal("expected WebhookEnabled=false when Webhook is nil")
+		}
+		if cfg.WebhookSecret == nil || *cfg.WebhookSecret != "" {
+			t.Fatal("expected empty WebhookSecret when Webhook is nil")
+		}
+	})
+}
+
+func TestUnitBuildResource_gitRepoConflictsValidator(t *testing.T) {
+	cases := []struct {
+		name   string
+		config string
+	}{
+		{
+			name: "repo_id_with_url",
+			config: `
+resource "komodo_build" "test" {
+  name = "tf-test-build-conflict"
+  source {
+    repo_id = "my-git-repo"
+    url     = "https://github.com"
+  }
+}`,
+		},
+		{
+			name: "repo_id_with_path",
+			config: `
+resource "komodo_build" "test" {
+  name = "tf-test-build-conflict"
+  source {
+    repo_id = "my-git-repo"
+    path    = "owner/repo"
+  }
+}`,
+		},
+		{
+			name: "repo_id_with_branch",
+			config: `
+resource "komodo_build" "test" {
+  name = "tf-test-build-conflict"
+  source {
+    repo_id = "my-git-repo"
+    branch  = "main"
+  }
+}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resource.UnitTest(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config:      tc.config,
+						ExpectError: regexp.MustCompile(`source\.repo_id conflicts with other source fields`),
+					},
+				},
+			})
+		})
 	}
 }

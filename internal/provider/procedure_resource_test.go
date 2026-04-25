@@ -5,14 +5,17 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/sebastianfs82/terraform-provider-komodo/internal/client"
 
+	attr "github.com/hashicorp/terraform-plugin-framework/attr"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -685,4 +688,466 @@ func TestUnitProcedureResource_deleteStateGetError(t *testing.T) {
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected diagnostic error for malformed state")
 	}
+}
+
+func TestUnitProcedureResource_partialProcedureConfigFromModel(t *testing.T) {
+	t.Run("empty_stages_no_schedule_no_webhook", func(t *testing.T) {
+		data := &ProcedureResourceModel{
+			FailureAlert: types.BoolValue(true),
+			Stages:       nil,
+			Schedule:     nil,
+			Webhook:      nil,
+		}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected error: %v", diags)
+		}
+		if len(cfg.Stages) != 0 {
+			t.Fatalf("expected empty stages slice, got %d", len(cfg.Stages))
+		}
+		// No schedule block → ScheduleEnabled cleared.
+		if cfg.ScheduleEnabled == nil || *cfg.ScheduleEnabled {
+			t.Fatal("expected ScheduleEnabled=false when no schedule block")
+		}
+		if cfg.Schedule == nil || *cfg.Schedule != "" {
+			t.Fatal("expected empty schedule expression")
+		}
+		// No webhook block → disabled.
+		if cfg.WebhookEnabled == nil || *cfg.WebhookEnabled {
+			t.Fatal("expected WebhookEnabled=false when no webhook block")
+		}
+		if cfg.FailureAlert == nil || !*cfg.FailureAlert {
+			t.Fatal("expected failure_alert=true")
+		}
+	})
+
+	t.Run("with_stages", func(t *testing.T) {
+		data := &ProcedureResourceModel{
+			FailureAlert: types.BoolNull(),
+			Stages: []ProcedureStageModel{
+				{
+					Name: types.StringValue("stage-1"),
+					Executions: []ProcedureExecutionModel{
+						{
+							Enabled:    types.BoolValue(true),
+							Type:       types.StringValue("RunProcedure"),
+							Parameters: types.MapNull(types.StringType),
+						},
+					},
+				},
+			},
+			Schedule: nil,
+			Webhook:  nil,
+		}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected error: %v", diags)
+		}
+		if len(cfg.Stages) != 1 {
+			t.Fatalf("expected 1 stage, got %d", len(cfg.Stages))
+		}
+		if cfg.Stages[0].Name != "stage-1" {
+			t.Fatalf("unexpected stage name: %s", cfg.Stages[0].Name)
+		}
+		if len(cfg.Stages[0].Executions) != 1 {
+			t.Fatal("expected 1 execution")
+		}
+		if !cfg.Stages[0].Executions[0].Enabled {
+			t.Fatal("expected execution enabled=true")
+		}
+		if cfg.Stages[0].Executions[0].Execution.Type != "RunProcedure" {
+			t.Fatalf("unexpected execution type: %s", cfg.Stages[0].Executions[0].Execution.Type)
+		}
+	})
+
+	t.Run("with_schedule_and_webhook", func(t *testing.T) {
+		data := &ProcedureResourceModel{
+			FailureAlert: types.BoolValue(false),
+			Stages:       nil,
+			Schedule: &ScheduleModel{
+				Format:       types.StringValue("Cron"),
+				Expression:   types.StringValue("0 30 9 * * *"),
+				Enabled:      types.BoolValue(true),
+				Timezone:     types.StringValue("UTC"),
+				AlertEnabled: types.BoolValue(false),
+			},
+			Webhook: &WebhookModel{
+				Enabled: types.BoolValue(true),
+				Secret:  types.StringNull(),
+			},
+		}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected error: %v", diags)
+		}
+		if cfg.ScheduleFormat == nil || *cfg.ScheduleFormat != "Cron" {
+			t.Fatal("expected ScheduleFormat=Cron")
+		}
+		if cfg.Schedule == nil || *cfg.Schedule != "0 30 9 * * *" {
+			t.Fatal("expected schedule expression")
+		}
+		if cfg.WebhookEnabled == nil || !*cfg.WebhookEnabled {
+			t.Fatal("expected WebhookEnabled=true")
+		}
+	})
+}
+
+func TestUnitProcedureResource_procedureToModel(t *testing.T) {
+	t.Run("empty_stages", func(t *testing.T) {
+		proc := &client.Procedure{
+			ID:   client.OID{OID: "proc123"},
+			Name: "my-procedure",
+			Tags: []string{},
+			Config: client.ProcedureConfig{
+				FailureAlert: true,
+				Stages:       []client.ProcedureStage{},
+			},
+		}
+		data := &ProcedureResourceModel{}
+		procedureToModel(proc, data)
+
+		if data.ID.ValueString() != "proc123" {
+			t.Fatalf("unexpected id: %s", data.ID.ValueString())
+		}
+		if data.Name.ValueString() != "my-procedure" {
+			t.Fatalf("unexpected name: %s", data.Name.ValueString())
+		}
+		if !data.FailureAlert.ValueBool() {
+			t.Fatal("expected failure_alert=true")
+		}
+		if data.Stages != nil {
+			t.Fatal("expected nil stages for empty API stages")
+		}
+		if data.Schedule != nil {
+			t.Fatal("expected nil schedule when not active")
+		}
+	})
+
+	t.Run("with_stage_no_prior_state", func(t *testing.T) {
+		proc := &client.Procedure{
+			ID:   client.OID{OID: "proc456"},
+			Name: "staged-procedure",
+			Config: client.ProcedureConfig{
+				Stages: []client.ProcedureStage{
+					{
+						Name: "deploy",
+						Executions: []client.ProcedureStageExecution{
+							{
+								Enabled: true,
+								Execution: client.ProcedureExecution{
+									Type:   "RunStack",
+									Params: nil,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		// No prior state (import path): data.Stages = nil.
+		data := &ProcedureResourceModel{}
+		procedureToModel(proc, data)
+
+		if len(data.Stages) != 1 {
+			t.Fatalf("expected 1 stage, got %d", len(data.Stages))
+		}
+		if data.Stages[0].Name.ValueString() != "deploy" {
+			t.Fatalf("unexpected stage name: %s", data.Stages[0].Name.ValueString())
+		}
+		if len(data.Stages[0].Executions) != 1 {
+			t.Fatal("expected 1 execution")
+		}
+		if data.Stages[0].Executions[0].Type.ValueString() != "RunStack" {
+			t.Fatalf("unexpected execution type: %s", data.Stages[0].Executions[0].Type.ValueString())
+		}
+	})
+
+	t.Run("with_active_schedule", func(t *testing.T) {
+		proc := &client.Procedure{
+			ID:   client.OID{OID: "proc789"},
+			Name: "scheduled-procedure",
+			Config: client.ProcedureConfig{
+				ScheduleEnabled: true,
+				ScheduleFormat:  "Cron",
+				Schedule:        "0 0 * * * *",
+			},
+		}
+		data := &ProcedureResourceModel{}
+		procedureToModel(proc, data)
+
+		if data.Schedule == nil {
+			t.Fatal("expected non-nil schedule when ScheduleEnabled=true")
+		}
+		if data.Schedule.Format.ValueString() != "Cron" {
+			t.Fatalf("unexpected schedule format: %s", data.Schedule.Format.ValueString())
+		}
+		if data.Schedule.Expression.ValueString() != "0 0 * * * *" {
+			t.Fatalf("unexpected schedule expression: %s", data.Schedule.Expression.ValueString())
+		}
+	})
+
+	t.Run("with_webhook_enabled", func(t *testing.T) {
+		proc := &client.Procedure{
+			ID:   client.OID{OID: "proc-wh"},
+			Name: "webhook-procedure",
+			Config: client.ProcedureConfig{
+				WebhookEnabled: true,
+				WebhookSecret:  "s3cr3t",
+			},
+		}
+		data := &ProcedureResourceModel{}
+		procedureToModel(proc, data)
+		if data.Webhook == nil {
+			t.Fatal("expected non-nil webhook block")
+		}
+		if !data.Webhook.Enabled.ValueBool() {
+			t.Fatal("expected webhook enabled=true")
+		}
+		if data.Webhook.Secret.ValueString() != "s3cr3t" {
+			t.Fatalf("expected webhook secret=s3cr3t, got %s", data.Webhook.Secret.ValueString())
+		}
+	})
+
+	t.Run("with_stage_null_params_in_prior_state", func(t *testing.T) {
+		// Prior state has a stage/execution with null parameters.
+		// Expect: parameters stay null (existing.IsNull() branch).
+		proc := &client.Procedure{
+			ID:   client.OID{OID: "proc-null-params"},
+			Name: "null-params-procedure",
+			Config: client.ProcedureConfig{
+				Stages: []client.ProcedureStage{
+					{
+						Name: "stage-1",
+						Executions: []client.ProcedureStageExecution{
+							{
+								Enabled: true,
+								Execution: client.ProcedureExecution{
+									Type:   "RunAction",
+									Params: nil,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		// Prior state has a stage with null Parameters.
+		data := &ProcedureResourceModel{
+			Stages: []ProcedureStageModel{
+				{
+					Name: types.StringValue("stage-1"),
+					Executions: []ProcedureExecutionModel{
+						{
+							Enabled:    types.BoolValue(true),
+							Type:       types.StringValue("RunAction"),
+							Parameters: types.MapNull(types.StringType),
+						},
+					},
+				},
+			},
+		}
+		procedureToModel(proc, data)
+		if len(data.Stages) != 1 {
+			t.Fatalf("expected 1 stage, got %d", len(data.Stages))
+		}
+		// Null parameters should stay null (not replaced with an empty map).
+		if !data.Stages[0].Executions[0].Parameters.IsNull() {
+			t.Fatal("expected parameters to remain null when prior was null")
+		}
+	})
+
+	t.Run("with_stage_existing_params_merged_from_api", func(t *testing.T) {
+		// Prior state has a stage with non-null parameters; API returns updated values.
+		params := json.RawMessage(`{"procedure":"new-child","extra":"ignored"}`)
+		proc := &client.Procedure{
+			ID:   client.OID{OID: "proc-merge"},
+			Name: "merge-params-procedure",
+			Config: client.ProcedureConfig{
+				Stages: []client.ProcedureStage{
+					{
+						Name: "run",
+						Executions: []client.ProcedureStageExecution{
+							{
+								Enabled: true,
+								Execution: client.ProcedureExecution{
+									Type:   "RunProcedure",
+									Params: params,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		// Prior state has "procedure" key; "extra" is not in prior state so should be ignored.
+		existingParams, _ := types.MapValue(types.StringType, map[string]attr.Value{
+			"procedure": types.StringValue("old-child"),
+		})
+		data := &ProcedureResourceModel{
+			Stages: []ProcedureStageModel{
+				{
+					Name: types.StringValue("run"),
+					Executions: []ProcedureExecutionModel{
+						{
+							Enabled:    types.BoolValue(true),
+							Type:       types.StringValue("RunProcedure"),
+							Parameters: existingParams,
+						},
+					},
+				},
+			},
+		}
+		procedureToModel(proc, data)
+		if len(data.Stages) != 1 {
+			t.Fatalf("expected 1 stage, got %d", len(data.Stages))
+		}
+		paramMap := data.Stages[0].Executions[0].Parameters
+		if paramMap.IsNull() {
+			t.Fatal("expected non-null parameters after merge")
+		}
+		// Only keys from prior state should be present; "extra" is excluded.
+		if _, hasExtra := paramMap.Elements()["extra"]; hasExtra {
+			t.Fatal("unexpected key 'extra' in merged parameters (not in prior state)")
+		}
+		val, ok := paramMap.Elements()["procedure"]
+		if !ok {
+			t.Fatal("expected key 'procedure' in merged parameters")
+		}
+		if val.(types.String).ValueString() != "new-child" {
+			t.Fatalf("expected procedure=new-child from API, got %s", val.(types.String).ValueString())
+		}
+	})
+}
+func TestUnitProcedureResource_partialProcedureConfigFromModel_coercions(t *testing.T) {
+	t.Run("empty_stages_sends_empty_slice", func(t *testing.T) {
+		data := &ProcedureResourceModel{Stages: nil}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if cfg.Stages == nil {
+			t.Fatal("expected non-nil Stages slice for empty stages")
+		}
+		if len(cfg.Stages) != 0 {
+			t.Fatalf("expected 0 stages, got %d", len(cfg.Stages))
+		}
+	})
+
+	t.Run("json_float64_coercion", func(t *testing.T) {
+		// Numeric param "42" should be coerced to float64.
+		params, _ := types.MapValueFrom(context.Background(), types.StringType, map[string]string{"stop_time": "42"})
+		data := &ProcedureResourceModel{
+			Stages: []ProcedureStageModel{
+				{
+					Name: types.StringValue("s1"),
+					Executions: []ProcedureExecutionModel{
+						{
+							Enabled:    types.BoolValue(true),
+							Type:       types.StringValue("RunBuild"),
+							Parameters: params,
+						},
+					},
+				},
+			},
+		}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if len(cfg.Stages) != 1 {
+			t.Fatalf("expected 1 stage, got %d", len(cfg.Stages))
+		}
+	})
+
+	t.Run("json_bool_coercion", func(t *testing.T) {
+		params, _ := types.MapValueFrom(context.Background(), types.StringType, map[string]string{"enabled": "true"})
+		data := &ProcedureResourceModel{
+			Stages: []ProcedureStageModel{
+				{
+					Name: types.StringValue("s1"),
+					Executions: []ProcedureExecutionModel{
+						{
+							Enabled:    types.BoolValue(true),
+							Type:       types.StringValue("RunStack"),
+							Parameters: params,
+						},
+					},
+				},
+			},
+		}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		_ = cfg
+	})
+
+	t.Run("schedule_nil_clears_fields", func(t *testing.T) {
+		data := &ProcedureResourceModel{Schedule: nil}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if cfg.ScheduleEnabled == nil || *cfg.ScheduleEnabled {
+			t.Fatal("expected ScheduleEnabled=false when Schedule block is nil")
+		}
+		if cfg.Schedule == nil || *cfg.Schedule != "" {
+			t.Fatal("expected empty Schedule when Schedule block is nil")
+		}
+	})
+
+	t.Run("schedule_non_nil_sets_fields", func(t *testing.T) {
+		data := &ProcedureResourceModel{
+			Schedule: &ScheduleModel{
+				Format:       types.StringValue("Cron"),
+				Expression:   types.StringValue("0 * * * *"),
+				Enabled:      types.BoolValue(true),
+				Timezone:     types.StringValue("UTC"),
+				AlertEnabled: types.BoolValue(false),
+			},
+		}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if cfg.ScheduleEnabled == nil || !*cfg.ScheduleEnabled {
+			t.Fatal("expected ScheduleEnabled=true")
+		}
+		if cfg.Schedule == nil || *cfg.Schedule != "0 * * * *" {
+			t.Fatalf("unexpected Schedule: %v", cfg.Schedule)
+		}
+	})
+
+	t.Run("webhook_nil_clears_fields", func(t *testing.T) {
+		data := &ProcedureResourceModel{Webhook: nil}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if cfg.WebhookEnabled == nil || *cfg.WebhookEnabled {
+			t.Fatal("expected WebhookEnabled=false when Webhook block is nil")
+		}
+		if cfg.WebhookSecret == nil || *cfg.WebhookSecret != "" {
+			t.Fatal("expected empty WebhookSecret when Webhook block is nil")
+		}
+	})
+
+	t.Run("webhook_non_nil_sets_fields", func(t *testing.T) {
+		data := &ProcedureResourceModel{
+			Webhook: &WebhookModel{
+				Enabled: types.BoolValue(true),
+				Secret:  types.StringValue("mysecret"),
+			},
+		}
+		cfg, diags := partialProcedureConfigFromModel(data)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if cfg.WebhookEnabled == nil || !*cfg.WebhookEnabled {
+			t.Fatal("expected WebhookEnabled=true")
+		}
+		if cfg.WebhookSecret == nil || *cfg.WebhookSecret != "mysecret" {
+			t.Fatalf("unexpected WebhookSecret: %v", cfg.WebhookSecret)
+		}
+	})
 }

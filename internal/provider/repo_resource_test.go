@@ -13,6 +13,7 @@ import (
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -566,4 +567,336 @@ func TestUnitRepoResource_deleteStateGetError(t *testing.T) {
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected diagnostic error for malformed state")
 	}
+}
+
+func TestUnitRepoResource_repoConfigFromModel(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	t.Run("minimal_no_source", func(t *testing.T) {
+		data := &RepoResourceModel{
+			ServerID:    types.StringValue("server-1"),
+			BuilderID:   types.StringNull(),
+			Path:        types.StringNull(),
+			Webhook:     nil,
+			OnClone:     nil,
+			OnPull:      nil,
+			Links:       types.ListNull(types.StringType),
+			Environment: nil,
+			Source:      nil,
+			Tags:        types.ListValueMust(types.StringType, nil),
+		}
+		cfg := repoConfigFromModel(ctx, c, data)
+		if cfg.ServerID != "server-1" {
+			t.Fatalf("expected server_id=server-1, got %s", cfg.ServerID)
+		}
+		if cfg.WebhookEnabled {
+			t.Fatal("expected webhook disabled")
+		}
+	})
+
+	t.Run("with_webhook_enabled", func(t *testing.T) {
+		data := &RepoResourceModel{
+			ServerID:    types.StringNull(),
+			BuilderID:   types.StringNull(),
+			Path:        types.StringNull(),
+			Links:       types.ListNull(types.StringType),
+			Source:      nil,
+			Environment: nil,
+			Tags:        types.ListValueMust(types.StringType, nil),
+			Webhook: &WebhookModel{
+				Enabled: types.BoolValue(true),
+				Secret:  types.StringValue("mysecret"),
+			},
+		}
+		cfg := repoConfigFromModel(ctx, c, data)
+		if !cfg.WebhookEnabled {
+			t.Fatal("expected webhook enabled=true")
+		}
+		if cfg.WebhookSecret != "mysecret" {
+			t.Fatalf("expected WebhookSecret=mysecret, got %s", cfg.WebhookSecret)
+		}
+	})
+
+	t.Run("with_on_clone_command", func(t *testing.T) {
+		data := &RepoResourceModel{
+			ServerID:    types.StringNull(),
+			BuilderID:   types.StringNull(),
+			Path:        types.StringNull(),
+			Links:       types.ListNull(types.StringType),
+			Source:      nil,
+			Environment: nil,
+			Webhook:     nil,
+			Tags:        types.ListValueMust(types.StringType, nil),
+			OnClone: &SystemCommandModel{
+				Path:    types.StringValue("/app"),
+				Command: types.StringValue("./setup.sh"),
+			},
+		}
+		cfg := repoConfigFromModel(ctx, c, data)
+		if cfg.OnClone.Path != "/app" || cfg.OnClone.Command != "./setup.sh" {
+			t.Fatalf("unexpected on_clone: %+v", cfg.OnClone)
+		}
+	})
+
+	t.Run("with_source_domain_and_path", func(t *testing.T) {
+		data := &RepoResourceModel{
+			ServerID:    types.StringNull(),
+			BuilderID:   types.StringNull(),
+			Path:        types.StringNull(),
+			Links:       types.ListNull(types.StringType),
+			Environment: nil,
+			Webhook:     nil,
+			Tags:        types.ListValueMust(types.StringType, nil),
+			Source: &RepositoryProviderModel{
+				Domain:       types.StringValue("github.com"),
+				HttpsEnabled: types.BoolValue(true),
+				AccountID:    types.StringNull(),
+				Path:         types.StringValue("owner/repo"),
+				Branch:       types.StringValue("main"),
+				Commit:       types.StringNull(),
+			},
+		}
+		cfg := repoConfigFromModel(ctx, c, data)
+		if cfg.GitProvider != "github.com" {
+			t.Fatalf("expected GitProvider=github.com, got %s", cfg.GitProvider)
+		}
+		if !cfg.GitHttps {
+			t.Fatal("expected GitHttps=true")
+		}
+		if cfg.Repo != "owner/repo" {
+			t.Fatalf("expected Repo=owner/repo, got %s", cfg.Repo)
+		}
+		if cfg.Branch != "main" {
+			t.Fatalf("expected Branch=main, got %s", cfg.Branch)
+		}
+	})
+
+	t.Run("with_links", func(t *testing.T) {
+		data := &RepoResourceModel{
+			ServerID:    types.StringNull(),
+			BuilderID:   types.StringNull(),
+			Path:        types.StringNull(),
+			Links:       types.ListValueMust(types.StringType, nil),
+			Source:      nil,
+			Environment: nil,
+			Webhook:     nil,
+			Tags:        types.ListValueMust(types.StringType, nil),
+		}
+		cfg := repoConfigFromModel(ctx, c, data)
+		if cfg.Links == nil {
+			t.Fatal("expected non-nil links slice from empty list")
+		}
+	})
+}
+
+func TestUnitRepoResource_repoToModel(t *testing.T) {
+	ctx := context.Background()
+	c := &client.Client{}
+
+	t.Run("basic_fields", func(t *testing.T) {
+		repo := &client.GitRepository{
+			ID:   client.OID{OID: "repo123"},
+			Name: "my-repo",
+			Tags: []string{"prod"},
+			Config: client.GitRepositoryConfig{
+				ServerID: "srv-1",
+			},
+		}
+		data := &RepoResourceModel{Tags: types.ListValueMust(types.StringType, nil)}
+		repoToModel(ctx, c, repo, data)
+		if data.ID.ValueString() != "repo123" {
+			t.Fatalf("unexpected ID: %s", data.ID.ValueString())
+		}
+		if data.Name.ValueString() != "my-repo" {
+			t.Fatalf("unexpected Name: %s", data.Name.ValueString())
+		}
+		if data.ServerID.ValueString() != "srv-1" {
+			t.Fatalf("unexpected server_id: %s", data.ServerID.ValueString())
+		}
+		if len(data.Tags.Elements()) != 1 {
+			t.Fatalf("expected 1 tag, got %d", len(data.Tags.Elements()))
+		}
+	})
+
+	t.Run("source_set_when_repo_non_empty", func(t *testing.T) {
+		repo := &client.GitRepository{
+			ID:   client.OID{OID: "repo456"},
+			Name: "git-repo",
+			Config: client.GitRepositoryConfig{
+				Repo:     "owner/myrepo",
+				Branch:   "develop",
+				GitHttps: true,
+			},
+		}
+		data := &RepoResourceModel{
+			Tags:   types.ListValueMust(types.StringType, nil),
+			Source: nil,
+		}
+		repoToModel(ctx, c, repo, data)
+		if data.Source == nil {
+			t.Fatal("expected source block set when Repo is non-empty")
+		}
+		if data.Source.Path.ValueString() != "owner/myrepo" {
+			t.Fatalf("expected source.path=owner/myrepo, got %s", data.Source.Path.ValueString())
+		}
+		if data.Source.Branch.ValueString() != "develop" {
+			t.Fatalf("expected source.branch=develop, got %s", data.Source.Branch.ValueString())
+		}
+		if !data.Source.HttpsEnabled.ValueBool() {
+			t.Fatal("expected https_enabled=true")
+		}
+	})
+
+	t.Run("source_nil_when_all_git_empty_and_prior_nil", func(t *testing.T) {
+		repo := &client.GitRepository{
+			ID:   client.OID{OID: "repo789"},
+			Name: "no-git",
+			Config: client.GitRepositoryConfig{
+				ServerID: "srv-1",
+			},
+		}
+		data := &RepoResourceModel{
+			Tags:   types.ListValueMust(types.StringType, nil),
+			Source: nil,
+		}
+		repoToModel(ctx, c, repo, data)
+		if data.Source != nil {
+			t.Fatal("expected nil source when no git fields set and prior Source nil")
+		}
+	})
+
+	t.Run("webhook_set_when_enabled", func(t *testing.T) {
+		repo := &client.GitRepository{
+			ID:   client.OID{OID: "repo000"},
+			Name: "webhook-repo",
+			Config: client.GitRepositoryConfig{
+				WebhookEnabled: true,
+				WebhookSecret:  "s3cr3t",
+			},
+		}
+		data := &RepoResourceModel{Tags: types.ListValueMust(types.StringType, nil)}
+		repoToModel(ctx, c, repo, data)
+		if data.Webhook == nil {
+			t.Fatal("expected non-nil webhook block")
+		}
+		if !data.Webhook.Enabled.ValueBool() {
+			t.Fatal("expected webhook enabled=true")
+		}
+		if data.Webhook.Secret.ValueString() != "s3cr3t" {
+			t.Fatalf("expected webhook secret=s3cr3t, got %s", data.Webhook.Secret.ValueString())
+		}
+	})
+
+	t.Run("on_clone_set_when_non_empty", func(t *testing.T) {
+		repo := &client.GitRepository{
+			ID:   client.OID{OID: "repo111"},
+			Name: "clone-hooks",
+			Config: client.GitRepositoryConfig{
+				OnClone: client.SystemCommand{Path: "/scripts", Command: "install.sh"},
+			},
+		}
+		data := &RepoResourceModel{Tags: types.ListValueMust(types.StringType, nil)}
+		repoToModel(ctx, c, repo, data)
+		if data.OnClone == nil {
+			t.Fatal("expected non-nil on_clone")
+		}
+		if data.OnClone.Path.ValueString() != "/scripts" {
+			t.Fatalf("unexpected on_clone.path: %s", data.OnClone.Path.ValueString())
+		}
+	})
+
+	t.Run("on_clone_nil_when_empty", func(t *testing.T) {
+		repo := &client.GitRepository{
+			ID:     client.OID{OID: "repo222"},
+			Name:   "no-hooks",
+			Config: client.GitRepositoryConfig{},
+		}
+		data := &RepoResourceModel{Tags: types.ListValueMust(types.StringType, nil)}
+		repoToModel(ctx, c, repo, data)
+		if data.OnClone != nil {
+			t.Fatal("expected nil on_clone when API returns empty command")
+		}
+	})
+
+	t.Run("env_file_path_populates_environment_block", func(t *testing.T) {
+		repo := &client.GitRepository{
+			ID:   client.OID{OID: "repo333"},
+			Name: "env-repo",
+			Config: client.GitRepositoryConfig{
+				EnvFilePath: "/app/.env",
+			},
+		}
+		data := &RepoResourceModel{Tags: types.ListValueMust(types.StringType, nil)}
+		repoToModel(ctx, c, repo, data)
+		if data.Environment == nil {
+			t.Fatal("expected non-nil environment block when env_file_path set")
+		}
+		if data.Environment.FilePath.ValueString() != "/app/.env" {
+			t.Fatalf("expected env_file_path=/app/.env, got %s", data.Environment.FilePath.ValueString())
+		}
+	})
+}
+
+func TestUnitRepoResource_envStringToMap(t *testing.T) {
+	t.Run("empty_string_returns_null_map", func(t *testing.T) {
+		m := envStringToMap("")
+		if !m.IsNull() {
+			t.Fatal("expected null map for empty input")
+		}
+	})
+
+	t.Run("blank_only_lines_return_null_map", func(t *testing.T) {
+		m := envStringToMap("   \n   \n")
+		if !m.IsNull() {
+			t.Fatal("expected null map when all lines are blank")
+		}
+	})
+
+	t.Run("simple_key_value_pair", func(t *testing.T) {
+		m := envStringToMap("FOO=bar")
+		if m.IsNull() {
+			t.Fatal("expected non-null map")
+		}
+		if len(m.Elements()) != 1 {
+			t.Fatalf("expected 1 element, got %d", len(m.Elements()))
+		}
+		val := m.Elements()["FOO"]
+		if val.(types.String).ValueString() != "bar" {
+			t.Fatalf("expected FOO=bar, got %s", val.(types.String).ValueString())
+		}
+	})
+
+	t.Run("lowercase_key_uppercased", func(t *testing.T) {
+		m := envStringToMap("database_url=postgres://localhost/db")
+		if _, ok := m.Elements()["DATABASE_URL"]; !ok {
+			t.Fatal("expected lowercase key to be uppercased to DATABASE_URL")
+		}
+	})
+
+	t.Run("line_without_equals_gets_empty_value", func(t *testing.T) {
+		m := envStringToMap("MYVAR")
+		if m.IsNull() {
+			t.Fatal("expected non-null map")
+		}
+		val := m.Elements()["MYVAR"]
+		if val.(types.String).ValueString() != "" {
+			t.Fatalf("expected empty value for key without =, got %q", val.(types.String).ValueString())
+		}
+	})
+
+	t.Run("value_with_equals_sign", func(t *testing.T) {
+		m := envStringToMap("DSN=host=localhost port=5432")
+		val := m.Elements()["DSN"]
+		if val.(types.String).ValueString() != "host=localhost port=5432" {
+			t.Fatalf("expected full value after first =, got %q", val.(types.String).ValueString())
+		}
+	})
+
+	t.Run("multiple_lines", func(t *testing.T) {
+		m := envStringToMap("FOO=1\nBAR=2\nBAZ=3")
+		if len(m.Elements()) != 3 {
+			t.Fatalf("expected 3 elements, got %d", len(m.Elements()))
+		}
+	})
 }
