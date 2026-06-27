@@ -217,6 +217,7 @@ func (p *KomodoProvider) Resources(ctx context.Context) []func() resource.Resour
 		NewStackResource,
 		NewServerResource,
 		NewSwarmResource,
+		NewSwarmSecretResource,
 		NewNetworkResource,
 		NewTerminalResource,
 		NewActionResource,
